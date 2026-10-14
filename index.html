@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f3f8f1">
+<meta name="color-scheme" content="light">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Đảo Mèo">
+<meta name="application-name" content="Đảo Mèo">
+<meta name="description" content="Đảo Mèo — Daily Mission, Checklist & Chấm công">
+
+<script>
+(function(){
+  "use strict";
+  var LS_KEY = '__srank_ver';
+
+  function getStored(){ try { return localStorage.getItem(LS_KEY) || ''; } catch(_){ return ''; } }
+  function setStored(v){ try { localStorage.setItem(LS_KEY, v); } catch(_){} }
+
+  async function fetchVersion(){
+    try {
+      var res = await fetch('/version.json?_=' + Date.now(), { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
+      if (!res.ok) return null;
+      var data = await res.json();
+      return data && data.v ? String(data.v) : null;
+    } catch(_){ return null; }
+  }
+
+  async function clearAll(){
+    var tasks = [];
+    if ('serviceWorker' in navigator){
+      tasks.push(navigator.serviceWorker.getRegistrations()
+        .then(function(regs){ return Promise.all(regs.map(function(r){ return r.unregister(); })); })
+        .catch(function(){}));
+    }
+    if ('caches' in window){
+      tasks.push(caches.keys()
+        .then(function(keys){ return Promise.all(keys.map(function(k){ return caches.delete(k); })); })
+        .catch(function(){}));
+    }
+    await Promise.all(tasks);
+  }
+
+  function hardReload(){
+    var url = new URL(location.href);
+    url.searchParams.set('_v', Date.now());
+    location.replace(url.toString());
+  }
+
+  (async function(){
+    var stored = getStored();
+    var remote = await fetchVersion();
+    if (!remote) return;
+    if (!stored){ setStored(remote); return; }
+    if (stored === remote) return;
+    await clearAll();
+    setStored(remote);
+    hardReload();
+  })();
+
+  setInterval(async function(){
+    if (document.hidden) return;
+    var remote = await fetchVersion();
+    if (!remote) return;
+    var stored = getStored();
+    if (stored && stored !== remote){ await clearAll(); setStored(remote); hardReload(); }
+  }, 5 * 60 * 1000);
+
+  document.addEventListener('visibilitychange', async function(){
+    if (document.hidden) return;
+    var remote = await fetchVersion();
+    if (!remote) return;
+    var stored = getStored();
+    if (stored && stored !== remote){ await clearAll(); setStored(remote); hardReload(); }
+  });
+})();
+</script>
+
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://tumjcsaexddioecwjolp.supabase.co" crossorigin>
+<link rel="dns-prefetch" href="https://tumjcsaexddioecwjolp.supabase.co">
+
+<title>S Rank — Daily Mission</title>
+<link rel="preload" href="css/main.css" as="style">
+<link rel="preload" href="js/main.js" as="script">
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/menu.css">
+
+<style id="landingCourtForce">
+html, body { overflow-y: auto !important; overflow-x: hidden !important; height: auto !important; min-height: 100% !important; }
+html body #space { overflow: visible !important; height: auto !important; min-height: 100vh !important; padding-top: max(28px, env(safe-area-inset-top, 0px)) !important; padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px)) !important; }
+html body #homeStack, html body #questionWrap { overflow: visible !important; height: auto !important; max-height: none !important; }
+html body #question, html body #question.play, html body #question.checklist-locked-home, html body #question.hero-wheel-open { background: transparent !important; background-color: transparent !important; background-image: none !important; border-color: transparent !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; max-height: none !important; height: auto !important; overflow: visible !important; }
+html body #question::before, html body #question::after { display: none !important; content: none !important; background: none !important; border: 0 !important; box-shadow: none !important; }
+html body #question.landing-court-active { max-height: none !important; height: auto !important; overflow: visible !important; }
+html body #question .landing-kicker { display: block !important; margin: 0 0 14px !important; padding: 0 !important; min-height: 16px !important; line-height: 1.2 !important; }
+html body #question .landing-title { margin: 0 0 10px !important; }
+html body #question .landing-top3.landing-court, html body #question .landing-court { display: flex !important; flex-direction: column !important; align-items: stretch !important; justify-content: flex-start !important; flex-wrap: nowrap !important; gap: 8px !important; padding: 0 !important; margin: 0 0 12px !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; height: auto !important; max-height: none !important; overflow: visible !important; position: static !important; background: none !important; border: 0 !important; box-shadow: none !important; box-sizing: border-box !important; }
+html body #question .landing-court::before, html body #question .landing-court::after { display: none !important; content: none !important; }
+html body #question .landing-court > * { flex: 0 0 auto !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; box-sizing: border-box !important; }
+
+/* PODIUM 3 CỘT */
+html body #question .court-podium { display: flex !important; flex-direction: row !important; justify-content: center !important; align-items: flex-end !important; gap: 6px !important; width: 100% !important; max-width: 100% !important; margin: 0 0 12px 0 !important; padding: 0 !important; box-sizing: border-box !important; }
+html body #question .podium-slot { flex: 1 1 0 !important; min-width: 0 !important; max-width: 33.333% !important; width: auto !important; display: flex !important; flex-direction: column !important; justify-content: flex-end !important; align-items: center !important; box-sizing: border-box !important; }
+html body #question .podium-slot-1 { padding-bottom: 25px !important; }
+
+html body #question .court-throne { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; gap: 4px !important; width: 100% !important; margin: 0 !important; }
+html body #question .throne-crown { font-size: 22px !important; line-height: 1 !important; margin-bottom: 2px !important; }
+html body #question .throne-avatar { position: relative !important; width: 68px !important; height: 68px !important; border-radius: 50% !important; overflow: hidden !important; border: 3px solid #ffb800 !important; background: linear-gradient(135deg,#fffbe9,#fff0c4) !important; box-shadow: 0 0 0 4px rgba(255,200,0,.25), 0 8px 24px -8px rgba(255,140,0,.55) !important; display: flex !important; align-items: center !important; justify-content: center !important; }
+html body #question .throne-avatar img { width: 100% !important; height: 100% !important; object-fit: cover !important; display: block !important; }
+html body #question .throne-avatar-fallback { font-size: 26px !important; font-weight: 950 !important; color: #7a5410 !important; display: none !important; }
+html body #question .throne-avatar-fallback.show { display: block !important; }
+html body #question .throne-medal { position: absolute !important; bottom: -6px !important; right: -6px !important; font-size: 20px !important; filter: drop-shadow(0 2px 4px rgba(0,0,0,.2)) !important; }
+html body #question .throne-name { font-size: 14px !important; font-weight: 950 !important; color: #7a5410 !important; max-width: 170px !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; text-align: center !important; }
+html body #question .throne-time { font-size: 11px !important; font-weight: 900 !important; color: #c8891a !important; font-variant-numeric: tabular-nums !important; }
+html body #question .court-advisors { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 12px !important; padding: 0 !important; margin: 0 !important; width: 100% !important; }
+html body #question .court-advisors .advisor:only-child { grid-column: 1 / -1 !important; justify-self: center !important; }
+html body #question .advisor { display: flex !important; flex-direction: column !important; align-items: center !important; gap: 3px !important; min-width: 0 !important; }
+html body #question .advisor-crown { font-size: 16px !important; line-height: 1 !important; display: inline-block !important; text-align: center !important; margin-bottom: 2px !important; }
+html body #question .advisor.rank-2 .advisor-crown { animation: advisorSunSpin 12s linear infinite !important; transform-origin: center center !important; }
+html body #question .advisor.rank-3 .advisor-crown { animation: advisorMoonFloat 3.5s ease-in-out infinite !important; }
+@keyframes advisorSunSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes advisorMoonFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) {
+  html body #question .advisor-crown { animation: none !important; }
+}
+html body #question .advisor-avatar { position: relative !important; width: 52px !important; height: 52px !important; border-radius: 50% !important; overflow: hidden !important; background: linear-gradient(135deg,#f5f7fa,#e8ecef) !important; display: flex !important; align-items: center !important; justify-content: center !important; }
+html body #question .advisor.rank-2 .advisor-avatar { border: 2.5px solid #c8d0d8 !important; box-shadow: 0 0 0 3px rgba(200,208,216,.3), 0 6px 16px -6px rgba(150,160,170,.5) !important; }
+html body #question .advisor.rank-3 .advisor-avatar { border: 2.5px solid #d18a4a !important; box-shadow: 0 0 0 3px rgba(217,154,92,.3), 0 6px 16px -6px rgba(200,130,70,.55) !important; }
+html body #question .advisor-avatar img { width: 100% !important; height: 100% !important; object-fit: cover !important; display: block !important; }
+html body #question .advisor-avatar-fallback { font-size: 20px !important; font-weight: 950 !important; display: none !important; }
+html body #question .advisor-avatar-fallback.show { display: block !important; }
+html body #question .advisor.rank-2 .advisor-avatar-fallback { color: #4a5460 !important; }
+html body #question .advisor.rank-3 .advisor-avatar-fallback { color: #7a4a20 !important; }
+html body #question .advisor-name { font-size: 11px !important; font-weight: 900 !important; max-width: 100% !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; text-align: center !important; }
+html body #question .advisor.rank-2 .advisor-name { color: #4a5460 !important; }
+html body #question .advisor.rank-3 .advisor-name { color: #7a4a20 !important; }
+html body #question .advisor-time { font-size: 10px !important; font-weight: 900 !important; color: #6b8f78 !important; font-variant-numeric: tabular-nums !important; }
+html body #question .court-courtiers-label { display: flex !important; align-items: center !important; gap: 10px !important; font-size: 10px !important; font-weight: 900 !important; color: #8fa89a !important; letter-spacing: .2em !important; text-transform: uppercase !important; margin: 4px 0 6px !important; padding: 0 !important; width: 100% !important; }
+html body #question .court-courtiers-label::before, html body #question .court-courtiers-label::after { content: '' !important; flex: 1 !important; height: 1px !important; background: linear-gradient(90deg, transparent, rgba(200,220,205,.85), transparent) !important; }
+html body #question .court-courtiers-label span { padding: 0 4px !important; white-space: nowrap !important; }
+html body #question .court-courtiers { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 6px !important; width: 100% !important; }
+html body #question .courtiers-col { display: flex !important; flex-direction: column !important; gap: 5px !important; min-width: 0 !important; }
+html body #question .courtier { display: flex !important; align-items: center !important; gap: 6px !important; padding: 5px 7px !important; border-radius: 12px !important; background: rgba(255,255,255,.55) !important; border: 1px solid rgba(200,220,205,.55) !important; min-width: 0 !important; }
+html body #question .courtier-avatar { width: 28px !important; height: 28px !important; border-radius: 50% !important; overflow: hidden !important; flex-shrink: 0 !important; background: linear-gradient(135deg,#e8f5ec,#d4ead9) !important; border: 1.5px solid #fff !important; display: flex !important; align-items: center !important; justify-content: center !important; }
+html body #question .courtier-avatar img { width: 100% !important; height: 100% !important; object-fit: cover !important; display: block !important; }
+html body #question .courtier-avatar-fallback { font-size: 12px !important; font-weight: 950 !important; color: #4a7a5a !important; display: none !important; }
+html body #question .courtier-avatar-fallback.show { display: block !important; }
+html body #question .courtier-info { min-width: 0 !important; flex: 1 !important; display: flex !important; flex-direction: column !important; gap: 0 !important; }
+html body #question .courtier-name { font-size: 10.5px !important; font-weight: 900 !important; color: #234a32 !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; line-height: 1.15 !important; }
+html body #question .courtier-time { font-size: 9px !important; font-weight: 800 !important; color: #6b8f78 !important; font-variant-numeric: tabular-nums !important; line-height: 1.15 !important; }
+html body #question .landing-cta { display: inline-block !important; margin-top: 12px !important; margin-bottom: 6px !important; }
+html body #question .landing-lock-note { display: block !important; margin-top: 6px !important; margin-bottom: 6px !important; }
+@media (min-width: 480px) {
+  html body #question .throne-avatar { width: 80px !important; height: 80px !important; }
+  html body #question .throne-name { font-size: 15px !important; }
+  html body #question .advisor-avatar { width: 60px !important; height: 60px !important; }
+  html body #question .advisor-name { font-size: 12px !important; }
+  html body #question .courtier { padding: 7px 9px !important; gap: 8px !important; }
+  html body #question .courtier-avatar { width: 34px !important; height: 34px !important; }
+  html body #question .courtier-name { font-size: 12px !important; }
+  html body #question .courtier-time { font-size: 10px !important; }
+}
+
+/* ATTENDANCE CARD — Stats inline */
+html body .att-employee-info { min-width: 0 !important; flex: 1 !important; display: flex !important; flex-direction: column !important; gap: 2px !important; }
+html body .att-employee-line { display: flex !important; align-items: baseline !important; gap: 8px !important; min-width: 0 !important; flex-wrap: wrap !important; }
+html body .att-employee-line .wheel-value { min-width: 0 !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; flex: 0 1 auto !important; }
+html body .att-employee-stats { display: inline-flex !important; align-items: center !important; gap: 6px !important; font-size: 12px !important; font-weight: 900 !important; color: #6b8f78 !important; font-variant-numeric: tabular-nums !important; flex: 0 0 auto !important; }
+html body .att-employee-stats .att-stats-pts { color: #4fa370 !important; font-weight: 950 !important; }
+html body .att-employee-stats .att-stats-sep { color: #c0d0c4 !important; font-weight: 700 !important; margin: 0 1px !important; }
+html body .att-employee-stats .att-stats-rank { display: inline-flex !important; align-items: center !important; justify-content: center !important; padding: 1px 7px !important; border-radius: 5px !important; font-size: 11px !important; font-weight: 950 !important; line-height: 1.3 !important; letter-spacing: .02em !important; }
+html body .att-employee-stats .att-stats-rank.rank-VIP { background: linear-gradient(135deg,#fff4c4,#d88800) !important; color: #4a2a00 !important; }
+html body .att-employee-stats .att-stats-rank.rank-SSS { background: linear-gradient(135deg,#ff6b6b,#991b1b) !important; color: #fff !important; }
+html body .att-employee-stats .att-stats-rank.rank-SS { background: linear-gradient(135deg,#f0a5ff,#86198f) !important; color: #fff !important; }
+html body .att-employee-stats .att-stats-rank.rank-S { background: linear-gradient(135deg,#ffb366,#c2410c) !important; color: #fff !important; }
+html body .att-employee-stats .att-stats-rank.rank-A { background: linear-gradient(135deg,#93c5fd,#1e40af) !important; color: #fff !important; }
+html body .att-employee-stats .att-stats-rank.rank-B { background: linear-gradient(135deg,#e8eef3,#d0d8e0) !important; color: #6b7a86 !important; }
+</style>
+
+<style id="hideBdFabForce">
+body:not(.user-is-admin) #adminBtn { display: none !important; }
+
+/* Login remember checkbox */
+.login-remember-label { display: flex !important; align-items: center !important; gap: 8px !important; font-size: 13px !important; color: #5a7a60 !important; font-weight: 700 !important; margin: 4px 0 10px !important; cursor: pointer !important; user-select: none !important; padding: 2px 0 !important; }
+.login-remember-label input[type="checkbox"] { width: 18px !important; height: 18px !important; cursor: pointer !important; accent-color: #4fa370 !important; margin: 0 !important; flex-shrink: 0 !important; }
+.login-remember-label span { line-height: 1.2 !important; }
+
+/* FIX pinch-zoom */
+html, body { touch-action: pan-x pan-y !important; -webkit-text-size-adjust: 100% !important; text-size-adjust: 100% !important; }
+#menuOverlay { touch-action: manipulation !important; overscroll-behavior: contain !important; }
+#menuOverlay *, #menuOverlayInner *, .menu-item, .menu-float { touch-action: manipulation !important; }
+#menuToggle { touch-action: none !important; }
+body.menu-open { touch-action: none !important; overscroll-behavior: none !important; overflow: hidden !important; }
+body.menu-open #menuOverlay { transform: none !important; }
+</style>
+</head>
+<body>
+<noscript>
+  <div style="padding:24px;font-family:system-ui,-apple-system,sans-serif;text-align:center;background:#f3f8f1;color:#333">
+    <h2 style="margin:0 0 8px">⚠️ Cần bật JavaScript</h2>
+    <p style="margin:0">Trang này yêu cầu JavaScript để hoạt động. Vui lòng bật JavaScript và tải lại trang.</p>
+  </div>
+</noscript>
+
+<main id="space">
+  <div id="status"></div>
+  <div id="appVersion" aria-label="Phiên bản">v2.6.0</div>
+
+  <div id="homeStack">
+    <div id="questionWrap">
+      <div id="counter">CÂU 1</div>
+      <div id="question"></div>
+    </div>
+  </div>
+
+  <div id="wheelArea">
+    <div id="wheelViewport" class="wheel-viewport">
+      <div class="wheel-selection"></div>
+      <div id="items" class="wheel-items"></div>
+    </div>
+    <div id="wheelHint">Vuốt lên / xuống để chọn</div>
+    <button id="confirm" type="button">Xác nhận ❤️</button>
+  </div>
+
+  <div id="message"></div>
+
+  <section id="checklistPanel" style="display:none">
+    <div id="checklistScroll"><table id="checklist">
+      <thead><tr><th>Kiểm duyệt viên</th><th>Giờ</th><th>Hoàn thành</th></tr></thead><tbody></tbody>
+    </table></div>
+    <div id="checklistActions"><button id="captureBtn" type="button">📸 Chụp checklist</button><button id="syncBtn" type="button">↻ Đồng bộ lại</button></div>
+  </section>
+
+  <nav id="bottomNav" aria-label="Điều hướng chính">
+    <button id="homeBtn" type="button">⌂ Home</button>
+    <button id="adminBtn" type="button" hidden>⚙ Admin</button>
+    <button id="checklistBtn" type="button" aria-expanded="false">☑ Checklist</button>
+  </nav>
+  <nav id="secondaryNav" aria-label="Công cụ">
+    <button id="attendanceBtn" type="button">🗓 Chấm công</button>
+  </nav>
+
+  <section id="adminPage" aria-label="Cài đặt Admin">
+    <header id="adminPageHeader">
+      <button id="adminPageBack" type="button" aria-label="Quay lại">←</button>
+      <div id="adminPageTitle"><span class="admin-page-kicker">HỆ THỐNG</span><span class="admin-page-name">Cài đặt Admin</span></div>
+      <button id="adminPageLogout" type="button" aria-label="Đăng xuất admin">🚪</button>
+    </header>
+    <div id="adminPageBody">
+      <nav id="adminPageNav" aria-label="Mục cài đặt">
+        <button class="admin-tab active" data-admin-tab="schedule" type="button"><span class="admin-tab-icon">⚙</span><span class="admin-tab-label">Giờ</span></button>
+        <button class="admin-tab" data-admin-tab="checklist" type="button"><span class="admin-tab-icon">☑</span><span class="admin-tab-label">Checklist</span></button>
+        <button class="admin-tab" data-admin-tab="stats" type="button"><span class="admin-tab-icon">📊</span><span class="admin-tab-label">Thống kê</span></button>
+      </nav>
+      <div id="adminPageContent">
+        <div class="admin-panel-view active" data-admin-view="schedule">
+          <h2 class="admin-section-title">Khung giờ hoạt động</h2>
+          <div class="admin-card">
+            <div class="admin-card-row"><div class="admin-card-icon">🔄</div><div class="admin-card-info"><label for="resetTimeInput">Giờ reset mỗi ngày</label><p>Checklist tự động làm mới vào lúc này</p></div><input id="resetTimeInput" type="text" value="00:00" inputmode="numeric" maxlength="5" placeholder="00:00" autocomplete="off"></div>
+            <div class="admin-card-row"><div class="admin-card-icon">🔒</div><div class="admin-card-info"><label for="checklistLockTimeInput">Giờ khoá Checklist</label><p>Sau giờ này, nút Checklist sẽ tạm khoá</p></div><input id="checklistLockTimeInput" type="text" value="21:00" inputmode="numeric" maxlength="5" placeholder="21:00" autocomplete="off"></div>
+          </div>
+          <div class="admin-note"><span class="admin-note-icon">💡</span><span>Ví dụ: reset <b>00:00</b>, khoá <b>21:00</b> → Checklist mở từ 0h đến 21h mỗi ngày.</span></div>
+          <div id="adminStatus" class="admin-status"></div>
+          <div class="admin-actions"><button id="adminSaveBtn" type="button">💾 Lưu cài đặt</button></div>
+        </div>
+        <div class="admin-panel-view" data-admin-view="checklist">
+          <h2 class="admin-section-title">Quản lý Checklist hôm nay</h2>
+          <div class="admin-toolbar"><input id="adminChecklistSearch" type="text" placeholder="🔍 Tìm tên..." autocomplete="off"><div class="admin-filters"><button class="admin-filter-btn active" data-filter="all" type="button">Tất cả</button><button class="admin-filter-btn" data-filter="checked" type="button">✓ Đã</button><button class="admin-filter-btn" data-filter="unchecked" type="button">○ Chưa</button></div></div>
+          <div id="adminChecklistStats" class="admin-stats-bar"></div>
+          <div id="adminChecklistRows" class="admin-list"></div>
+        </div>
+        <div class="admin-panel-view" data-admin-view="stats">
+          <h2 class="admin-section-title">Thống kê hôm nay</h2>
+          <div class="admin-stats-grid">
+            <div class="admin-stat-card"><div class="admin-stat-icon">👥</div><div id="adminStatTotal" class="admin-stat-value">0</div><div class="admin-stat-label">Tổng số</div></div>
+            <div class="admin-stat-card success"><div class="admin-stat-icon">✅</div><div id="adminStatChecked" class="admin-stat-value">0</div><div class="admin-stat-label">Đã check</div></div>
+            <div class="admin-stat-card warn"><div class="admin-stat-icon">⭕</div><div id="adminStatUnchecked" class="admin-stat-value">0</div><div class="admin-stat-label">Chưa check</div></div>
+          </div>
+          <h3 class="admin-section-subtitle">⏰ Top 3 check sớm nhất</h3>
+          <div id="adminStatTop3" class="admin-list"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="hint" aria-hidden="true" hidden></div>
+</main>
+
+<button id="avatarBtn" type="button" aria-label="Đổi avatar" hidden>📷</button>
+<input id="avatarFileInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+
+<button id="logoutBtn" type="button" aria-label="Đăng xuất" hidden><span aria-hidden="true">🚪</span><span class="lb-name" id="logoutName"></span></button>
+
+<button id="displayNameBtn" type="button" hidden style="display:none"></button>
+
+<div id="loginOverlay" aria-hidden="true">
+  <section id="loginPanel" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+    <div id="loginHead">
+      <div id="loginTitle">🔐 Đăng nhập</div>
+      <button id="loginClose" type="button" aria-label="Đóng">×</button>
+    </div>
+    <label class="login-label" for="loginUsername">Tên đăng nhập</label>
+    <input id="loginUsername" type="text" inputmode="text" autocomplete="username" placeholder="VD: tienloi" maxlength="60" autocapitalize="none" spellcheck="false">
+    <label class="login-label" for="loginPassword">Mật khẩu</label>
+    <input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••">
+    <label class="login-remember-label" for="loginRemember">
+      <input type="checkbox" id="loginRemember">
+      <span>Lưu mật khẩu cho lần sau</span>
+    </label>
+    <div id="loginMsg"></div>
+    <button id="loginSubmit" type="button">Đăng nhập</button>
+  </section>
+</div>
+
+<section id="attendancePage" aria-label="Lịch chấm công">
+  <div class="att-page-inner"><div class="att-shell">
+    <header class="att-head">
+      <button id="attendanceBack" class="att-icon-btn" type="button" aria-label="Quay lại">←</button>
+      <div class="att-head-title"><span class="att-kicker">HỆ THỐNG 02</span><span class="att-title">Chấm công</span></div>
+      <div class="att-head-actions">
+        <button id="attendanceTodayBtn" class="att-icon-btn" type="button" aria-label="Về tháng hiện tại">📅</button>
+        <button id="attendanceSyncBtn" class="att-icon-btn" type="button" aria-label="Đồng bộ">⟳</button>
+      </div>
+    </header>
+    <button id="attendanceEmployeeWheelBtn" class="att-employee-card" type="button">
+      <span class="att-employee-avatar" id="attendanceEmployeeAvatar">?</span>
+      <span class="att-employee-info">
+        <span class="att-employee-label">Kiểm Duyệt Viên</span>
+        <span class="att-employee-line">
+          <span class="wheel-value">Đang tải…</span>
+          <span class="att-employee-stats" id="attendanceEmployeeStats"></span>
+        </span>
+      </span>
+      <span class="att-employee-chevron">⌄</span>
+    </button>
+    <select id="attendanceEmployee" aria-hidden="true" tabindex="-1"></select>
+    <div class="att-month-nav">
+      <button id="attendancePrev" type="button" aria-label="Tháng trước">‹</button>
+      <div class="att-month-label"><span id="attendanceMonthLabel">Tháng 1</span><span id="attendanceYearLabel">2026</span></div>
+      <button id="attendanceNext" type="button" aria-label="Tháng sau">›</button>
+    </div>
+    <div class="att-inline-stats">
+      <div class="att-inline-stat work"><span class="att-inline-stat-icon">✓</span><span class="att-inline-stat-value" id="attendanceWorkCount">0</span><span class="att-inline-stat-label">làm</span></div>
+      <div class="att-inline-stat off"><span class="att-inline-stat-icon">—</span><span class="att-inline-stat-value" id="attendanceOffCount">0</span><span class="att-inline-stat-label">nghỉ</span></div>
+      <div class="att-inline-stat leave"><span class="att-inline-stat-icon">🌴</span><span class="att-inline-stat-value" id="attendanceLeaveCount">0</span><span class="att-inline-stat-label">phép</span></div>
+    </div>
+    <section class="att-card att-calendar-card">
+      <div class="att-week" aria-hidden="true"><div>T2</div><div>T3</div><div>T4</div><div>T5</div><div>T6</div><div>T7</div><div>CN</div></div>
+      <div id="attendanceGrid" class="att-grid"></div>
+    </section>
+    <div class="att-footer-status">
+      <div id="attendanceSyncStatus" class="att-footer-line" aria-live="polite"><span class="att-footer-dot"></span><span class="att-footer-text">Chưa đồng bộ</span></div>
+      <div id="attendanceAutoStatus" class="att-footer-line muted"><span>⟳</span><span class="att-footer-text">Tự động làm mới sau <b id="attendanceCountdown">60</b>s</span></div>
+    </div>
+  </div></div>
+</section>
+
+<div id="attendanceNameWheel" aria-hidden="true">
+  <section class="att-name-wheel-panel" role="dialog" aria-modal="true">
+    <div class="att-name-wheel-head"><div class="att-name-wheel-title">Chọn kiểm duyệt viên</div><button id="attendanceNameWheelClose" type="button" aria-label="Đóng">×</button></div>
+    <div id="attendanceNameWheelViewport" class="att-name-wheel-viewport wheel-viewport"><div class="wheel-selection"></div><div id="attendanceNameWheelItems" class="wheel-items"></div></div>
+    <div class="att-name-wheel-hint">Vuốt lên / xuống để chọn</div>
+    <button id="attendanceNameWheelConfirm" type="button">Xác nhận</button>
+  </section>
+</div>
+
+<div id="attendanceStatusOverlay" aria-hidden="true">
+  <section id="attendanceStatusPanel" role="dialog" aria-modal="true">
+    <div class="att-sheet-handle" aria-hidden="true"></div>
+    <div id="attendanceStatusHead">
+      <div><div id="attendanceStatusTitle">Cập nhật chấm công</div><div id="attendanceStatusSub"></div></div>
+      <button id="attendanceStatusClose" type="button" aria-label="Đóng">×</button>
+    </div>
+    <div id="attendanceStatusOptions">
+      <button class="att-status-option work" type="button" data-status=""><span class="att-status-icon">✓</span><span class="att-status-label">Đi làm</span></button>
+      <button class="att-status-option leave" type="button" data-status="P"><span class="att-status-icon">🌴</span><span class="att-status-label">Phép</span></button>
+      <button class="att-status-option off" type="button" data-status="O"><span class="att-status-icon">—</span><span class="att-status-label">OFF</span></button>
+      <button class="att-status-option ot" type="button" data-status="T"><span class="att-status-icon">⚡</span><span class="att-status-label">OT</span></button>
+      <button class="att-status-option q" type="button" data-status="Q"><span class="att-status-icon">❓</span><span class="att-status-label">Quên</span></button>
+      <button class="att-status-option x" type="button" data-status="X"><span class="att-status-icon">⚠️</span><span class="att-status-label">Không phép</span></button>
+      <button id="attendanceMultiBtn" class="att-status-option multi" type="button"><span class="att-status-icon">☷</span><span class="att-status-label">Chọn nhiều</span></button>
+      <button class="att-status-option clear" type="button" data-status="__clear"><span class="att-status-icon">🗑</span><span class="att-status-label">Xoá</span></button>
+    </div>
+    <div id="attendanceStatusSaving"></div>
+  </section>
+</div>
+
+<div id="attendanceMultiBar" aria-hidden="true">
+  <button class="att-multi-action cancel" id="attendanceMultiCancel" type="button">Hủy</button>
+  <div id="attendanceMultiCount">0 ngày</div>
+  <button class="att-multi-action p" data-multi-status="P" type="button">Phép</button>
+  <button class="att-multi-action o" data-multi-status="O" type="button">OFF</button>
+  <button class="att-multi-action t" data-multi-status="T" type="button">OT</button>
+  <button class="att-multi-action q" data-multi-status="Q" type="button">Quên</button>
+  <button class="att-multi-action x" data-multi-status="X" type="button">X</button>
+  <button class="att-multi-action clear" data-multi-status="" type="button">Xóa</button>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/toast.js" defer></script>
+<script src="js/admin-session.js" defer></script>
+<script src="js/store.js" defer></script>
+<script src="js/scheduler.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-adapter.js" defer></script>
+<script src="js/display-name.js" defer></script>
+<script src="js/auth.js" defer></script>
+<script src="js/main.js" defer></script>
+<script src="js/auth-ui.js" defer></script>
+<script src="js/avatar-upload.js" defer></script>
+<script src="js/checklist-ui.js?v=6.3" defer></script>
+<script src="js/checklist-bridge.js" defer></script>
+<script src="js/attendance.js" defer></script>
+<script src="js/attendance-top3.js" defer></script>
+<script src="js/realtime.js" defer></script>
+<script src="js/menu.js" defer></script>
+
+<script>
+(function(){
+  "use strict";
+  var done = false;
+  function scrollTopOnce(){
+    if (done) return;
+    if (window.scrollY > 4) window.scrollTo(0, 0);
+    done = true;
+  }
+  window.addEventListener('load', function(){
+    setTimeout(scrollTopOnce, 150);
+    setTimeout(scrollTopOnce, 600);
+    setTimeout(scrollTopOnce, 1500);
+  });
+})();
+</script>
+
+<button id="menuToggle" type="button" aria-label="Mở menu" aria-expanded="false">
+  <span></span><span></span><span></span>
+</button>
+
+<div id="menuOverlay" aria-hidden="true">
+  <div id="menuOverlayInner">
+    <div class="menu-float" style="top:6%;left:6%;animation-delay:0s">🌸</div>
+    <div class="menu-float small" style="top:14%;right:10%;animation-delay:.7s">✨</div>
+    <div class="menu-float" style="top:42%;left:3%;animation-delay:1.4s">💗</div>
+    <div class="menu-float small" style="top:58%;right:5%;animation-delay:.3s">🎀</div>
+    <div class="menu-float" style="bottom:14%;left:12%;animation-delay:1s">🐾</div>
+    <div class="menu-float small" style="bottom:22%;right:14%;animation-delay:1.7s">✨</div>
+    <div class="menu-float small" style="top:78%;left:8%;animation-delay:.5s">🌸</div>
+    <div class="menu-float small" style="top:30%;right:20%;animation-delay:2s">💕</div>
+
+    <header class="menu-header">
+      <div class="menu-brand">
+        <div class="menu-brand-logo">🐱</div>
+        <div class="menu-brand-text">
+          <div class="menu-brand-name">Đảo Mèo</div>
+          <div class="menu-brand-sub">Daily Mission</div>
+        </div>
+      </div>
+      <button class="menu-close" type="button" aria-label="Đóng menu">✕</button>
+    </header>
+
+    <div id="menuUserCard" class="menu-user-card" hidden>
+      <div class="menu-user-avatar" id="menuUserAvatar">🐱</div>
+      <div class="menu-user-info">
+        <div class="menu-user-name" id="menuUserName">Khách</div>
+        <div class="menu-user-sub" id="menuUserRole">Thành viên</div>
+      </div>
+      <button class="menu-user-action" id="menuAvatarBtn" type="button" aria-label="Đổi avatar">📷</button>
+      <button class="menu-user-logout" id="menuLogoutBtn" type="button" aria-label="Đăng xuất">🚪</button>
+    </div>
+
+    <div class="menu-section">
+      <div class="menu-section-title"><span>✨</span> Chính</div>
+      <div class="menu-grid">
+        <button class="menu-item" data-target="homeBtn" type="button"><span class="menu-item-icon">⌂</span><span class="menu-item-label">Home</span></button>
+        <button class="menu-item" data-target="adminBtn" type="button" hidden><span class="menu-item-icon">⚙</span><span class="menu-item-label">Admin</span></button>
+        <button class="menu-item" data-target="checklistBtn" type="button"><span class="menu-item-icon">☑</span><span class="menu-item-label">Checklist</span></button>
+      </div>
+    </div>
+
+    <div class="menu-section">
+      <div class="menu-section-title"><span>🎀</span> Công cụ</div>
+      <div class="menu-grid">
+        <button class="menu-item" data-target="attendanceBtn" type="button"><span class="menu-item-icon">🗓</span><span class="menu-item-label">Chấm công</span></button>
+        <button class="menu-item" data-target="displayNameBtn" type="button"><span class="menu-item-icon">🎴</span><span class="menu-item-label">Đổi tên hiển thị</span></button>
+      </div>
+    </div>
+
+    <div class="menu-footer">Made with 💗 · v2.6.0</div>
+  </div>
+</div>
+</body>
+</html>
