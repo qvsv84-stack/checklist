@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════
-   MAIN.JS — CORE v3.0.0 🐱
+   MAIN.JS — CORE v3.0.1 🐱
    - Landing + Checkin wheel + Court top3
    - Checklist logic + capture ảnh
    - Admin panel (3 tab)
    - Auto sync + reset schedule
-   - KHÔNG có: LiveFeed, Monitor, Puzzle, Tulokho, Wallet UI, Birthday
+   - Realtime listen sb:score:changed
    ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -17,7 +17,6 @@
     return;
   }
 
-  /* ───── CONSTANTS ───── */
   const TIMEOUT = Object.freeze({ FAST: 8000, NORMAL: 12000, SLOW: 20000, DEFAULT: 12000 });
   const CHECKLIST_LOCK_KEY = 'srank_checklist_lock_time_v1';
   const LAST_PICKED_NAME_KEY = 'srank_last_picked_name_v1';
@@ -28,7 +27,6 @@
   const SETTINGS_TTL = 300000;
   const ITEM_H = 58;
 
-  /* ───── DOM REFS ───── */
   const $ = id => document.getElementById(id);
   const els = {
     space: $('space'),
@@ -86,7 +84,6 @@
   }
   window.attendanceRankClient = rankClient;
 
-  /* ───── UTILS ───── */
   const todayKey = () => Store.todayKey();
   const dayKeyOf = ts => Store.dayKeyOf(ts);
   const yesterdayKey = () => Store.yesterdayKey();
@@ -224,6 +221,9 @@
   let checklistLockTime = '21:00';
   let initialSheetLoaded = false;
   let adminUnlocked = AdminSession.isValid();
+
+  /* ⭐ Realtime debounce state */
+  let _realtimeDebounceTimer = null;
 
   const _getStateForCache = () => ({ names, checked, times, points, ranks, day: todayKey() });
   const cacheSchedule = (immediate = false) => {
@@ -1524,6 +1524,20 @@
   document.addEventListener('visibilitychange', onVisible);
   window.addEventListener('focus', onVisible);
 
+  /* ⭐ Realtime listen — debounce 300ms */
+  window.addEventListener('sb:score:changed', () => {
+    if (_realtimeDebounceTimer) return;
+    _realtimeDebounceTimer = setTimeout(() => {
+      _realtimeDebounceTimer = null;
+      if (syncInFlight) return;
+      if (document.hidden) return;
+      if (els.wheelArea.classList.contains('show') || els.message.classList.contains('show')) return;
+      if (Date.now() - _lastUserActionAt < USER_ACTION_PAUSE_MS) return;
+      lastAutoSyncAt = Date.now();
+      loadData(false, true);
+    }, 300);
+  });
+
   /* ───── PUBLIC API ───── */
   window.__getChecklistNames = () => Array.isArray(names) ? names.slice() : [];
   window.__getChecklistState = () => ({
@@ -1657,5 +1671,5 @@
     try { renderAdminStats(); } catch (_) {}
   });
 
-  console.log('[main] ready ✓ v3.0.0');
+  console.log('[main] ready ✓ v3.0.1');
 })();
