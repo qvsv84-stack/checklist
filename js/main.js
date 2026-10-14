@@ -1,12 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════
-   MAIN.JS — CORE v3.0.4 🐱
-   - Landing + Checkin wheel + Court top3
-   - Checklist logic + capture ảnh
-   - Admin panel (3 tab)
-   - Auto sync + reset schedule
-   - Realtime listen sb:score:changed
-   - Avatar cache + retry sau auth
-   - Crown ☀️🌙 luôn hiện; đã bỏ 🥇 ở throne
+   MAIN.JS — CORE v3.0.5 🐱
+   - ĐÃ XOÁ: wheel câu 1 + câu 2 + showMessage + openQuestion1
+   - Flow: Login → bấm CTA → checkin(displayName) → xong
+   - GIỮ: createWheel factory (attendance.js dùng)
+   - Landing + Checklist + Admin + Auto sync + Realtime + Avatar
    ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -21,24 +18,17 @@
 
   const TIMEOUT = Object.freeze({ FAST: 8000, NORMAL: 12000, SLOW: 20000, DEFAULT: 12000 });
   const CHECKLIST_LOCK_KEY = 'srank_checklist_lock_time_v1';
-  const LAST_PICKED_NAME_KEY = 'srank_last_picked_name_v1';
   const CHECKLIST_SYNC_MS = 30000;
   const AUTO_SYNC_MS = 15000;
   const USER_ACTION_PAUSE_MS = 5000;
   const SELF_CHECK_IGNORE_MS = 20000;
   const SETTINGS_TTL = 300000;
-  const ITEM_H = 58;
 
   const $ = id => document.getElementById(id);
   const els = {
     space: $('space'),
     question: $('question'),
-    counter: $('counter'),
-    wheelArea: $('wheelArea'),
-    itemsBox: $('items'),
-    confirm: $('confirm'),
     hint: $('hint'),
-    message: $('message'),
     checklistPanel: $('checklistPanel'),
     checklistScroll: $('checklistScroll'),
     checklistBody: document.querySelector('#checklist tbody'),
@@ -119,7 +109,6 @@
   }
   window.__loadAvatarsFromSupabase = loadAvatarsFromSupabase;
 
-  /* ⭐ Bootstrap avatar với retry (chờ session sẵn sàng) */
   function bootstrapAvatars(retries) {
     if (retries == null) retries = 5;
     loadAvatarsFromSupabase().then((hasData) => {
@@ -159,8 +148,8 @@
     return 'ck_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 12);
   };
 
-  /* ───── WHEEL FACTORY ───── */
-  function createWheel({ viewport, itemsBox, itemHeight = ITEM_H, itemClass = '', onChange }) {
+  /* ───── WHEEL FACTORY (chỉ expose cho attendance.js dùng) ───── */
+  function createWheel({ viewport, itemsBox, itemHeight = 58, itemClass = '', onChange }) {
     let index = 0, offset = 0, dragging = false, startY = 0, items = [];
     const raf = { id: 0 };
 
@@ -256,8 +245,6 @@
   /* ───── STATE ───── */
   let names = [], checked = [], times = [], points = [], ranks = [];
   let stateDay = '';
-  let current = 0;
-  let q1Opened = false;
   let _lastUserActionAt = 0;
   const _recentSelfChecks = new Map();
   const _pendingChecks = new Set();
@@ -271,7 +258,6 @@
   let resetTime = '00:00', resetTimer = null;
   let checklistLockTime = '21:00';
   let initialSheetLoaded = false;
-  let adminUnlocked = AdminSession.isValid();
 
   let _realtimeDebounceTimer = null;
 
@@ -368,7 +354,7 @@
     try { renderChecklist(true); } catch (_) {}
     try { if (typeof renderAdminChecklistEditor === 'function') renderAdminChecklistEditor(); } catch (_) {}
     try { if (typeof renderAdminStats === 'function') renderAdminStats(); } catch (_) {}
-    if (!q1Opened && !els.checklistPanel.classList.contains('show')) {
+    if (!els.checklistPanel.classList.contains('show')) {
       try { renderLandingState(true); } catch (_) {}
     }
     console.log('[CL] Reset local:', oldDay, '→', newDay);
@@ -571,22 +557,6 @@
     }
   }
 
-  /* ───── WHEEL INSTANCE ───── */
-  const mainWheel = createWheel({
-    viewport: els.wheelArea.querySelector('#wheelViewport') || els.wheelArea,
-    itemsBox: els.itemsBox,
-    itemHeight: ITEM_H,
-    onChange: () => els.confirm.classList.add('show')
-  });
-  mainWheel.attach();
-
-  const origSetItems = mainWheel.setItems;
-  mainWheel.setItems = list => {
-    origSetItems(list);
-    setTimeout(() => mainWheel.schedule(), 20);
-  };
-  const buildWheel = () => mainWheel.setItems(names);
-
   /* ───── LOAD DATA ───── */
   async function loadData(showError = true, force = false) {
     if (syncInFlight) {
@@ -595,7 +565,6 @@
     }
     if (initialSheetLoaded && !force) {
       renderChecklist();
-      buildWheel();
       renderAdminChecklistEditor();
       return true;
     }
@@ -604,7 +573,6 @@
     try {
       if (!names.length && cacheLoad()) {
         renderChecklist();
-        buildWheel();
       } else if (!names.length && els.checklistPanel.classList.contains('show')) {
         renderChecklistSkeleton();
       }
@@ -681,7 +649,6 @@
       window.syncAttendanceEmployees?.();
       cacheSave();
       renderChecklist(true);
-      buildWheel();
       if (els.adminPage.classList.contains('show')) renderAdminChecklistEditor();
       if (els.hint) els.hint.textContent = 'Chạm vào câu hỏi';
       setStatus(force ? 'Đã cập nhật ✓' : 'Đã đồng bộ ✓');
@@ -704,8 +671,6 @@
     autoSyncTimer = setTimeout(async function tick() {
       const skip =
         document.hidden ||
-        els.wheelArea.classList.contains('show') ||
-        els.message.classList.contains('show') ||
         document.getElementById('attendancePage')?.classList.contains('show') ||
         Date.now() - _lastUserActionAt < USER_ACTION_PAUSE_MS ||
         syncInFlight;
@@ -743,7 +708,7 @@
     stateDay = todayKey();
     cacheSave();
     if (!updateChecklistRow(index)) renderChecklist(true);
-    if (!q1Opened && !els.checklistPanel.classList.contains('show')) renderLandingState();
+    if (!els.checklistPanel.classList.contains('show')) renderLandingState();
     setStatus(`Đã ghi ${clientTime} ✓`);
 
     try {
@@ -776,51 +741,9 @@
       _recentSelfChecks.delete(name);
       cacheSave();
       if (!updateChecklistRow(index)) renderChecklist(true);
-      if (!q1Opened && !els.checklistPanel.classList.contains('show')) renderLandingState();
+      if (!els.checklistPanel.classList.contains('show')) renderLandingState();
       const msg = String(err?.message || '').trim();
       setStatus(msg ? `Không ghi được: ${msg}` : 'Không ghi được — kiểm tra mạng');
-    }
-  }
-
-  /* ───── BURST ───── */
-  function burst() {
-    const f = document.createElement('div');
-    f.className = 'flash';
-    els.space.appendChild(f);
-    setTimeout(() => f.remove(), 700);
-
-    const hearts = [];
-    for (let i = 0; i < 20; i++) {
-      const h = document.createElement('div');
-      h.className = 'heart';
-      h.textContent = i % 5 === 0 ? '💗' : '♥';
-      const a = Math.PI * 2 * i / 20;
-      const r = 80 + Math.random() * 200;
-      h.style.setProperty('--x', Math.cos(a) * r + 'px');
-      h.style.setProperty('--y', Math.sin(a) * r + 'px');
-      h.style.setProperty('--r', Math.random() * 120 - 60 + 'deg');
-      h.style.setProperty('--s', (0.7 + Math.random() * 1.3).toFixed(2));
-      h.style.setProperty('--time', (0.7 + Math.random() * 0.6).toFixed(2) + 's');
-      els.space.appendChild(h);
-      hearts.push(h);
-    }
-    setTimeout(() => { for (const h of hearts) h.remove(); }, 1600);
-  }
-
-  function showMessage(html, duration = 2200, next = null) {
-    els.wheelArea.classList.remove('show');
-    els.question.style.opacity = '0';
-    els.hint.textContent = '';
-    els.message.innerHTML = html;
-    els.message.classList.remove('show');
-    void els.message.offsetWidth;
-    els.message.classList.add('show');
-    burst();
-    if (next) {
-      setTimeout(() => {
-        els.message.classList.remove('show');
-        setTimeout(next, 220);
-      }, duration);
     }
   }
 
@@ -848,7 +771,6 @@
   }
 
   function renderLandingState(forceFullReplay = false) {
-    els.question.classList.remove('hero-wheel-open');
     const locked = isChecklistLocked();
     els.question.classList.toggle('checklist-locked-home', locked);
 
@@ -883,7 +805,6 @@
       const _L = _court.filter((_, i) => i % 2 === 0);
       const _R = _court.filter((_, i) => i % 2 === 1);
 
-      /* ⭐ v3.0.4: bỏ 🥇 ở throne; crown ☀️🌙 luôn hiện */
       const _podium = `<div class="court-podium">`
         + `<div class="podium-slot podium-slot-2">${_t2 ? `<div class="advisor rank-2"><div class="advisor-crown">☀️</div><div class="advisor-avatar">${_av(_t2, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t2)}">${_nm(_t2)}</div><div class="advisor-time">${_t2.time}</div></div>` : ''}</div>`
         + `<div class="podium-slot podium-slot-1">${_t1 ? `<div class="court-throne"><div class="throne-crown">👑</div><div class="throne-avatar">${_av(_t1, 'throne-avatar')}</div><div class="throne-name" title="${_nm(_t1)}">${_nm(_t1)}</div><div class="throne-time">${_t1.time}</div></div>` : ''}</div>`
@@ -1011,120 +932,18 @@
   }
 
   function maybeRenderLanding() {
-    if (q1Opened) return;
     if (els.checklistPanel.classList.contains('show')) return;
-    if (els.wheelArea.classList.contains('show')) return;
-    if (els.message.classList.contains('show')) return;
-    if (els.confirm.classList.contains('show')) return;
     renderLandingState();
     _lastLockCheck = Date.now();
     _cachedLocked = isChecklistLocked();
   }
 
-  /* ───── QUESTION FLOW ───── */
-  function openQuestion1(e) {
-    e?.preventDefault();
-    if (isChecklistLocked()) { renderLandingState(); return; }
-    if (q1Opened || !names.length) return;
-    q1Opened = true;
-    _lastUserActionAt = Date.now();
-    els.question.classList.add('hero-wheel-open');
-    els.question.style.pointerEvents = 'none';
-    els.question.style.opacity = '0';
-    els.question.style.transform = 'scale(.8)';
-    burst();
-    setTimeout(() => {
-      els.wheelArea.style.opacity = '1';
-      els.wheelArea.style.pointerEvents = 'auto';
-      els.wheelArea.classList.add('show');
-      els.confirm.classList.add('show');
-      try {
-        const lastPicked = localStorage.getItem(LAST_PICKED_NAME_KEY);
-        if (lastPicked) {
-          const idx = names.indexOf(lastPicked);
-          if (idx >= 0) mainWheel.setIndex(idx);
-        }
-      } catch (_) {}
-      mainWheel.schedule();
-      els.hint.textContent = 'Vuốt lên / xuống • ↑ ↓ để chọn • Enter để xác nhận';
-      syncQuickTools();
-    }, 180);
-  }
-
-  els.confirm.addEventListener('click', () => {
-    if (isChecklistLocked()) { resetHome(); return; }
-    const selected = names[mainWheel.getIndex()];
-    if (!selected) return;
-    try { localStorage.setItem(LAST_PICKED_NAME_KEY, selected); } catch (_) {}
-    current = mainWheel.getIndex();
-    showQuestion2();
-  });
-
-  function showQuestion2() {
-    els.wheelArea.classList.remove('show');
-    els.wheelArea.style.opacity = '0';
-    els.wheelArea.style.pointerEvents = 'none';
-    els.confirm.classList.remove('show');
-    els.counter.textContent = 'CÂU 2';
-    els.question.innerHTML = '<div class="system-question"><div class="system-question-title">HỆ THỐNG ĐẢO MÈO</div><div class="system-question-sub">Hôm nay bạn đã hoàn thành checklist chưa?</div></div>';
-    els.question.style.opacity = '1';
-    els.question.style.pointerEvents = 'none';
-    els.question.style.transform = 'scale(1)';
-
-    const box = document.createElement('div');
-    box.id = 'q2answers';
-    box.innerHTML = '<button id="doneBtn">Tôi đã hoàn thành</button><button id="laterBtn">Tôi chưa hoàn thành</button>';
-    els.space.appendChild(box);
-    Object.assign(box.style, {
-      position: 'absolute', left: '50%', top: '64%',
-      transform: 'translate(-50%,0)', zIndex: '22',
-      display: 'flex', flexDirection: 'column', gap: '12px',
-      width: 'min(88vw,390px)', opacity: '0', transition: 'opacity .25s'
-    });
-    [...box.children].forEach(b => Object.assign(b.style, {
-      minHeight: '50px', padding: '10px 18px', borderRadius: '999px',
-      border: '1px solid rgba(255,255,255,.25)', color: '#fff',
-      fontSize: '15px', fontWeight: '700', background: 'rgba(255,255,255,.07)',
-      backdropFilter: 'blur(10px)'
-    }));
-    box.querySelector('#doneBtn').style.background = 'linear-gradient(135deg,#ff3c91,#ff70b9)';
-    requestAnimationFrame(() => box.style.opacity = '1');
-
-    box.querySelector('#doneBtn').addEventListener('click', () => {
-      const completedIndex = mainWheel.getIndex();
-      const selected = names[completedIndex];
-      box.remove();
-      els.question.style.opacity = '0';
-      els.question.style.pointerEvents = 'none';
-      els.hint.textContent = '';
-      els.message.classList.remove('show');
-      checkin(selected, completedIndex);
-      window.__clV6?.open?.();
-      const row = els.checklistBody.querySelector(`tr[data-index="${completedIndex}"]`);
-      if (row) setTimeout(() => row.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80);
-    });
-
-    box.querySelector('#laterBtn').addEventListener('click', () => {
-      box.remove();
-      showMessage(`<div class="later-message"><span class="later-title">Không sao!</span><span class="later-name">Cố lên "${names[mainWheel.getIndex()]}" 💪</span></div>`, 0);
-    });
-  }
-
+  /* ───── RESET HOME (đơn giản hoá — chỉ dọn overlay) ───── */
   function resetHome() {
     document.getElementById('q2answers')?.remove();
     window.__clV6?.close?.();
     restartAutoSync();
-    els.message.classList.remove('show');
-    els.wheelArea.classList.remove('show');
-    els.wheelArea.style.opacity = '0';
-    els.wheelArea.style.pointerEvents = 'none';
-    els.confirm.classList.remove('show');
     syncQuickTools();
-    q1Opened = false;
-    els.question.classList.remove('hero-wheel-open');
-    current = 0;
-    mainWheel.setIndex(0);
-    els.counter.textContent = 'CÂU 1';
     _lastTop3Signature = '';
     renderLandingState(true);
     els.hint.textContent = isChecklistLocked() ? '' : (names.length ? 'Chạm vào câu hỏi' : 'Đang tải dữ liệu…');
@@ -1308,7 +1127,7 @@
       renderChecklist(true);
       renderAdminChecklistEditor();
       renderAdminStats();
-      if (!q1Opened && !els.checklistPanel.classList.contains('show')) renderLandingState();
+      if (!els.checklistPanel.classList.contains('show')) renderLandingState();
       setStatus(next ? 'Đã check ✓' : 'Đã bỏ check ✓');
     } catch (e) {
       const _em = (e && e.message) || 'Không cập nhật được';
@@ -1366,7 +1185,6 @@
 
   function openAdminSettings() {
     if (!AdminSession.isValid()) { setStatus('Bạn không có quyền admin'); return; }
-    adminUnlocked = true;
     syncQuickTools();
     els.adminPage.classList.add('show');
     els.adminPage.setAttribute('aria-hidden', 'false');
@@ -1416,9 +1234,6 @@
     const otherOpen =
       els.checklistPanel.classList.contains('show') ||
       els.adminPage.classList.contains('show') ||
-      els.wheelArea.classList.contains('show') ||
-      els.message.classList.contains('show') ||
-      els.confirm.classList.contains('show') ||
       document.getElementById('attendanceNameWheel')?.classList.contains('show') ||
       document.getElementById('attendancePage')?.classList.contains('show') ||
       document.getElementById('loginOverlay')?.classList.contains('show');
@@ -1451,7 +1266,6 @@
   els.adminPageLogout?.addEventListener('click', () => {
     if (confirm('Đăng xuất khỏi Admin?')) {
       AdminSession.clear();
-      adminUnlocked = false;
       closeAdmin();
       setStatus('Đã đăng xuất admin');
     }
@@ -1515,22 +1329,6 @@
     }
   });
 
-  addEventListener('keydown', e => {
-    if (!els.wheelArea.classList.contains('show')) return;
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      mainWheel.setIndex(mainWheel.getIndex() + 1);
-      els.confirm.classList.add('show');
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      mainWheel.setIndex(mainWheel.getIndex() - 1);
-      els.confirm.classList.add('show');
-    } else if (e.key === 'Enter' && els.confirm.classList.contains('show')) {
-      e.preventDefault();
-      els.confirm.click();
-    }
-  });
-
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     const capturePreview = document.getElementById('capturePreview');
@@ -1555,7 +1353,6 @@
       else attendancePage.classList.remove('show');
       syncQuickTools(); e.preventDefault(); return;
     }
-    if (els.wheelArea.classList.contains('show')) { resetHome(); e.preventDefault(); return; }
   });
 
   function onVisible() {
@@ -1566,7 +1363,6 @@
     }
     _lastLockCheck = 0;
     if (syncInFlight || !initialSheetLoaded) return;
-    if (els.wheelArea.classList.contains('show') || els.message.classList.contains('show')) return;
     if (Date.now() - _lastUserActionAt < USER_ACTION_PAUSE_MS) return;
     if (Date.now() - lastAutoSyncAt < 3000) return;
     lastAutoSyncAt = Date.now();
@@ -1582,7 +1378,6 @@
       _realtimeDebounceTimer = null;
       if (syncInFlight) return;
       if (document.hidden) return;
-      if (els.wheelArea.classList.contains('show') || els.message.classList.contains('show')) return;
       if (Date.now() - _lastUserActionAt < USER_ACTION_PAUSE_MS) return;
       lastAutoSyncAt = Date.now();
       loadData(false, true);
@@ -1611,7 +1406,7 @@
     stateDay = todayKey();
     cacheSave();
     renderChecklist(true);
-    if (!q1Opened && !els.checklistPanel.classList.contains('show')) renderLandingState();
+    if (!els.checklistPanel.classList.contains('show')) renderLandingState();
 
     try {
       const token = AdminSession.get();
@@ -1628,7 +1423,7 @@
       times[idx] = prevTime;
       cacheSave();
       renderChecklist(true);
-      if (!q1Opened && !els.checklistPanel.classList.contains('show')) renderLandingState();
+      if (!els.checklistPanel.classList.contains('show')) renderLandingState();
       throw e;
     }
   };
@@ -1656,7 +1451,6 @@
       checked: checked.slice(),
       times: times.slice()
     }),
-    /* ⭐ v3.0.4 — Avatar API */
     avatar: {
       setCache: (name, url) => {
         try {
@@ -1681,7 +1475,6 @@
   loadChecklistLockTime();
   if (els.checklistLockTimeInput) els.checklistLockTimeInput.value = checklistLockTime;
 
-  /* ⭐ Reload avatars khi auth state thay đổi */
   try {
     if (window.SRank?.Auth?.onChange) {
       window.SRank.Auth.onChange(() => {
@@ -1695,14 +1488,12 @@
     }
   } catch (_) {}
 
-  /* ⭐ Bootstrap avatars với retry */
   bootstrapAvatars(5);
 
   let _loadDataPromise = null;
   if (cacheLoad()) {
     initialSheetLoaded = true;
     renderChecklist(true);
-    buildWheel();
     if (els.hint) els.hint.textContent = names.length ? 'Chạm vào câu hỏi' : 'Đang tải dữ liệu…';
     setStatus('Đã tải dữ liệu lưu ✓');
     _loadDataPromise = loadData(false, true);
@@ -1736,11 +1527,11 @@
       const nextLocked = isChecklistLocked();
       const lockChanged = nextLocked !== _cachedLocked;
       _cachedLocked = nextLocked;
-      if (lockChanged && !q1Opened && !els.checklistPanel.classList.contains('show')) {
+      if (lockChanged && !els.checklistPanel.classList.contains('show')) {
         renderLandingState();
       }
     }
-    if (!q1Opened && !els.checklistPanel.classList.contains('show')) {
+    if (!els.checklistPanel.classList.contains('show')) {
       if (_cachedLocked) {
         if (els.hint && els.hint.textContent !== '') els.hint.textContent = '';
       } else if (names.length && els.hint && els.hint.textContent !== 'Chạm vào câu hỏi') {
@@ -1758,7 +1549,6 @@
     try { renderAdminStats(); } catch (_) {}
   });
 
-  /* ⭐ Re-render khi avatar thay đổi */
   window.addEventListener('avatarUpdated', () => {
     loadAvatarsFromSupabase().then(() => {
       try { renderLandingState(true); } catch (_) {}
@@ -1766,5 +1556,5 @@
     }).catch(() => {});
   });
 
-  console.log('[main] ready ✓ v3.0.4');
+  console.log('[main] ready ✓ v3.0.5');
 })();
