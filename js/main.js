@@ -4,6 +4,7 @@
    - Flow: Login → bấm CTA → checkin(displayName) → xong
    - GIỮ: createWheel factory (attendance.js dùng)
    - Landing + Checklist + Admin + Auto sync + Realtime + Avatar
+   - THÊM: Admin long-press đổi tên hiển thị + tab Users (tạo/list/toggle)
    ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -54,7 +55,15 @@
     checklistLockTimeInput: $('checklistLockTimeInput'),
     adminStatus: $('adminStatus'),
     adminSaveBtn: $('adminSaveBtn'),
-    adminChecklistRows: $('adminChecklistRows')
+    adminChecklistRows: $('adminChecklistRows'),
+    adminNewUsername: $('adminNewUsername'),
+    adminNewPassword: $('adminNewPassword'),
+    adminNewDisplayName: $('adminNewDisplayName'),
+    adminNewAttRow: $('adminNewAttRow'),
+    adminCreateUserBtn: $('adminCreateUserBtn'),
+    adminUsersStatus: $('adminUsersStatus'),
+    adminUsersRows: $('adminUsersRows'),
+    adminUsersSearch: $('adminUsersSearch')
   };
 
   /* ───── FALLBACK HELPERS ───── */
@@ -1181,6 +1190,7 @@
     els.adminViews.forEach(v => v.classList.toggle('active', v.dataset.adminView === tabName));
     if (tabName === 'checklist') renderAdminChecklistEditor();
     else if (tabName === 'stats') renderAdminStats();
+    else if (tabName === 'users') renderAdminUsers();
   }
 
   function openAdminSettings() {
@@ -1203,6 +1213,7 @@
     els.adminStatus.classList.remove('error', 'warn');
     renderAdminChecklistEditor();
     renderAdminStats();
+    renderAdminUsers();
 
     getSettingsCached(false).then(s => {
       if (!s) return;
@@ -1228,6 +1239,179 @@
     document.body.style.overflow = '';
     syncQuickTools();
   };
+
+  /* ───── ADMIN USERS (tạo / list / toggle) ───── */
+  let _adminUsersSearchTerm = '';
+  let _adminUsersList = [];
+
+  function _currentUsername() {
+    try {
+      const u = window.SRank?.Auth?.getCurrentUser?.();
+      if (!u || !u.email) return '';
+      return String(u.email).split('@')[0].toLowerCase();
+    } catch (_) { return ''; }
+  }
+
+  function _renderAdminUsersList() {
+    if (!els.adminUsersRows) return;
+    const q = _adminUsersSearchTerm;
+    const filtered = !q ? _adminUsersList : _adminUsersList.filter(u =>
+      String(u.username || '').toLowerCase().includes(q) ||
+      String(u.displayName || '').toLowerCase().includes(q)
+    );
+    if (!filtered.length) {
+      els.adminUsersRows.innerHTML = '<div class="admin-list-empty">Không có user nào</div>';
+      return;
+    }
+    const me = _currentUsername();
+    const frag = document.createDocumentFragment();
+    filtered.forEach(u => {
+      const isMe = u.username === me;
+      const row = document.createElement('div');
+      row.className = 'admin-row-item' + (u.active ? ' checked' : '');
+
+      const nameEl = document.createElement('span');
+      nameEl.className = 'admin-row-name';
+      nameEl.textContent = (u.isAdmin ? '👑 ' : '') + (u.displayName || u.username);
+
+      const userEl = document.createElement('span');
+      userEl.className = 'admin-row-time';
+      userEl.textContent = '@' + u.username + (u.active ? '' : ' · tắt');
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'admin-row-btn' + (u.active ? ' checked' : '');
+      if (isMe) {
+        btn.disabled = true;
+        btn.textContent = '(bạn)';
+      } else {
+        btn.textContent = u.active ? 'Tắt' : 'Bật';
+        btn.addEventListener('click', () => adminToggleUser(u.username, !u.active, btn));
+      }
+      row.append(nameEl, userEl, btn);
+      frag.appendChild(row);
+    });
+    els.adminUsersRows.innerHTML = '';
+    els.adminUsersRows.appendChild(frag);
+  }
+
+  async function renderAdminUsers() {
+    if (!els.adminUsersRows) return;
+    const token = AdminSession.get();
+    if (!token) return;
+    const sb = window.__sb;
+    if (!sb || !sb.rpc) {
+      els.adminUsersRows.innerHTML = '<div class="admin-list-empty">Chưa kết nối máy chủ</div>';
+      return;
+    }
+    els.adminUsersRows.innerHTML = '<div class="admin-list-empty">Đang tải…</div>';
+    try {
+      const res = await sb.rpc('rpc_admin_list_users', { p_token: token });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok !== true) throw new Error(d.error || 'Không tải được');
+      _adminUsersList = Array.isArray(d.data) ? d.data : [];
+      _renderAdminUsersList();
+    } catch (e) {
+      els.adminUsersRows.innerHTML = '<div class="admin-list-empty">Lỗi: ' + escapeHtml(String(e?.message || e)) + '</div>';
+    }
+  }
+
+  async function adminCreateUser() {
+    if (!els.adminCreateUserBtn) return;
+    const username = String(els.adminNewUsername?.value || '').trim().toLowerCase();
+    const password = String(els.adminNewPassword?.value || '');
+    const displayName = String(els.adminNewDisplayName?.value || '').trim();
+    const attRowRaw = String(els.adminNewAttRow?.value || '').trim();
+    const attRow = attRowRaw ? parseInt(attRowRaw, 10) : null;
+
+    const setErr = (m) => {
+      if (!els.adminUsersStatus) return;
+      els.adminUsersStatus.textContent = m;
+      els.adminUsersStatus.classList.remove('warn');
+      els.adminUsersStatus.classList.add('error');
+    };
+    if (!/^[a-z0-9_]{3,32}$/.test(username)) return setErr('Username không hợp lệ (3-32 ký tự: a-z, 0-9, _)');
+    if (password.length < 6) return setErr('Mật khẩu tối thiểu 6 ký tự');
+    if (!displayName) return setErr('Thiếu tên hiển thị');
+    if (displayName.length > 100) return setErr('Tên hiển thị tối đa 100 ký tự');
+    if (attRowRaw && (!Number.isFinite(attRow) || attRow < 0 || attRow > 999)) return setErr('Thứ tự không hợp lệ (0-999)');
+
+    const token = AdminSession.get();
+    if (!token) return setErr('Không có quyền admin');
+    const sb = window.__sb;
+    if (!sb || !sb.rpc) return setErr('Chưa kết nối máy chủ');
+
+    els.adminCreateUserBtn.disabled = true;
+    els.adminUsersStatus?.classList.remove('error', 'warn');
+    if (els.adminUsersStatus) els.adminUsersStatus.textContent = 'Đang tạo…';
+
+    try {
+      const res = await sb.rpc('rpc_admin_create_user', {
+        p_token: token,
+        p_username: username,
+        p_password: password,
+        p_display_name: displayName,
+        p_att_row: attRow
+      });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok !== true) throw new Error(d.error || 'Không tạo được');
+
+      if (els.adminUsersStatus) {
+        els.adminUsersStatus.classList.remove('error', 'warn');
+        els.adminUsersStatus.textContent = `Đã tạo: @${username} → ${displayName} ✓`;
+      }
+      try { Toast.show(`Đã tạo tài khoản: ${displayName}`, { type: 'success', duration: 3500 }); } catch (_) {}
+
+      if (els.adminNewUsername) els.adminNewUsername.value = '';
+      if (els.adminNewPassword) els.adminNewPassword.value = '';
+      if (els.adminNewDisplayName) els.adminNewDisplayName.value = '';
+      if (els.adminNewAttRow) els.adminNewAttRow.value = '';
+
+      await renderAdminUsers();
+    } catch (e) {
+      const msg = String(e?.message || e || 'Lỗi');
+      setErr('Lỗi: ' + msg);
+      try { Toast.show('Lỗi tạo user: ' + msg, { type: 'error', duration: 4000 }); } catch (_) {}
+    } finally {
+      if (els.adminCreateUserBtn) els.adminCreateUserBtn.disabled = false;
+    }
+  }
+
+  async function adminToggleUser(username, nextActive, btn) {
+    const token = AdminSession.get();
+    if (!token) return;
+    const sb = window.__sb;
+    if (!sb || !sb.rpc) return;
+
+    btn.disabled = true;
+    const old = btn.textContent;
+    btn.textContent = '…';
+    try {
+      const res = await sb.rpc('rpc_admin_toggle_user', {
+        p_token: token,
+        p_username: username,
+        p_active: nextActive
+      });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok !== true) throw new Error(d.error || 'Không cập nhật được');
+      try { Toast.show(`${nextActive ? 'Bật' : 'Tắt'}: @${username}`, { type: 'success', duration: 2500 }); } catch (_) {}
+      await renderAdminUsers();
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = old;
+      const msg = String(e?.message || e || 'Lỗi');
+      try { Toast.show('Lỗi: ' + msg, { type: 'error', duration: 4000 }); } catch (_) {}
+    }
+  }
+
+  els.adminUsersSearch?.addEventListener('input', e => {
+    _adminUsersSearchTerm = String(e.target.value || '').trim().toLowerCase();
+    _renderAdminUsersList();
+  });
+  els.adminCreateUserBtn?.addEventListener('click', adminCreateUser);
 
   /* ───── SYNC QUICK TOOLS ───── */
   function _syncQuickTools() {
@@ -1279,7 +1463,6 @@
       const d = res.data || {};
       if (d.ok !== true) throw new Error(d.error || 'Không lưu được');
 
-      // Update DN MAP + localStorage cache
       try {
         if (window.DisplayName && window.DisplayName.map) {
           window.DisplayName.map.set(rawName, val);
@@ -1333,7 +1516,6 @@
   els.question.addEventListener('pointercancel', _cancelLongPress);
   els.question.addEventListener('pointerleave', _cancelLongPress);
 
-  // Chặn context menu (copy/paste) khi admin long-press vào card
   els.question.addEventListener('contextmenu', e => {
     if (!AdminSession.isValid()) return;
     const card = e.target?.closest?.('[data-name]');
@@ -1469,7 +1651,6 @@
   document.addEventListener('visibilitychange', onVisible);
   window.addEventListener('focus', onVisible);
 
-  /* ⭐ Realtime listen — debounce 300ms */
   window.addEventListener('sb:score:changed', () => {
     if (_realtimeDebounceTimer) return;
     _realtimeDebounceTimer = setTimeout(() => {
