@@ -260,6 +260,7 @@ body.menu-open #menuOverlay { transform: none !important; }
         <button class="admin-tab active" data-admin-tab="schedule" type="button"><span class="admin-tab-icon">⚙</span><span class="admin-tab-label">Giờ</span></button>
         <button class="admin-tab" data-admin-tab="checklist" type="button"><span class="admin-tab-icon">☑</span><span class="admin-tab-label">Checklist</span></button>
         <button class="admin-tab" data-admin-tab="stats" type="button"><span class="admin-tab-icon">📊</span><span class="admin-tab-label">Thống kê</span></button>
+        <button class="admin-tab" data-admin-tab="users" type="button"><span class="admin-tab-icon">👥</span><span class="admin-tab-label">Users</span></button>
       </nav>
       <div id="adminPageContent">
         <div class="admin-panel-view active" data-admin-view="schedule">
@@ -287,6 +288,49 @@ body.menu-open #menuOverlay { transform: none !important; }
           </div>
           <h3 class="admin-section-subtitle">⏰ Top 3 check sớm nhất</h3>
           <div id="adminStatTop3" class="admin-list"></div>
+        </div>
+        <div class="admin-panel-view" data-admin-view="users">
+          <h2 class="admin-section-title">Tạo tài khoản mới</h2>
+          <div class="admin-card">
+            <div class="admin-card-row">
+              <div class="admin-card-icon">👤</div>
+              <div class="admin-card-info">
+                <label for="adminNewUsername">Username</label>
+                <p>Chữ thường, số, _ (3-32 ký tự)</p>
+              </div>
+              <input id="adminNewUsername" type="text" inputmode="text" maxlength="32" placeholder="tenuser" autocomplete="off" autocapitalize="none" spellcheck="false">
+            </div>
+            <div class="admin-card-row">
+              <div class="admin-card-icon">🔑</div>
+              <div class="admin-card-info">
+                <label for="adminNewPassword">Mật khẩu</label>
+                <p>Tối thiểu 6 ký tự</p>
+              </div>
+              <input id="adminNewPassword" type="text" inputmode="text" maxlength="64" placeholder="••••••" autocomplete="new-password">
+            </div>
+            <div class="admin-card-row">
+              <div class="admin-card-icon">🏷</div>
+              <div class="admin-card-info">
+                <label for="adminNewDisplayName">Tên hiển thị</label>
+                <p>Tên trong checklist / chấm công</p>
+              </div>
+              <input id="adminNewDisplayName" type="text" inputmode="text" maxlength="100" placeholder="VD: Nguyễn Văn A" autocomplete="off">
+            </div>
+            <div class="admin-card-row">
+              <div class="admin-card-icon">📊</div>
+              <div class="admin-card-info">
+                <label for="adminNewAttRow">Thứ tự (tùy chọn)</label>
+                <p>Số nhỏ hiện trước trong chấm công</p>
+              </div>
+              <input id="adminNewAttRow" type="text" inputmode="numeric" maxlength="3" placeholder="1" autocomplete="off">
+            </div>
+          </div>
+          <div id="adminUsersStatus" class="admin-status"></div>
+          <div class="admin-actions"><button id="adminCreateUserBtn" type="button">➕ Tạo tài khoản</button></div>
+
+          <h2 class="admin-section-title" style="margin-top:24px">Danh sách tài khoản</h2>
+          <div class="admin-toolbar"><input id="adminUsersSearch" type="text" placeholder="🔍 Tìm username / tên..." autocomplete="off"></div>
+          <div id="adminUsersRows" class="admin-list"></div>
         </div>
       </div>
     </div>
