@@ -4,7 +4,8 @@
    - Flow: Login → bấm CTA → checkin(displayName) → xong
    - GIỮ: createWheel factory (attendance.js dùng)
    - Landing + Checklist + Admin + Auto sync + Realtime + Avatar
-   - THÊM: Admin long-press đổi tên hiển thị + tab Users (tạo/list/toggle)
+   - THÊM: Admin long-press đổi tên hiển thị + tab Users
+   - THÊM: Highlight tên của chính mình ở quần thần (nâu + nền vàng nhạt)
    ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -157,7 +158,7 @@
     return 'ck_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 12);
   };
 
-  /* ───── WHEEL FACTORY (chỉ expose cho attendance.js dùng) ───── */
+  /* ───── WHEEL FACTORY ───── */
   function createWheel({ viewport, itemsBox, itemHeight = 58, itemClass = '', onChange }) {
     let index = 0, offset = 0, dragging = false, startY = 0, items = [];
     const raf = { id: 0 };
@@ -820,7 +821,20 @@
         + `<div class="podium-slot podium-slot-3">${_t3 ? `<div class="advisor rank-3" data-name="${escapeHtml(_t3.name)}"><div class="advisor-crown">🌙</div><div class="advisor-avatar">${_av(_t3, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t3)}">${_nm(_t3)}</div><div class="advisor-time">${_t3.time}</div></div>` : ''}</div>`
         + `</div>`;
 
-      const _cHTML = p => `<div class="courtier" data-name="${escapeHtml(p.name)}"><div class="courtier-avatar">${_av(p, 'courtier-avatar')}</div><div class="courtier-info"><div class="courtier-name" title="${_nm(p)}">${_nm(p)}</div><div class="courtier-time">${p.time}</div></div></div>`;
+      // ✅ Highlight tên của chính mình (chỉ quần thần)
+      const _myRawName = (() => {
+        try {
+          const u = window.SRank?.Auth?.getCurrentUser?.();
+          return u && u.displayName ? String(u.displayName).trim() : '';
+        } catch (_) { return ''; }
+      })();
+      const _cHTML = p => {
+        const isMe = _myRawName && p.name === _myRawName;
+        const meStyle = isMe
+          ? ' style="color:#8B4513;background:rgba(200,150,80,.15);border-radius:6px;padding:2px 6px;margin:-2px -6px"'
+          : '';
+        return `<div class="courtier" data-name="${escapeHtml(p.name)}"><div class="courtier-avatar">${_av(p, 'courtier-avatar')}</div><div class="courtier-info"><div class="courtier-name"${meStyle} title="${_nm(p)}">${_nm(p)}</div><div class="courtier-time">${p.time}</div></div></div>`;
+      };
       const _ct = _court.length
         ? `<div class="court-courtiers-label"><span>✦ QUẦN THẦN ✦</span></div><div class="court-courtiers"><div class="courtiers-col">${_L.map(_cHTML).join('')}</div><div class="courtiers-col">${_R.map(_cHTML).join('')}</div></div>`
         : '';
@@ -947,7 +961,7 @@
     _cachedLocked = isChecklistLocked();
   }
 
-  /* ───── RESET HOME (đơn giản hoá — chỉ dọn overlay) ───── */
+  /* ───── RESET HOME ───── */
   function resetHome() {
     document.getElementById('q2answers')?.remove();
     window.__clV6?.close?.();
@@ -1240,7 +1254,7 @@
     syncQuickTools();
   };
 
-  /* ───── ADMIN USERS (tạo / list / toggle) ───── */
+  /* ───── ADMIN USERS ───── */
   let _adminUsersSearchTerm = '';
   let _adminUsersList = [];
 
@@ -1370,6 +1384,17 @@
       if (els.adminNewAttRow) els.adminNewAttRow.value = '';
 
       await renderAdminUsers();
+
+      // Clear cache chấm công để force reload danh sách KDV
+      try {
+        Object.keys(localStorage).forEach(k => {
+          if (k.startsWith('srank_attendance_check_v2_')) localStorage.removeItem(k);
+        });
+      } catch (_) {}
+
+      // Refresh list KDV cho landing + checklist + chấm công
+      try { await loadData(false, true); } catch (_) {}
+      try { window.syncAttendanceEmployees?.(true); } catch (_) {}
     } catch (e) {
       const msg = String(e?.message || e || 'Lỗi');
       setErr('Lỗi: ' + msg);
