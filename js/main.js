@@ -789,7 +789,7 @@
       checked: !!checked[i]
     })).filter(p => p.checked && p.time && p.name).sort((a, b) => a.time.localeCompare(b.time));
 
-    const top3 = checkedList.slice(0, 13);
+    const top3 = checkedList.slice(0, 20);
     const newSig = top3Signature(top3);
     const top3Changed = newSig !== _lastTop3Signature;
 
