@@ -810,7 +810,7 @@
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
       const _t1 = top3[0], _t2 = top3[1], _t3 = top3[2];
-      const _court = top3.slice(3, 13);
+      const _court = top3.slice(3);
       const _L = _court.filter((_, i) => i % 2 === 0);
       const _R = _court.filter((_, i) => i % 2 === 1);
 
