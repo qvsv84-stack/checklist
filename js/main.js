@@ -806,12 +806,12 @@
       const _R = _court.filter((_, i) => i % 2 === 1);
 
       const _podium = `<div class="court-podium">`
-        + `<div class="podium-slot podium-slot-2">${_t2 ? `<div class="advisor rank-2"><div class="advisor-crown">☀️</div><div class="advisor-avatar">${_av(_t2, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t2)}">${_nm(_t2)}</div><div class="advisor-time">${_t2.time}</div></div>` : ''}</div>`
-        + `<div class="podium-slot podium-slot-1">${_t1 ? `<div class="court-throne"><div class="throne-crown">👑</div><div class="throne-avatar">${_av(_t1, 'throne-avatar')}</div><div class="throne-name" title="${_nm(_t1)}">${_nm(_t1)}</div><div class="throne-time">${_t1.time}</div></div>` : ''}</div>`
-        + `<div class="podium-slot podium-slot-3">${_t3 ? `<div class="advisor rank-3"><div class="advisor-crown">🌙</div><div class="advisor-avatar">${_av(_t3, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t3)}">${_nm(_t3)}</div><div class="advisor-time">${_t3.time}</div></div>` : ''}</div>`
+        + `<div class="podium-slot podium-slot-2">${_t2 ? `<div class="advisor rank-2" data-name="${escapeHtml(_t2.name)}"><div class="advisor-crown">☀️</div><div class="advisor-avatar">${_av(_t2, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t2)}">${_nm(_t2)}</div><div class="advisor-time">${_t2.time}</div></div>` : ''}</div>`
+        + `<div class="podium-slot podium-slot-1">${_t1 ? `<div class="court-throne" data-name="${escapeHtml(_t1.name)}"><div class="throne-crown">👑</div><div class="throne-avatar">${_av(_t1, 'throne-avatar')}</div><div class="throne-name" title="${_nm(_t1)}">${_nm(_t1)}</div><div class="throne-time">${_t1.time}</div></div>` : ''}</div>`
+        + `<div class="podium-slot podium-slot-3">${_t3 ? `<div class="advisor rank-3" data-name="${escapeHtml(_t3.name)}"><div class="advisor-crown">🌙</div><div class="advisor-avatar">${_av(_t3, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t3)}">${_nm(_t3)}</div><div class="advisor-time">${_t3.time}</div></div>` : ''}</div>`
         + `</div>`;
 
-      const _cHTML = p => `<div class="courtier"><div class="courtier-avatar">${_av(p, 'courtier-avatar')}</div><div class="courtier-info"><div class="courtier-name" title="${_nm(p)}">${_nm(p)}</div><div class="courtier-time">${p.time}</div></div></div>`;
+      const _cHTML = p => `<div class="courtier" data-name="${escapeHtml(p.name)}"><div class="courtier-avatar">${_av(p, 'courtier-avatar')}</div><div class="courtier-info"><div class="courtier-name" title="${_nm(p)}">${_nm(p)}</div><div class="courtier-time">${p.time}</div></div></div>`;
       const _ct = _court.length
         ? `<div class="court-courtiers-label"><span>✦ QUẦN THẦN ✦</span></div><div class="court-courtiers"><div class="courtiers-col">${_L.map(_cHTML).join('')}</div><div class="courtiers-col">${_R.map(_cHTML).join('')}</div></div>`
         : '';
@@ -1241,6 +1241,104 @@
   }
   const syncQuickTools = throttleRAF(_syncQuickTools);
   window.syncQuickTools = syncQuickTools;
+
+  /* ───── ADMIN LONG-PRESS ĐỔI TÊN HIỂN THỊ ───── */
+  const LP_DURATION = 600;
+  const LP_MOVE_THRESHOLD = 12;
+  let _lpTimer = null, _lpStartX = 0, _lpStartY = 0, _lpTarget = '';
+
+  function _cancelLongPress() {
+    if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
+    _lpTarget = '';
+  }
+
+  async function adminRenamePrompt(name) {
+    const rawName = String(name || '').trim();
+    if (!rawName) return;
+    const cur = (window.DN ? window.DN(rawName) : rawName) || rawName;
+    const next = prompt(
+      `Đổi tên hiển thị cho "${rawName}"\n(hiện tại: "${cur}")\n\nTối đa 40 ký tự:`,
+      cur === rawName ? '' : cur
+    );
+    if (next === null) return;
+    const val = String(next).trim();
+    if (!val) { setStatus('Tên không được rỗng'); return; }
+    if (val === cur) return;
+
+    const token = AdminSession.get();
+    if (!token) { setStatus('Bạn không có quyền admin'); return; }
+    const sb = window.__sb;
+    if (!sb || !sb.rpc) { setStatus('Chưa kết nối máy chủ'); return; }
+
+    try {
+      setStatus('Đang lưu…');
+      const res = await sb.rpc('rpc_admin_set_profile', {
+        p_token: token, p_name: rawName, p_display: val
+      });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok !== true) throw new Error(d.error || 'Không lưu được');
+
+      // Update DN MAP + localStorage cache
+      try {
+        if (window.DisplayName && window.DisplayName.map) {
+          window.DisplayName.map.set(rawName, val);
+          try {
+            const raw = localStorage.getItem('srank_display_names_v1');
+            const obj = raw ? JSON.parse(raw) : {};
+            obj[rawName] = val;
+            localStorage.setItem('srank_display_names_v1', JSON.stringify(obj));
+          } catch (_) {}
+        }
+      } catch (_) {}
+
+      try { window.dispatchEvent(new CustomEvent('displayNameUpdated')); } catch (_) {}
+      setStatus(`Đã đổi thành "${val}" ✓`);
+      try { Toast.show(`Đổi tên: ${rawName} → ${val}`, { type: 'success', duration: 3000 }); } catch (_) {}
+    } catch (e) {
+      const msg = String(e?.message || e || 'Lỗi');
+      setStatus('Lỗi: ' + msg);
+      try { Toast.show('Lỗi đổi tên: ' + msg, { type: 'error', duration: 4000 }); } catch (_) {}
+    }
+  }
+
+  els.question.addEventListener('pointerdown', e => {
+    if (!AdminSession.isValid()) return;
+    const card = e.target?.closest?.('[data-name]');
+    if (!card) return;
+    _lpStartX = e.clientX;
+    _lpStartY = e.clientY;
+    _lpTarget = card.dataset.name || '';
+    if (!_lpTarget) return;
+    if (_lpTimer) clearTimeout(_lpTimer);
+    _lpTimer = setTimeout(() => {
+      _lpTimer = null;
+      const n = _lpTarget;
+      _lpTarget = '';
+      if (n) {
+        try { navigator.vibrate?.(30); } catch (_) {}
+        adminRenamePrompt(n);
+      }
+    }, LP_DURATION);
+  });
+
+  els.question.addEventListener('pointermove', e => {
+    if (!_lpTimer) return;
+    const dx = Math.abs(e.clientX - _lpStartX);
+    const dy = Math.abs(e.clientY - _lpStartY);
+    if (dx > LP_MOVE_THRESHOLD || dy > LP_MOVE_THRESHOLD) _cancelLongPress();
+  });
+
+  els.question.addEventListener('pointerup', _cancelLongPress);
+  els.question.addEventListener('pointercancel', _cancelLongPress);
+  els.question.addEventListener('pointerleave', _cancelLongPress);
+
+  // Chặn context menu (copy/paste) khi admin long-press vào card
+  els.question.addEventListener('contextmenu', e => {
+    if (!AdminSession.isValid()) return;
+    const card = e.target?.closest?.('[data-name]');
+    if (card) e.preventDefault();
+  });
 
   /* ───── EVENT LISTENERS ───── */
   els.homeBtn.addEventListener('click', () => {
