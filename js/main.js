@@ -1,10 +1,12 @@
 /* ═══════════════════════════════════════════════════════════════
-   MAIN.JS — CORE v3.0.1 🐱
+   MAIN.JS — CORE v3.0.4 🐱
    - Landing + Checkin wheel + Court top3
    - Checklist logic + capture ảnh
    - Admin panel (3 tab)
    - Auto sync + reset schedule
    - Realtime listen sb:score:changed
+   - Avatar cache + retry sau auth
+   - Crown ☀️🌙 luôn hiện; đã bỏ 🥇 ở throne
    ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -78,12 +80,61 @@
     if (s >= 100) return 'A';
     return 'B';
   };
-  function getAvatarUrl(name) {
-    try { return window.getAvatarUrl ? window.getAvatarUrl(name) : ''; }
-    catch (_) { return ''; }
-  }
   window.attendanceRankClient = rankClient;
 
+  /* ───── AVATAR CACHE + LOADER ───── */
+  const _avatarCache = new Map();
+  window.__avatarCache = _avatarCache;
+
+  function getAvatarUrl(name) {
+    try {
+      const k = String(name || '').trim();
+      if (!k) return '';
+      return _avatarCache.get(k) || '';
+    } catch (_) { return ''; }
+  }
+  window.getAvatarUrl = getAvatarUrl;
+
+  async function loadAvatarsFromSupabase() {
+    try {
+      const sb = window.__sb;
+      if (!sb || !sb.rpc) return false;
+      const res = await sb.rpc('rpc_get_avatars');
+      if (res.error) throw res.error;
+      const d = res.data;
+      if (!d || d.ok !== true) return false;
+      const list = Array.isArray(d.data) ? d.data : [];
+      _avatarCache.clear();
+      list.forEach(it => {
+        if (it && it.name && it.url) {
+          _avatarCache.set(String(it.name).trim(), String(it.url));
+        }
+      });
+      console.log('[AV] loaded', list.length, 'avatars');
+      return list.length > 0;
+    } catch (e) {
+      console.warn('[AV] load failed', e && e.message);
+      return false;
+    }
+  }
+  window.__loadAvatarsFromSupabase = loadAvatarsFromSupabase;
+
+  /* ⭐ Bootstrap avatar với retry (chờ session sẵn sàng) */
+  function bootstrapAvatars(retries) {
+    if (retries == null) retries = 5;
+    loadAvatarsFromSupabase().then((hasData) => {
+      if (hasData){
+        try { renderLandingState(true); } catch (_) {}
+        try { renderChecklist(true); } catch (_) {}
+      } else if (retries > 0){
+        setTimeout(() => bootstrapAvatars(retries - 1), 1500);
+      }
+    }).catch(() => {
+      if (retries > 0) setTimeout(() => bootstrapAvatars(retries - 1), 1500);
+    });
+  }
+
+  /* ───── UTILS ───── */
   const todayKey = () => Store.todayKey();
   const dayKeyOf = ts => Store.dayKeyOf(ts);
   const yesterdayKey = () => Store.yesterdayKey();
@@ -222,7 +273,6 @@
   let initialSheetLoaded = false;
   let adminUnlocked = AdminSession.isValid();
 
-  /* ⭐ Realtime debounce state */
   let _realtimeDebounceTimer = null;
 
   const _getStateForCache = () => ({ names, checked, times, points, ranks, day: todayKey() });
@@ -833,10 +883,11 @@
       const _L = _court.filter((_, i) => i % 2 === 0);
       const _R = _court.filter((_, i) => i % 2 === 1);
 
+      /* ⭐ v3.0.4: bỏ 🥇 ở throne; crown ☀️🌙 luôn hiện */
       const _podium = `<div class="court-podium">`
-        + `<div class="podium-slot podium-slot-2">${_t2 ? `<div class="advisor rank-2">${getAvatarUrl(_t2.name) ? `<div class="advisor-crown">☀️</div>` : ''}<div class="advisor-avatar">${_av(_t2, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t2)}">${_nm(_t2)}</div><div class="advisor-time">${_t2.time}</div></div>` : ''}</div>`
-        + `<div class="podium-slot podium-slot-1">${_t1 ? `<div class="court-throne"><div class="throne-crown">👑</div><div class="throne-avatar">${_av(_t1, 'throne-avatar')}<span class="throne-medal">🥇</span></div><div class="throne-name" title="${_nm(_t1)}">${_nm(_t1)}</div><div class="throne-time">${_t1.time}</div></div>` : ''}</div>`
-        + `<div class="podium-slot podium-slot-3">${_t3 ? `<div class="advisor rank-3">${getAvatarUrl(_t3.name) ? `<div class="advisor-crown">🌙</div>` : ''}<div class="advisor-avatar">${_av(_t3, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t3)}">${_nm(_t3)}</div><div class="advisor-time">${_t3.time}</div></div>` : ''}</div>`
+        + `<div class="podium-slot podium-slot-2">${_t2 ? `<div class="advisor rank-2"><div class="advisor-crown">☀️</div><div class="advisor-avatar">${_av(_t2, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t2)}">${_nm(_t2)}</div><div class="advisor-time">${_t2.time}</div></div>` : ''}</div>`
+        + `<div class="podium-slot podium-slot-1">${_t1 ? `<div class="court-throne"><div class="throne-crown">👑</div><div class="throne-avatar">${_av(_t1, 'throne-avatar')}</div><div class="throne-name" title="${_nm(_t1)}">${_nm(_t1)}</div><div class="throne-time">${_t1.time}</div></div>` : ''}</div>`
+        + `<div class="podium-slot podium-slot-3">${_t3 ? `<div class="advisor rank-3"><div class="advisor-crown">🌙</div><div class="advisor-avatar">${_av(_t3, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t3)}">${_nm(_t3)}</div><div class="advisor-time">${_t3.time}</div></div>` : ''}</div>`
         + `</div>`;
 
       const _cHTML = p => `<div class="courtier"><div class="courtier-avatar">${_av(p, 'courtier-avatar')}</div><div class="courtier-info"><div class="courtier-name" title="${_nm(p)}">${_nm(p)}</div><div class="courtier-time">${p.time}</div></div></div>`;
@@ -1604,12 +1655,48 @@
       names: names.slice(),
       checked: checked.slice(),
       times: times.slice()
-    })
+    }),
+    /* ⭐ v3.0.4 — Avatar API */
+    avatar: {
+      setCache: (name, url) => {
+        try {
+          const k = String(name || '').trim();
+          if (!k) return;
+          _avatarCache.set(k, String(url || ''));
+          try { renderLandingState(true); } catch (_) {}
+          try { renderChecklist(true); } catch (_) {}
+        } catch (_) {}
+      },
+      getCache: (name) => {
+        try {
+          const k = String(name || '').trim();
+          return k ? (_avatarCache.get(k) || '') : '';
+        } catch (_) { return ''; }
+      },
+      reload: loadAvatarsFromSupabase
+    }
   });
 
   /* ───── BOOT ───── */
   loadChecklistLockTime();
   if (els.checklistLockTimeInput) els.checklistLockTimeInput.value = checklistLockTime;
+
+  /* ⭐ Reload avatars khi auth state thay đổi */
+  try {
+    if (window.SRank?.Auth?.onChange) {
+      window.SRank.Auth.onChange(() => {
+        loadAvatarsFromSupabase().then((hasData) => {
+          if (hasData){
+            try { renderLandingState(true); } catch (_) {}
+            try { renderChecklist(true); } catch (_) {}
+          }
+        }).catch(() => {});
+      });
+    }
+  } catch (_) {}
+
+  /* ⭐ Bootstrap avatars với retry */
+  bootstrapAvatars(5);
 
   let _loadDataPromise = null;
   if (cacheLoad()) {
@@ -1671,5 +1758,13 @@
     try { renderAdminStats(); } catch (_) {}
   });
 
-  console.log('[main] ready ✓ v3.0.1');
+  /* ⭐ Re-render khi avatar thay đổi */
+  window.addEventListener('avatarUpdated', () => {
+    loadAvatarsFromSupabase().then(() => {
+      try { renderLandingState(true); } catch (_) {}
+      try { renderChecklist(true); } catch (_) {}
+    }).catch(() => {});
+  });
+
+  console.log('[main] ready ✓ v3.0.4');
 })();
