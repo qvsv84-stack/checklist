@@ -1,6 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════
-   MAIN.JS — CORE v4.0.0 🐱 (Orchestrator)
+   MAIN.JS — CORE v4.0.1 🐱 (Orchestrator)
    ---------------------------------------------------------
+   v4.0.1 — FIX boot race condition:
+   - Nếu main.js load sau DOMContentLoaded (rare), đợi 1 tick
+     (setTimeout 0) để 3 view modules kịp đăng ký callbacks
+     trước khi boot() chạy renderLanding lần đầu.
    v4.0.0 — TASK 2 REFACTOR:
    - Tách 3 view modules:
        • js/landing.js        → renderLandingState, podium, resetHome
@@ -1009,11 +1013,18 @@
       }).catch(() => {});
     });
 
-    console.log('[main] ready ✓ v4.0.0 (orchestrator, 3 view modules)');
+    console.log('[main] ready ✓ v4.0.1 (orchestrator, 3 view modules, race-safe)');
   }
 
+  // ✅ v4.0.1: FIX boot race condition
+  // - Normal case: main.js chạy khi readyState = 'interactive'
+  //   → đợi DOMContentLoaded (tất cả defer scripts đã chạy xong)
+  // - Edge case: main.js chạy khi readyState = 'complete' (load từ cache nhanh,
+  //   hoặc script inject muộn) → DOMContentLoaded đã fire rồi
+  //   → cần setTimeout(0) để 3 view modules (defer, chạy ngay sau main.js)
+  //     kịp đăng ký callbacks trước khi boot() gọi renderLanding lần đầu.
   if (document.readyState === 'complete') {
-    boot();
+    setTimeout(boot, 0);
   } else {
     document.addEventListener('DOMContentLoaded', boot, { once: true });
   }
