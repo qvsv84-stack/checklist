@@ -1,14 +1,11 @@
 /* ═══════════════════════════════════════════════════════════════
-   CTA MORPH — v1.4 🎬
-   Fix: bind cả pointerup (auth-ui dùng pointerup → chặn trước)
-   - Intercept click + pointerup + keydown (capture)
-   - Dedup pointerup/click
-   - Skip nếu là scroll (pointer di chuyển > 10px)
+   CTA MORPH — v2.0 🎬
+   API-only: auth-ui.js gọi window.__ctaMorph.start(ctaEl)
+   Không bind listener → không conflict phase/capture với auth-ui
    ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
-  if (window.__ctaMorphLoaded) return;
-  window.__ctaMorphLoaded = true;
+  if (window.__ctaMorph) return;
 
   const D_FLASH = 180;
   const D_MORPH = 320;
@@ -19,10 +16,8 @@
   const DEFAULT_H = 38;
 
   let _animating = false;
-  let _handledAt = 0;
-  let _pd = null;
 
-  console.log('[ctaMorph] script loaded ✓ v1.4');
+  console.log('[ctaMorph] loaded v2.0 (API-only)');
 
   function getUser() {
     try {
@@ -71,19 +66,6 @@
       }
     } catch (_) {}
     return { w: DEFAULT_W, h: DEFAULT_H };
-  }
-
-  function findCTA(el) {
-    let cta = el?.closest?.('#question .landing-cta[data-cta="checkin"]');
-    if (cta) return cta;
-    cta = el?.closest?.('#question .landing-cta:not(.locked)');
-    if (cta) {
-      const txt = String(cta.textContent || '').toLowerCase();
-      if (/đăng nhập|login/i.test(txt)) return null;
-      if (/đã chấm công/i.test(txt)) return null;
-      return cta;
-    }
-    return null;
   }
 
   function injectStyles() {
@@ -220,24 +202,32 @@
     return ghost;
   }
 
-  async function startMorph(cta) {
-    if (_animating) {
-      console.log('[ctaMorph] bỏ qua — đang animate');
-      return;
-    }
+  async function runMorph(cta) {
     const user = getUser();
     if (!user) {
       console.log('[ctaMorph] không có user — skip');
-      return;
+      return false;
     }
     console.log('[ctaMorph] bắt đầu morph cho', user.name);
-    _animating = true;
 
+    // Lưu state cũ
     const prevPointerEvents = cta.style.pointerEvents;
     const prevOpacity = cta.style.opacity;
+
+    // Flash vàng
+    const prevBoxShadow = cta.style.boxShadow;
+    const prevTransition = cta.style.transition;
+    cta.style.transition = 'box-shadow 80ms ease';
+    cta.style.boxShadow = '0 0 0 3px #ffd700, 0 0 20px #ffd700';
+    await new Promise(r => setTimeout(r, D_FLASH));
+    cta.style.boxShadow = prevBoxShadow;
+    cta.style.transition = prevTransition;
+
+    // Ẩn CTA gốc
     cta.style.pointerEvents = 'none';
     cta.style.opacity = '0';
 
+    // Tạo ghost
     const time = nowHHMM();
     const ghost = buildGhost(cta, user, time);
     document.body.appendChild(ghost);
@@ -247,6 +237,7 @@
     const targetLeft = rect.left + (rect.width - target.w) / 2;
     const targetTop = rect.top + (rect.height - target.h) / 2;
 
+    // Trigger morph
     requestAnimationFrame(() => {
       ghost.classList.add('morphing');
       ghost.style.width = target.w + 'px';
@@ -255,6 +246,7 @@
       ghost.style.top = targetTop + 'px';
     });
 
+    // Gọi API song song
     let apiOK = false;
     try {
       await window.SRank.requestCheckin(user.name);
@@ -264,9 +256,11 @@
       console.log('[ctaMorph] API checkin FAIL', e?.message);
     }
 
+    // Chờ morph + hold
     await new Promise(r => setTimeout(r, D_MORPH + D_HOLD));
 
     if (!apiOK) {
+      // Reverse
       ghost.classList.remove('morphing');
       ghost.classList.add('reversing');
       ghost.style.width = rect.width + 'px';
@@ -278,92 +272,30 @@
       cta.style.pointerEvents = prevPointerEvents;
       cta.style.opacity = prevOpacity;
       try { window.SRank?.setStatus?.('Chấm công thất bại — thử lại'); } catch(_){}
-      _animating = false;
-      return;
+      return false;
     }
 
+    // Fade out — CTA gốc VẪN ẩn (opacity: 0). Landing re-render sẽ update dataset.cta='done' → CSS ẩn hẳn.
     ghost.classList.add('fading');
     await new Promise(r => setTimeout(r, D_FADE));
     ghost.remove();
-    _animating = false;
+    return true;
   }
 
-  function tryIntercept(e) {
-    if (_animating) return;
-    // Dedup pointerup → click
-    const now = Date.now();
-    if (now - _handledAt < 500) return;
-
-    const cta = findCTA(e.target);
-    if (!cta) return;
-
-    _handledAt = now;
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-
-    console.log('[ctaMorph] CTA detected:', cta.textContent?.trim());
-
-    // Flash vàng
-    const prevBoxShadow = cta.style.boxShadow;
-    const prevTransition = cta.style.transition;
-    cta.style.transition = 'box-shadow 80ms ease';
-    cta.style.boxShadow = '0 0 0 3px #ffd700, 0 0 20px #ffd700';
-    setTimeout(() => {
-      cta.style.boxShadow = prevBoxShadow;
-      cta.style.transition = prevTransition;
-    }, D_FLASH);
-
-    setTimeout(() => {
-      startMorph(cta);
-    }, 60);
-  }
-
-  function onPointerDown(e) {
-    _pd = { x: e.clientX, y: e.clientY };
-  }
-
-  function onPointerUp(e) {
-    if (!_pd) return tryIntercept(e);
-    const dx = Math.abs(e.clientX - _pd.x);
-    const dy = Math.abs(e.clientY - _pd.y);
-    _pd = null;
-    if (dx > 10 || dy > 10) return; // was scroll/move
-    tryIntercept(e);
-  }
-
-  function onKeyDown(e) {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    tryIntercept(e);
-  }
-
-  function boot() {
-    injectStyles();
-
-    // Capture phase — chạy TRƯỚC mọi handler khác
-    // pointerdown để đo vị trí, pointerup + click để intercept
-    document.addEventListener('pointerdown', onPointerDown, true);
-    document.addEventListener('pointerup', onPointerUp, true);
-    document.addEventListener('click', tryIntercept, true);
-    document.addEventListener('keydown', onKeyDown, true);
-
-    console.log('[ctaMorph] ready ✓ v1.4 — capture listeners attached');
-
-    // Chấm xanh debug
-    try {
-      if (!document.getElementById('__ctaMorphDot')) {
-        const dot = document.createElement('div');
-        dot.id = '__ctaMorphDot';
-        dot.style.cssText = 'position:fixed;top:4px;left:4px;width:10px;height:10px;background:#00ff00;border-radius:50%;z-index:99999;pointer-events:none;box-shadow:0 0 6px #00ff00';
-        if (document.body) document.body.appendChild(dot);
-        else document.addEventListener('DOMContentLoaded', () => document.body.appendChild(dot));
+  window.__ctaMorph = {
+    start: async function (cta) {
+      if (!cta) return false;
+      if (_animating) return false;
+      _animating = true;
+      try {
+        return await runMorph(cta);
+      } finally {
+        _animating = false;
       }
-    } catch (_) {}
-  }
+    },
+    isReady: function () { return true; }
+  };
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
-    boot();
-  }
+  injectStyles();
+  console.log('[ctaMorph] ready ✓ v2.0');
 })();
