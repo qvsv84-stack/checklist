@@ -1,12 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════
    MAIN.JS — CORE v3.0.5 🐱
-   - ĐÃ XOÁ: wheel câu 1 + câu 2 + showMessage + openQuestion1
-   - Flow: Login → bấm CTA → checkin(displayName) → xong
-   - GIỮ: createWheel factory (attendance.js dùng)
    - Landing + Checklist + Admin + Auto sync + Realtime + Avatar
-   - THÊM: Admin long-press đổi tên hiển thị + tab Users
-   - THÊM: Highlight tên của chính mình ở quần thần (nâu + nền vàng nhạt)
-   - THÊM: data-cta cho neon CTA "Đăng nhập" + "Chấm công" (không áp dụng "done")
+   - Admin long-press đổi tên hiển thị + tab Users
+   - Highlight tên của chính mình ở quần thần
+   - data-cta cho neon CTA + tab Users xoá user
    ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -1284,7 +1281,10 @@
   function _renderAdminUsersList() {
     if (!els.adminUsersRows) return;
     const q = _adminUsersSearchTerm;
-    const filtered = !q ? _adminUsersList : _adminUsersList.filter(u =>
+
+    // ⭐ Ẩn admin chính (tienloi) khỏi danh sách — tránh bấm nhầm
+    const base = _adminUsersList.filter(u => String(u.username || '').toLowerCase() !== 'tienloi');
+    const filtered = !q ? base : base.filter(u =>
       String(u.username || '').toLowerCase().includes(q) ||
       String(u.displayName || '').toLowerCase().includes(q)
     );
@@ -1307,17 +1307,35 @@
       userEl.className = 'admin-row-time';
       userEl.textContent = '@' + u.username + (u.active ? '' : ' · tắt');
 
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'admin-row-btn' + (u.active ? ' checked' : '');
+      // ⭐ Wrapper chứa 2 nút: Tắt/Bật + Xoá
+      const actions = document.createElement('span');
+      actions.style.cssText = 'display:inline-flex;gap:6px;flex-shrink:0;align-items:center;';
+
+      const btnToggle = document.createElement('button');
+      btnToggle.type = 'button';
+      btnToggle.className = 'admin-row-btn' + (u.active ? ' checked' : '');
       if (isMe) {
-        btn.disabled = true;
-        btn.textContent = '(bạn)';
+        btnToggle.disabled = true;
+        btnToggle.textContent = '(bạn)';
       } else {
-        btn.textContent = u.active ? 'Tắt' : 'Bật';
-        btn.addEventListener('click', () => adminToggleUser(u.username, !u.active, btn));
+        btnToggle.textContent = u.active ? 'Tắt' : 'Bật';
+        btnToggle.addEventListener('click', () => adminToggleUser(u.username, !u.active, btnToggle));
       }
-      row.append(nameEl, userEl, btn);
+
+      const btnDel = document.createElement('button');
+      btnDel.type = 'button';
+      btnDel.className = 'admin-row-btn';
+      btnDel.style.cssText = 'background:#dc2626;color:#fff;border-color:#dc2626;';
+      if (isMe) {
+        btnDel.disabled = true;
+        btnDel.textContent = 'Xoá';
+      } else {
+        btnDel.textContent = 'Xoá';
+        btnDel.addEventListener('click', () => adminDeleteUser(u.username, u.displayName, btnDel));
+      }
+
+      actions.append(btnToggle, btnDel);
+      row.append(nameEl, userEl, actions);
       frag.appendChild(row);
     });
     els.adminUsersRows.innerHTML = '';
@@ -1400,12 +1418,14 @@
 
       await renderAdminUsers();
 
+      // Clear cache chấm công để force reload danh sách KDV
       try {
         Object.keys(localStorage).forEach(k => {
           if (k.startsWith('srank_attendance_check_v2_')) localStorage.removeItem(k);
         });
       } catch (_) {}
 
+      // Refresh list KDV cho landing + checklist + chấm công
       try { await loadData(false, true); } catch (_) {}
       try { window.syncAttendanceEmployees?.(true); } catch (_) {}
     } catch (e) {
@@ -1442,6 +1462,60 @@
       btn.textContent = old;
       const msg = String(e?.message || e || 'Lỗi');
       try { Toast.show('Lỗi: ' + msg, { type: 'error', duration: 4000 }); } catch (_) {}
+    }
+  }
+
+  /* ⭐ Xoá vĩnh viễn user — double confirm bằng cách gõ username */
+  async function adminDeleteUser(username, displayName, btn) {
+    if (!username) return;
+
+    // Confirm 1: cảnh báo
+    const label = displayName || username;
+    if (!confirm(`Xoá VĨNH VIỄN user "${label}" (@${username})?\n\nHành động này KHÔNG THỂ hoàn tác.\n- User không login được nữa\n- Xoá khỏi mọi danh sách\n- Lịch sử điểm/top3 của user sẽ MỒ CÔI (vẫn còn trong DB nhưng không hiện)`)) {
+      return;
+    }
+
+    // Confirm 2: gõ chính xác username
+    const typed = prompt(`Xác nhận lần cuối — gõ CHÍNH XÁC username:\n\n${username}`);
+    if (String(typed || '').trim().toLowerCase() !== username.toLowerCase()) {
+      try { Toast.show('Username không khớp — huỷ xoá', { type: 'warning', duration: 2500 }); } catch (_) {}
+      return;
+    }
+
+    const token = AdminSession.get();
+    if (!token) return;
+    const sb = window.__sb;
+    if (!sb || !sb.rpc) return;
+
+    btn.disabled = true;
+    const old = btn.textContent;
+    btn.textContent = '…';
+    try {
+      const res = await sb.rpc('rpc_admin_delete_user', {
+        p_token: token,
+        p_username: username
+      });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok !== true) throw new Error(d.error || 'Không xoá được');
+
+      try { Toast.show(`Đã xoá: @${username}`, { type: 'success', duration: 3000 }); } catch (_) {}
+
+      // Clear cache chấm công + refresh
+      try {
+        Object.keys(localStorage).forEach(k => {
+          if (k.startsWith('srank_attendance_check_v2_')) localStorage.removeItem(k);
+        });
+      } catch (_) {}
+
+      await renderAdminUsers();
+      try { await loadData(false, true); } catch (_) {}
+      try { window.syncAttendanceEmployees?.(true); } catch (_) {}
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = old;
+      const msg = String(e?.message || e || 'Lỗi');
+      try { Toast.show('Lỗi xoá: ' + msg, { type: 'error', duration: 4000 }); } catch (_) {}
     }
   }
 
