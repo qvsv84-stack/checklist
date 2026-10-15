@@ -1,4 +1,4 @@
-<!doctype html>
+l<!doctype html>
 <html lang="vi">
 <head>
 <meta charset="utf-8">
@@ -204,8 +204,9 @@ body.menu-open #menuOverlay { transform: none !important; }
 </style>
 
 <style id="neonCtaForce">
-/* ═══ NEON CTA — chỉ áp dụng cho CTA "Đăng nhập" (data-cta="login") ═══ */
-html body #question .landing-cta[data-cta="login"] {
+/* ═══ NEON CTA — áp dụng cho CTA "Đăng nhập" và "Chấm công" ═══ */
+html body #question .landing-cta[data-cta="login"],
+html body #question .landing-cta[data-cta="checkin"] {
   position: relative !important;
   z-index: 0 !important;
   background: linear-gradient(135deg, hsl(260 97% 55%), hsl(280 90% 55%)) !important;
@@ -222,7 +223,8 @@ html body #question .landing-cta[data-cta="login"] {
     inset 0 0 14px hsl(260 97% 85% / .3) !important;
   transition: box-shadow .2s ease, transform .12s ease !important;
 }
-html body #question .landing-cta[data-cta="login"]::before {
+html body #question .landing-cta[data-cta="login"]::before,
+html body #question .landing-cta[data-cta="checkin"]::before {
   content: "" !important;
   position: absolute !important;
   inset: -5px !important;
@@ -232,7 +234,8 @@ html body #question .landing-cta[data-cta="login"]::before {
   pointer-events: none !important;
   box-shadow: 0 0 18px hsl(260 97% 60% / .5) !important;
 }
-html body #question .landing-cta[data-cta="login"]:active {
+html body #question .landing-cta[data-cta="login"]:active,
+html body #question .landing-cta[data-cta="checkin"]:active {
   transform: scale(.96) !important;
   box-shadow:
     0 0 0 1px hsl(260 97% 80% / .85),
