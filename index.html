@@ -499,7 +499,12 @@ html body #question .landing-cta[data-cta="checkin"]:active {
   <button class="att-multi-action clear" data-multi-status="" type="button">Xóa</button>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════
+     SCRIPT LOAD ORDER — KHÔNG THAY ĐỔI
+     ✅ v1.1: role.js load sau config.js, TRƯỚC admin-session.js
+     ═══════════════════════════════════════════════════════ -->
 <script src="js/config.js"></script>
+<script src="js/role.js" defer></script>
 <script src="js/toast.js" defer></script>
 <script src="js/admin-session.js" defer></script>
 <script src="js/store.js" defer></script>
