@@ -1,12 +1,17 @@
 /* ═══════════════════════════════════════════════════════════════
-   MAIN.JS — CORE v3.0.6 🐱
-   - Landing + Checklist + Admin + Auto sync + Realtime + Avatar
-   - Admin long-press đổi tên hiển thị + tab Users
-   - Highlight tên của chính mình ở quần thần
-   - data-cta cho neon CTA + tab Users xoá user
-   v3.0.6 CHANGES:
-   - Bỏ hard-code 'tienloi' — dùng Role.getAdminUsernames()
-   - Admin whitelist giờ ở config.js (ADMIN_USERNAMES)
+   MAIN.JS — CORE v4.0.0 🐱 (Orchestrator)
+   ---------------------------------------------------------
+   v4.0.0 — TASK 2 REFACTOR:
+   - Tách 3 view modules:
+       • js/landing.js        → renderLandingState, podium, resetHome
+       • js/admin.js          → toàn bộ admin panel (4 tabs)
+       • js/checklist-view.js → renderChecklist, checkin, notify
+   - main.js giờ chỉ còn:
+       • State ownership (names[], checked[], times[]...)
+       • Expose window.SrankCore (state getters + helpers)
+       • Wire callbacks từ views
+       • Load data + auto-sync + boot
+   - Load order: main.js → landing.js → admin.js → checklist-view.js
    ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -24,10 +29,13 @@
   const CHECKLIST_SYNC_MS = 30000;
   const AUTO_SYNC_MS = 15000;
   const USER_ACTION_PAUSE_MS = 5000;
-  const SELF_CHECK_IGNORE_MS = 20000;
   const SETTINGS_TTL = 300000;
 
   const $ = id => document.getElementById(id);
+
+  /* ═══════════════════════════════════════════════════════
+     1. DOM REFS
+     ═══════════════════════════════════════════════════════ */
   const els = {
     space: $('space'),
     question: $('question'),
@@ -68,8 +76,46 @@
     adminUsersSearch: $('adminUsersSearch')
   };
 
-  /* ───── FALLBACK HELPERS ───── */
-  const rankClient = v => (Store.rankClient ? Store.rankClient(v) : v);
+  /* ═══════════════════════════════════════════════════════
+     2. STATE
+     ═══════════════════════════════════════════════════════ */
+  let names = [], checked = [], times = [], points = [], ranks = [];
+  let stateDay = '';
+  let _lastUserActionAt = 0;
+  let _lastLockCheck = 0;
+  let _cachedLocked = false;
+  let settingsCache = null, settingsFetchedAt = 0, settingsFetchPromise = null;
+  let syncInFlight = false;
+  let autoSyncTimer = null, lastAutoSyncAt = 0;
+  let resetTime = '00:00', resetTimer = null;
+  let checklistLockTime = '21:00';
+  let initialSheetLoaded = false;
+  let _realtimeDebounceTimer = null;
+
+  const _avatarCache = new Map();
+  window.__avatarCache = _avatarCache;
+
+  /* ═══════════════════════════════════════════════════════
+     3. UTILS
+     ═══════════════════════════════════════════════════════ */
+  const todayKey = () => Store.todayKey();
+  const hhmm = () => Store.nowHHMM();
+  const isValid24hTime = v => Store.isValid24hTime(v);
+
+  const escapeHtml = s => String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  const throttleRAF = fn => {
+    let scheduled = false, lastArgs;
+    return (...args) => {
+      lastArgs = args;
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(() => { scheduled = false; fn(...lastArgs); });
+    };
+  };
+
   const normalizeServerRank = (value, score) => {
     if (Store.normalizeServerRank) return Store.normalizeServerRank(value, score);
     const v = String(value || '').trim().toUpperCase();
@@ -81,11 +127,7 @@
     if (s >= 100) return 'A';
     return 'B';
   };
-  window.attendanceRankClient = rankClient;
-
-  /* ───── AVATAR CACHE + LOADER ───── */
-  const _avatarCache = new Map();
-  window.__avatarCache = _avatarCache;
+  window.attendanceRankClient = v => Store.rankClient ? Store.rankClient(v) : v;
 
   function getAvatarUrl(name) {
     try {
@@ -107,11 +149,8 @@
       const list = Array.isArray(d.data) ? d.data : [];
       _avatarCache.clear();
       list.forEach(it => {
-        if (it && it.name && it.url) {
-          _avatarCache.set(String(it.name).trim(), String(it.url));
-        }
+        if (it && it.name && it.url) _avatarCache.set(String(it.name).trim(), String(it.url));
       });
-      console.log('[AV] loaded', list.length, 'avatars');
       return list.length > 0;
     } catch (e) {
       console.warn('[AV] load failed', e && e.message);
@@ -124,8 +163,8 @@
     if (retries == null) retries = 5;
     loadAvatarsFromSupabase().then((hasData) => {
       if (hasData){
-        try { renderLandingState(true); } catch (_) {}
-        try { renderChecklist(true); } catch (_) {}
+        try { S.callbacks.renderLanding?.(true); } catch (_) {}
+        try { S.callbacks.renderChecklist?.(true); } catch (_) {}
       } else if (retries > 0){
         setTimeout(() => bootstrapAvatars(retries - 1), 1500);
       }
@@ -134,150 +173,52 @@
     });
   }
 
-  /* ───── UTILS ───── */
-  const todayKey = () => Store.todayKey();
-  const dayKeyOf = ts => Store.dayKeyOf(ts);
-  const yesterdayKey = () => Store.yesterdayKey();
-  const hhmm = () => Store.nowHHMM();
-  const isValid24hTime = v => Store.isValid24hTime(v);
-  const escapeHtml = s => String(s ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-
-  const throttleRAF = fn => {
-    let scheduled = false, lastArgs;
-    return (...args) => {
-      lastArgs = args;
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(() => { scheduled = false; fn(...lastArgs); });
-    };
+  /* ═══════════════════════════════════════════════════════
+     4. STATUS
+     ═══════════════════════════════════════════════════════ */
+  const ROUTINE_TOAST_PATTERNS = [
+    /^Đã (cập nhật|đồng bộ|tải dữ liệu)/i,
+    /^Đang (dùng|cập nhật|đồng bộ)/i,
+    /^Máy chủ chưa xác nhận/i,
+    /^Trình duyệt đang chặn/i,
+    /^Đang lưu ảnh/i,
+    /^Đã (mở chia sẻ|tạo ảnh)/i
+  ];
+  const isRoutineMessage = t => ROUTINE_TOAST_PATTERNS.some(re => re.test(t));
+  const inferToastType = t => {
+    if (t.includes('✓') || /thành công/i.test(t)) return 'success';
+    if (t.includes('⚠') || /lỗi|thất bại/i.test(t)) return 'error';
+    if (/^chưa|^không|mất kết nối|thử lại|đang chờ/i.test(t)) return 'warning';
+    return 'info';
   };
 
-  const uuid = () => {
-    try { if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID(); } catch (_) {}
-    return 'ck_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 12);
-  };
-
-  /* ───── WHEEL FACTORY ───── */
-  function createWheel({ viewport, itemsBox, itemHeight = 58, itemClass = '', onChange }) {
-    let index = 0, offset = 0, dragging = false, startY = 0, items = [];
-    const raf = { id: 0 };
-
-    function render() {
-      if (!items.length) return;
-      const mid = (viewport.clientHeight || 292) / 2;
-      const children = itemsBox.children;
-      for (let i = 0; i < children.length; i++) {
-        const el = children[i];
-        const y = (i - index) * itemHeight + mid + offset;
-        const d = Math.abs(y - mid);
-        const n = Math.min(1, d / (itemHeight * 2.3));
-        el.style.top = y - itemHeight / 2 + 'px';
-        el.style.transform = `scale(${1 - n * 0.28})`;
-        el.style.opacity = 0.2 + (1 - n) * 0.8;
-        el.style.filter = `blur(${n * 2.5}px)`;
-        el.classList.toggle('selected', i === index && Math.abs(offset) < itemHeight * 0.35);
-      }
+  let _statusTimer = null;
+  function setStatus(t) {
+    const text = String(t || '').trim();
+    if (els.status) {
+      els.status.textContent = text;
+      els.status.classList.add('show');
+      clearTimeout(_statusTimer);
+      _statusTimer = setTimeout(() => els.status.classList.remove('show'), 1400);
     }
-
-    function schedule() {
-      if (raf.id) return;
-      raf.id = requestAnimationFrame(() => { raf.id = 0; render(); });
-    }
-
-    function setItems(list) {
-      items = Array.isArray(list) ? list.slice() : [];
-      itemsBox.innerHTML = '';
-      const frag = document.createDocumentFragment();
-      items.forEach(name => {
-        const el = document.createElement('div');
-        el.className = 'wheel-item' + (itemClass ? ' ' + itemClass : '');
-        el.textContent = name;
-        frag.appendChild(el);
-      });
-      itemsBox.appendChild(frag);
-      if (index >= items.length) index = Math.max(0, items.length - 1);
-      schedule();
-    }
-
-    function setIndex(i) {
-      index = Math.max(0, Math.min(items.length - 1, i));
-      offset = 0;
-      schedule();
-    }
-
-    function settle() {
-      const steps = Math.round(-offset / itemHeight);
-      if (steps !== 0) index = Math.max(0, Math.min(items.length - 1, index + steps));
-      offset = 0;
-      render();
-      if (typeof onChange === 'function') {
-        try { onChange(index, items[index]); } catch (_) {}
-      }
-    }
-
-    function attach() {
-      viewport.addEventListener('pointerdown', e => {
-        dragging = true; startY = e.clientY; offset = 0;
-        viewport.setPointerCapture?.(e.pointerId);
-      });
-      viewport.addEventListener('pointermove', e => {
-        if (!dragging) return;
-        offset = e.clientY - startY;
-        if ((index === 0 && offset > 0) || (index === items.length - 1 && offset < 0)) offset *= 0.25;
-        render();
-      });
-      const end = e => {
-        if (!dragging) return;
-        dragging = false; settle();
-        viewport.releasePointerCapture?.(e.pointerId);
-      };
-      viewport.addEventListener('pointerup', end);
-      viewport.addEventListener('pointercancel', end);
-      viewport.addEventListener('wheel', e => {
-        if (!items.length) return;
-        e.preventDefault();
-        if (!e.deltaY) return;
-        index += e.deltaY > 0 ? 1 : -1;
-        index = Math.max(0, Math.min(items.length - 1, index));
-        offset = 0;
-        render();
-        if (typeof onChange === 'function') {
-          try { onChange(index, items[index]); } catch (_) {}
-        }
-      }, { passive: false });
-    }
-
-    return { setItems, setIndex, getIndex: () => index, getItems: () => items, schedule, settle, attach, render };
+    if (text && !isRoutineMessage(text)) Toast.show(text, { type: inferToastType(text) });
   }
-  window.createWheel = createWheel;
 
-  /* ───── STATE ───── */
-  let names = [], checked = [], times = [], points = [], ranks = [];
-  let stateDay = '';
-  let _lastUserActionAt = 0;
-  const _recentSelfChecks = new Map();
-  const _pendingChecks = new Set();
-
-  let _lastLockCheck = 0;
-  let _cachedLocked = false;
-
-  let settingsCache = null, settingsFetchedAt = 0, settingsFetchPromise = null;
-  let syncInFlight = false;
-  let autoSyncTimer = null, lastAutoSyncAt = 0;
-  let resetTime = '00:00', resetTimer = null;
-  let checklistLockTime = '21:00';
-  let initialSheetLoaded = false;
-
-  let _realtimeDebounceTimer = null;
-
+  /* ═══════════════════════════════════════════════════════
+     5. STATE WRITE HELPERS
+     ═══════════════════════════════════════════════════════ */
   const _getStateForCache = () => ({ names, checked, times, points, ranks, day: todayKey() });
-  const cacheSchedule = (immediate = false) => {
+  const cacheSave = (immediate = false) => {
     if (immediate) Store.flushSave(_getStateForCache);
     else Store.scheduleSave(_getStateForCache);
   };
-  const cacheSave = cacheSchedule;
+  function markFresh() {
+    stateDay = todayKey();
+    cacheSave();
+  }
+  function markUserAction() {
+    _lastUserActionAt = Date.now();
+  }
   window.addEventListener('beforeunload', () => Store.flushSave(_getStateForCache));
 
   function cacheLoad() {
@@ -292,7 +233,9 @@
     return true;
   }
 
-  /* ───── SETTINGS ───── */
+  /* ═══════════════════════════════════════════════════════
+     6. SETTINGS
+     ═══════════════════════════════════════════════════════ */
   async function getSettingsCached(force = false) {
     const now = Date.now();
     if (!force && settingsCache && now - settingsFetchedAt < SETTINGS_TTL) return settingsCache;
@@ -325,54 +268,21 @@
     try { localStorage.setItem(CHECKLIST_LOCK_KEY, checklistLockTime); } catch (_) {}
   }
 
-  /* ───── STATUS/TOAST ───── */
-  const ROUTINE_TOAST_PATTERNS = [
-    /^Đã (cập nhật|đồng bộ|tải dữ liệu)/i,
-    /^Đang (dùng|cập nhật|đồng bộ)/i,
-    /^Máy chủ chưa xác nhận/i,
-    /^Trình duyệt đang chặn/i,
-    /^Đang lưu ảnh/i,
-    /^Đã (mở chia sẻ|tạo ảnh)/i
-  ];
-  const isRoutineMessage = t => ROUTINE_TOAST_PATTERNS.some(re => re.test(t));
-  const inferToastType = t => {
-    if (t.includes('✓') || /thành công/i.test(t)) return 'success';
-    if (t.includes('⚠') || /lỗi|thất bại/i.test(t)) return 'error';
-    if (/^chưa|^không|mất kết nối|thử lại|đang chờ/i.test(t)) return 'warning';
-    return 'info';
-  };
-
-  let _statusTimer = null;
-  function setStatus(t) {
-    const text = String(t || '').trim();
-    if (els.status) {
-      els.status.textContent = text;
-      els.status.classList.add('show');
-      clearTimeout(_statusTimer);
-      _statusTimer = setTimeout(() => els.status.classList.remove('show'), 1400);
-    }
-    if (text && !isRoutineMessage(text)) Toast.show(text, { type: inferToastType(text) });
+  function checklistLockInfo() {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hour12: false
+    }).formatToParts(new Date());
+    const hour = Number(parts.find(p => p.type === 'hour')?.value || 0);
+    const minute = Number(parts.find(p => p.type === 'minute')?.value || 0);
+    const [lh, lm] = String(checklistLockTime || '21:00').split(':').map(Number);
+    const lockMinutes = (Number.isFinite(lh) ? lh : 21) * 60 + (Number.isFinite(lm) ? lm : 0);
+    return { locked: hour * 60 + minute >= lockMinutes, time: checklistLockTime };
   }
+  const isChecklistLocked = () => checklistLockInfo().locked;
 
-  /* ───── RESET LOCAL STATE ───── */
-  function resetLocalStateForNewDay(reason) {
-    const oldDay = stateDay, newDay = todayKey();
-    if (oldDay === newDay && reason !== 'force') return false;
-    checked = names.map(() => false);
-    times = names.map(() => '');
-    stateDay = newDay;
-    cacheSchedule(true);
-    try { renderChecklist(true); } catch (_) {}
-    try { if (typeof renderAdminChecklistEditor === 'function') renderAdminChecklistEditor(); } catch (_) {}
-    try { if (typeof renderAdminStats === 'function') renderAdminStats(); } catch (_) {}
-    if (!els.checklistPanel.classList.contains('show')) {
-      try { renderLandingState(true); } catch (_) {}
-    }
-    console.log('[CL] Reset local:', oldDay, '→', newDay);
-    return true;
-  }
-
-  /* ───── RESET SCHEDULER ───── */
+  /* ═══════════════════════════════════════════════════════
+     7. RESET SCHEDULER + LOCAL STATE
+     ═══════════════════════════════════════════════════════ */
   function scheduleNextReset() {
     if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
     const now = new Date();
@@ -409,183 +319,44 @@
     }, delay);
   }
 
-  /* ───── CHECKLIST LOCK ───── */
-  function checklistLockInfo() {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hour12: false
-    }).formatToParts(new Date());
-    const hour = Number(parts.find(p => p.type === 'hour')?.value || 0);
-    const minute = Number(parts.find(p => p.type === 'minute')?.value || 0);
-    const [lh, lm] = String(checklistLockTime || '21:00').split(':').map(Number);
-    const lockMinutes = (Number.isFinite(lh) ? lh : 21) * 60 + (Number.isFinite(lm) ? lm : 0);
-    return { locked: hour * 60 + minute >= lockMinutes, time: checklistLockTime };
-  }
-  const isChecklistLocked = () => checklistLockInfo().locked;
-
-  /* ───── CHECKLIST RENDER ───── */
-  function renderChecklistSkeleton() {
-    const frag = document.createDocumentFragment();
-    for (let i = 0; i < 5; i++) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = '<td><div class="skeleton skeleton-row medium"></div></td><td><div class="skeleton skeleton-row short"></div></td><td><div class="skeleton" style="width:25px;height:25px;border-radius:8px;margin:auto"></div></td>';
-      frag.appendChild(tr);
+  function resetLocalStateForNewDay(reason) {
+    const oldDay = stateDay, newDay = todayKey();
+    if (oldDay === newDay && reason !== 'force') return false;
+    checked = names.map(() => false);
+    times = names.map(() => '');
+    stateDay = newDay;
+    cacheSave(true);
+    try { window.ChecklistView?._resetSignature?.(); } catch (_) {}
+    try { S.callbacks.renderChecklist?.(true); } catch (_) {}
+    try { S.callbacks.renderAdminChecklist?.(); } catch (_) {}
+    try { S.callbacks.renderAdminStats?.(); } catch (_) {}
+    if (!els.checklistPanel.classList.contains('show')) {
+      try { S.callbacks.renderLanding?.(true); } catch (_) {}
     }
-    els.checklistBody.innerHTML = '';
-    els.checklistBody.appendChild(frag);
-    _checklistSignature = '';
-  }
-
-  let _checklistSignature = '';
-  function checklistSig() {
-    return names.map((n, i) => `${n}|${checked[i] ? 1 : 0}|${times[i] || ''}`).join('::');
-  }
-
-  function renderChecklist(force = false) {
-    const sig = checklistSig();
-    if (!force && sig === _checklistSignature) return;
-    _checklistSignature = sig;
-
-    const rows = names.map((name, i) => ({
-      name, index: i,
-      checked: !!checked[i],
-      time: times[i] || ''
-    }));
-    rows.sort((a, b) => {
-      if (a.checked !== b.checked) return a.checked ? -1 : 1;
-      if (a.checked && b.checked) {
-        const ta = a.time || '99:99', tb = b.time || '99:99';
-        const c = ta.localeCompare(tb);
-        if (c !== 0) return c;
-      }
-      return a.index - b.index;
-    });
-
-    const frag = document.createDocumentFragment();
-    rows.forEach(row => {
-      const tr = document.createElement('tr');
-      tr.dataset.index = row.index;
-      tr.innerHTML = '<td class="playerName"></td><td class="checkTime"></td><td><div class="checkBox"></div></td>';
-      tr.firstChild.textContent = (window.DN ? window.DN(row.name) : row.name);
-      tr.querySelector('.checkTime').textContent = row.time || '—';
-      if (row.checked) tr.querySelector('.checkBox').classList.add('checked');
-      frag.appendChild(tr);
-    });
-    els.checklistBody.innerHTML = '';
-    els.checklistBody.appendChild(frag);
-  }
-
-  function updateChecklistRow(index) {
-    const tr = els.checklistBody.querySelector(`tr[data-index="${index}"]`);
-    if (!tr) return false;
-    const timeCell = tr.querySelector('.checkTime');
-    const box = tr.querySelector('.checkBox');
-    if (timeCell) timeCell.textContent = times[index] || '—';
-    if (box) box.classList.toggle('checked', !!checked[index]);
-    _checklistSignature = checklistSig();
+    console.log('[CL] Reset local:', oldDay, '→', newDay);
     return true;
   }
 
-  /* ───── SMOOTH UPDATE ───── */
-  function smoothUpdateChecklist(newData) {
-    if (!names.length) return false;
-    if (names.length !== newData.names.length) return false;
-    if (names.some((n, i) => n !== newData.names[i])) return false;
-
-    const oldChecked = checked.slice();
-    const oldTimes = times.slice();
-    const oldPoints = points.slice();
-    const oldRanks = ranks.slice();
-    const newlyChecked = [];
-    const changedIdx = [];
-    const mergedChecked = newData.checked.slice();
-    const mergedTimes = newData.times.slice();
-
-    for (let i = 0; i < names.length; i++) {
-      if (_pendingChecks.has(names[i])) {
-        mergedChecked[i] = oldChecked[i];
-        mergedTimes[i] = oldTimes[i];
-      }
-      const checkedChanged = oldChecked[i] !== mergedChecked[i];
-      const timeChanged = String(oldTimes[i] || '') !== String(mergedTimes[i] || '');
-      const pointsChanged = oldPoints[i] !== newData.points[i];
-      const rankChanged = oldRanks[i] !== newData.ranks[i];
-      if (checkedChanged || timeChanged || pointsChanged || rankChanged) {
-        changedIdx.push(i);
-        if (!oldChecked[i] && mergedChecked[i]) {
-          newlyChecked.push({ name: names[i], time: mergedTimes[i] || '' });
-        }
-      }
-    }
-    if (!changedIdx.length) return true;
-
-    checked = mergedChecked;
-    times = mergedTimes;
-    points = newData.points;
-    ranks = newData.ranks;
-    stateDay = todayKey();
-
-    renderChecklist(true);
-    changedIdx.slice(0, 5).forEach((idx, k) => {
-      const tr = els.checklistBody.querySelector(`tr[data-index="${idx}"]`);
-      if (!tr) return;
-      tr.classList.add('row-updated');
-      setTimeout(() => tr.classList.remove('row-updated'), 1200 + k * 80);
-    });
-    if (newlyChecked.length) notifyNewlyChecked(newlyChecked);
-    return true;
-  }
-
-  /* ───── NOTIFY ───── */
-  function isRecentCheckMinute(hhmmStr, maxMin) {
-    const m = String(hhmmStr || '').match(/^([01]\d|2[0-3]):([0-5]\d)$/);
-    if (!m) return false;
-    const h = +m[1], mi = +m[2];
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hour12: false
-    }).formatToParts(new Date());
-    const nowH = +(parts.find(p => p.type === 'hour')?.value || 0);
-    const nowM = +(parts.find(p => p.type === 'minute')?.value || 0);
-    let diff = nowH * 60 + nowM - (h * 60 + mi);
-    if (diff < 0) diff += 1440;
-    return diff <= maxMin;
-  }
-
-  function notifyNewlyChecked(list) {
-    if (!Array.isArray(list) || !list.length) return;
-    const now = Date.now();
-    const filtered = list.filter(item => {
-      const last = _recentSelfChecks.get(item.name);
-      if (last && now - last < SELF_CHECK_IGNORE_MS) return false;
-      return isRecentCheckMinute(item.time, 5);
-    });
-    if (!filtered.length) return;
-    filtered.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
-    if (filtered.length === 1) {
-      const p = filtered[0];
-      Toast.show(`${p.name} vừa check lúc ${p.time || '—'}`, { type: 'person', icon: '🌸', duration: 3200 });
-    } else {
-      Toast.show(`${filtered[0].name} và ${filtered.length - 1} người khác vừa check`, { type: 'person', icon: '🌸', duration: 3200 });
-    }
-  }
-
-  /* ───── LOAD DATA ───── */
+  /* ═══════════════════════════════════════════════════════
+     8. LOAD DATA — gọi smooth update từ ChecklistView
+     ═══════════════════════════════════════════════════════ */
   async function loadData(showError = true, force = false) {
     if (syncInFlight) {
       if (force) setStatus('Đang đồng bộ, vui lòng chờ...');
       return false;
     }
     if (initialSheetLoaded && !force) {
-      renderChecklist();
-      renderAdminChecklistEditor();
+      S.callbacks.renderChecklist?.();
+      S.callbacks.renderAdminChecklist?.();
       return true;
     }
 
     syncInFlight = true;
     try {
       if (!names.length && cacheLoad()) {
-        renderChecklist();
+        S.callbacks.renderChecklist?.();
       } else if (!names.length && els.checklistPanel.classList.contains('show')) {
-        renderChecklistSkeleton();
+        S.callbacks.renderChecklistSkeleton?.();
       }
 
       const r = await window.__srankApi('getData', { _ts: Date.now() }, TIMEOUT.SLOW);
@@ -610,23 +381,25 @@
 
       const canSmooth = initialSheetLoaded && !force
         && els.checklistPanel.classList.contains('show')
-        && names.length > 0;
+        && names.length > 0
+        && typeof window.ChecklistView?.smoothUpdate === 'function';
 
       if (canSmooth) {
-        const updated = smoothUpdateChecklist({
+        const res = window.ChecklistView.smoothUpdate({
           names: serverNames, points: serverPoints,
           checked: serverChecks, times: serverTimes, ranks: serverRanks
         });
-        if (updated) {
+        if (res && res.ok) {
           lastAutoSyncAt = Date.now();
           window.syncAttendanceEmployees?.();
           cacheSave();
           setStatus('Đã cập nhật ✓');
-          maybeRenderLanding();
+          S.callbacks.maybeRenderLanding?.();
           return true;
         }
       }
 
+      /* Full reload path */
       let newlyChecked = [];
       if (initialSheetLoaded && names.length > 0) {
         const prevNames = names.slice();
@@ -640,9 +413,10 @@
 
       const mergedChecks = serverChecks.slice();
       const mergedTimes = serverTimes.slice();
+      const hasPending = window.ChecklistView?.hasPendingCheck || (() => false);
       if (initialSheetLoaded && names.length === serverNames.length) {
         for (let i = 0; i < names.length; i++) {
-          if (names[i] === serverNames[i] && _pendingChecks.has(names[i])) {
+          if (names[i] === serverNames[i] && hasPending(names[i])) {
             mergedChecks[i] = checked[i] === true;
             mergedTimes[i] = times[i] || '';
           }
@@ -659,15 +433,15 @@
       lastAutoSyncAt = Date.now();
       window.syncAttendanceEmployees?.();
       cacheSave();
-      renderChecklist(true);
-      if (els.adminPage.classList.contains('show')) renderAdminChecklistEditor();
+      S.callbacks.renderChecklist?.(true);
+      if (els.adminPage.classList.contains('show')) S.callbacks.renderAdminChecklist?.();
       if (els.hint) els.hint.textContent = 'Chạm vào câu hỏi';
       setStatus(force ? 'Đã cập nhật ✓' : 'Đã đồng bộ ✓');
-      maybeRenderLanding();
-      if (newlyChecked.length) notifyNewlyChecked(newlyChecked);
+      S.callbacks.maybeRenderLanding?.();
+      if (newlyChecked.length) window.ChecklistView?.notify?.(newlyChecked);
       return true;
     } catch (e) {
-      if (showError && !names.length) els.hint.textContent = 'Không tải được dữ liệu';
+      if (showError && !names.length && els.hint) els.hint.textContent = 'Không tải được dữ liệu';
       if (names.length) setStatus('Đang dùng dữ liệu đã lưu');
       return false;
     } finally {
@@ -675,7 +449,9 @@
     }
   }
 
-  /* ───── AUTO SYNC ───── */
+  /* ═══════════════════════════════════════════════════════
+     9. AUTO SYNC
+     ═══════════════════════════════════════════════════════ */
   function restartAutoSync() {
     if (autoSyncTimer) { clearTimeout(autoSyncTimer); autoSyncTimer = null; }
     const interval = els.checklistPanel.classList.contains('show') ? CHECKLIST_SYNC_MS : AUTO_SYNC_MS;
@@ -692,302 +468,82 @@
       if (autoSyncTimer !== null) autoSyncTimer = setTimeout(tick, interval);
     }, interval);
   }
-  const startAutoSync = restartAutoSync;
 
-  /* ───── CHECKIN ───── */
-  async function checkin(name, index) {
-    if (checked[index] === true && times[index]) {
-      setStatus(`Đã ghi ${times[index]} ✓`);
-      return;
-    }
-    _lastUserActionAt = Date.now();
-    _recentSelfChecks.set(name, Date.now());
-    if (_recentSelfChecks.size > 100) {
-      const now = Date.now();
-      for (const [k, v] of _recentSelfChecks) {
-        if (now - v > SELF_CHECK_IGNORE_MS * 2) _recentSelfChecks.delete(k);
-      }
-    }
-    _pendingChecks.add(name);
-
-    const clientTime = hhmm();
-    const prevChecked = checked[index];
-    const prevTime = times[index];
-
-    times[index] = clientTime;
-    checked[index] = true;
-    stateDay = todayKey();
-    cacheSave();
-    if (!updateChecklistRow(index)) renderChecklist(true);
-    if (!els.checklistPanel.classList.contains('show')) renderLandingState();
-    setStatus(`Đã ghi ${clientTime} ✓`);
-
-    try {
-      const r = await window.__srankApi('checkin', { name, clientTime, clientEpoch: String(Date.now()) }, TIMEOUT.NORMAL);
-      if (!r.ok) throw new Error(r.error || 'Checkin thất bại');
-      if (r.data && Number.isFinite(Number(r.data.points))) {
-        points[index] = Number(r.data.points);
-        ranks[index] = normalizeServerRank(r.data.rank, points[index]);
-      }
-      if (r.data && /^([01]\d|2[0-3]):[0-5]\d$/.test(String(r.data.time || ''))) {
-        times[index] = String(r.data.time);
-      }
-      _pendingChecks.delete(name);
-      stateDay = todayKey();
-      cacheSave();
-      updateChecklistRow(index);
-      setStatus(`Đã ghi ${times[index] || clientTime} ✓`);
-      try {
-        window.dispatchEvent(new CustomEvent('checkinDone', { detail: { name, time: times[index] || clientTime } }));
-      } catch (_) {}
-      try {
-        localStorage.setItem('srank_last_checkin', JSON.stringify({
-          name, time: times[index] || clientTime, date: todayKey()
-        }));
-      } catch (_) {}
-    } catch (err) {
-      _pendingChecks.delete(name);
-      checked[index] = prevChecked;
-      times[index] = prevTime;
-      _recentSelfChecks.delete(name);
-      cacheSave();
-      if (!updateChecklistRow(index)) renderChecklist(true);
-      if (!els.checklistPanel.classList.contains('show')) renderLandingState();
-      const msg = String(err?.message || '').trim();
-      setStatus(msg ? `Không ghi được: ${msg}` : 'Không ghi được — kiểm tra mạng');
-    }
+  /* ═══════════════════════════════════════════════════════
+     10. SYNC QUICK TOOLS
+     ═══════════════════════════════════════════════════════ */
+  function _syncQuickTools() {
+    const otherOpen =
+      els.checklistPanel.classList.contains('show') ||
+      els.adminPage.classList.contains('show') ||
+      document.getElementById('attendanceNameWheel')?.classList.contains('show') ||
+      document.getElementById('attendancePage')?.classList.contains('show') ||
+      document.getElementById('loginOverlay')?.classList.contains('show');
+    document.body.classList.toggle('overlay-open', otherOpen);
   }
+  const syncQuickTools = throttleRAF(_syncQuickTools);
+  window.syncQuickTools = syncQuickTools;
 
-  /* ───── LANDING STATE ───── */
-  let _lastTop3Signature = '';
-  const top3Signature = list => list.map(p => `${p.name}|${p.time}|${getAvatarUrl(p.name)}`).join('::');
+  /* ═══════════════════════════════════════════════════════
+     11. EXPOSE SrankCore — TRƯỚC KHI VIEWS LOAD
+     ═══════════════════════════════════════════════════════ */
+  const S = {
+    // State getters (luôn fresh)
+    get names()   { return names; },
+    get checked() { return checked; },
+    get times()   { return times; },
+    get points()  { return points; },
+    get ranks()   { return ranks; },
 
-  function __getCtaRender() {
-    try {
-      if (typeof window.__getCtaInfo === 'function') {
-        const i = window.__getCtaInfo();
-        if (i && i.text) return i;
-      }
-    } catch (_) {}
-    return { text: '🔐 Đăng nhập', locked: false };
-  }
-  function __getKickerRender() {
-    try {
-      if (typeof window.__getKickerRender === 'function') {
-        const r = window.__getKickerRender();
-        if (r && r.version) return r;
-      }
-    } catch (_) {}
-    return { html: null, version: 'default', text: '🐱 DAILY TEAM HUB' };
-  }
+    // Writable settings
+    get resetTime()         { return resetTime; },
+    set resetTime(v)        { resetTime = v; },
+    get checklistLockTime() { return checklistLockTime; },
+    set checklistLockTime(v){ checklistLockTime = v; },
+    get settingsCache()     { return settingsCache; },
+    set settingsCache(v)    { settingsCache = v; },
+    get settingsFetchedAt() { return settingsFetchedAt; },
+    set settingsFetchedAt(v){ settingsFetchedAt = v; },
 
-  function _resolveCtaState(ci) {
-    if (ci && ci.locked) return 'locked';
-    const txt = String(ci && ci.text || '');
-    if (/đăng nhập/i.test(txt)) return 'login';
-    if (/đã chấm công/i.test(txt)) return 'done';
-    return 'checkin';
-  }
+    // DOM
+    els,
 
-  function renderLandingState(forceFullReplay = false) {
-    const locked = isChecklistLocked();
-    els.question.classList.toggle('checklist-locked-home', locked);
+    // Helpers
+    hhmm, todayKey, escapeHtml,
+    getAvatarUrl, isChecklistLocked,
+    isValid24hTime, normalizeServerRank, setStatus,
+    saveChecklistLockTime, getSettingsCached, syncQuickTools,
 
-    const checkedList = names.map((name, i) => ({
-      name: String(name || '').trim(),
-      time: String(times[i] || '').trim(),
-      checked: !!checked[i]
-    })).filter(p => p.checked && p.time && p.name).sort((a, b) => a.time.localeCompare(b.time));
+    // Actions
+    markFresh, markUserAction, scheduleNextReset, loadData,
 
-    const top3 = checkedList.slice(0, 20);
-    const newSig = top3Signature(top3);
-    const top3Changed = newSig !== _lastTop3Signature;
+    // Hooks (main.js wire)
+    onAfterRenderLanding: null,
+    onResetHome: null,
+    onLockSettingsChanged: null,
 
-    let top3HTML = '';
-    if (top3.length === 0) {
-      top3HTML = '<div class="landing-top3-empty">Chưa có ai check hôm nay — hãy là người đầu tiên! 🐱</div>';
-    } else {
-      const _av = (p, cls) => {
-        const u = getAvatarUrl(p.name);
-        const su = u ? u.replace(/"/g, '&quot;') : '';
-        const ini = String((window.DN ? window.DN(p.name) : p.name) || '?').trim().slice(0, 1).toUpperCase();
-        return u
-          ? `<img src="${su}" alt="" loading="eager" decoding="async" onerror="this.style.display='none';this.nextElementSibling.classList.add('show');"><span class="${cls}-fallback">${ini}</span>`
-          : `<span class="${cls}-fallback show">${ini}</span>`;
-      };
-      const _nm = p => String((window.DN ? window.DN(p.name) : p.name) || '')
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    // Callbacks container (views tự đăng ký)
+    callbacks: {}
+  };
+  window.SrankCore = S;
 
-      const _t1 = top3[0], _t2 = top3[1], _t3 = top3[2];
-      const _court = top3.slice(3);
-      const _L = _court.filter((_, i) => i % 2 === 0);
-      const _R = _court.filter((_, i) => i % 2 === 1);
-
-      const _podium = `<div class="court-podium">`
-        + `<div class="podium-slot podium-slot-2">${_t2 ? `<div class="advisor rank-2" data-name="${escapeHtml(_t2.name)}"><div class="advisor-crown">☀️</div><div class="advisor-avatar">${_av(_t2, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t2)}">${_nm(_t2)}</div><div class="advisor-time">${_t2.time}</div></div>` : ''}</div>`
-        + `<div class="podium-slot podium-slot-1">${_t1 ? `<div class="court-throne" data-name="${escapeHtml(_t1.name)}"><div class="throne-crown">👑</div><div class="throne-avatar">${_av(_t1, 'throne-avatar')}</div><div class="throne-name" title="${_nm(_t1)}">${_nm(_t1)}</div><div class="throne-time">${_t1.time}</div></div>` : ''}</div>`
-        + `<div class="podium-slot podium-slot-3">${_t3 ? `<div class="advisor rank-3" data-name="${escapeHtml(_t3.name)}"><div class="advisor-crown">🌙</div><div class="advisor-avatar">${_av(_t3, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t3)}">${_nm(_t3)}</div><div class="advisor-time">${_t3.time}</div></div>` : ''}</div>`
-        + `</div>`;
-
-      // ✅ Highlight tên của chính mình (chỉ quần thần)
-      const _myRawName = (() => {
-        try {
-          const u = window.SRank?.Auth?.getCurrentUser?.();
-          return u && u.displayName ? String(u.displayName).trim() : '';
-        } catch (_) { return ''; }
-      })();
-      const _cHTML = p => {
-        const isMe = _myRawName && p.name === _myRawName;
-        const meStyle = isMe
-          ? ' style="color:#8B4513;background:rgba(200,150,80,.15);border-radius:6px;padding:2px 6px;margin:-2px -6px"'
-          : '';
-        return `<div class="courtier" data-name="${escapeHtml(p.name)}"><div class="courtier-avatar">${_av(p, 'courtier-avatar')}</div><div class="courtier-info"><div class="courtier-name"${meStyle} title="${_nm(p)}">${_nm(p)}</div><div class="courtier-time">${p.time}</div></div></div>`;
-      };
-      const _ct = _court.length
-        ? `<div class="court-courtiers-label"><span>✦ QUẦN THẦN ✦</span></div><div class="court-courtiers"><div class="courtiers-col">${_L.map(_cHTML).join('')}</div><div class="courtiers-col">${_R.map(_cHTML).join('')}</div></div>`
-        : '';
-
-      top3HTML = `<div class="landing-top3 landing-court">${_podium}${_ct}</div>`;
-    }
-
-    els.question.classList.toggle('landing-court-active', top3.length > 3);
-
-    const titleEl = els.question.querySelector('.landing-title');
-    const hasStructure = !!titleEl && !forceFullReplay;
-
-    if (!hasStructure) {
-      const _kr = __getKickerRender();
-      const _kh = _kr.html || _kr.text;
-      const _kv = _kr.version;
-      els.question.classList.remove('play');
-
-      if (locked) {
-        els.question.innerHTML =
-          `<span class="landing-kicker" data-kicker-version="${_kv}">${_kh}</span>`
-          + `<span class="landing-title">CHECKLIST ĐẢO MÈO</span>`
-          + top3HTML
-          + `<span class="landing-cta locked" data-cta="locked" role="button" aria-disabled="true" tabindex="-1">Tạm khoá Checklist</span>`
-          + `<span class="landing-lock-note">Sau ${checklistLockTime} sẽ khoá Checklist nha mn 🥰</span>`;
-      } else {
-        const _ci = __getCtaRender();
-        const _ctaState = _resolveCtaState(_ci);
-        els.question.innerHTML =
-          `<span class="landing-kicker" data-kicker-version="${_kv}">${_kh}</span>`
-          + `<span class="landing-title">CHECKLIST ĐẢO MÈO</span>`
-          + top3HTML
-          + `<span class="landing-cta${_ci.locked ? ' locked' : ''}" data-cta="${_ctaState}" role="button" ${_ci.locked ? 'aria-disabled="true" tabindex="-1"' : 'tabindex="0"'}>${_ci.text}</span>`;
-      }
-      _lastTop3Signature = newSig;
-      els.question.style.removeProperty('--top3-base');
-      void els.question.offsetWidth;
-      els.question.classList.add('play');
-      els.question.style.opacity = '1';
-      els.question.style.transform = 'scale(1)';
-      els.question.style.pointerEvents = locked ? 'none' : 'auto';
-      return;
-    }
-
-    if (top3Changed) {
-      els.question.querySelector('.landing-top3-label')?.remove();
-      els.question.querySelector('.landing-top3')?.remove();
-      els.question.querySelector('.landing-top3-empty')?.remove();
-      const ctaBefore = els.question.querySelector('.landing-cta');
-      if (ctaBefore && top3HTML) {
-        ctaBefore.insertAdjacentHTML('beforebegin', top3HTML);
-        _lastTop3Signature = newSig;
-        els.question.classList.remove('top3-replay');
-        void els.question.offsetWidth;
-        els.question.classList.add('top3-replay');
-      } else return;
-    }
-
-    const cta = els.question.querySelector('.landing-cta');
-    const lockNote = els.question.querySelector('.landing-lock-note');
-    const kickerEl = els.question.querySelector('.landing-kicker');
-
-    if (kickerEl) {
-      const _kr = __getKickerRender();
-      if (kickerEl.dataset.kickerVersion !== _kr.version) {
-        if (_kr.html) kickerEl.innerHTML = _kr.html;
-        else kickerEl.textContent = _kr.text;
-        kickerEl.dataset.kickerVersion = _kr.version;
-      }
-    }
-
-    if (locked) {
-      if (cta && !cta.classList.contains('locked')) {
-        cta.classList.add('locked');
-        cta.setAttribute('aria-disabled', 'true');
-        cta.setAttribute('tabindex', '-1');
-        cta.textContent = 'Tạm khoá Checklist';
-      }
-      if (cta && cta.dataset.cta !== 'locked') cta.dataset.cta = 'locked';
-      const noteTxt = `Sau ${checklistLockTime} sẽ khoá Checklist nha mn 🥰`;
-      if (!lockNote) {
-        const note = document.createElement('span');
-        note.className = 'landing-lock-note';
-        note.textContent = noteTxt;
-        els.question.appendChild(note);
-      } else if (lockNote.textContent !== noteTxt) {
-        lockNote.textContent = noteTxt;
-      }
-    } else {
-      const _ci2 = __getCtaRender();
-      if (_ci2.locked) {
-        if (cta && !cta.classList.contains('locked')) {
-          cta.classList.add('locked');
-          cta.setAttribute('aria-disabled', 'true');
-          cta.setAttribute('tabindex', '-1');
-        }
-        const nTxt2 = `Sau ${checklistLockTime} sẽ khoá Checklist nha mn 🥰`;
-        if (!lockNote) {
-          const n = document.createElement('span');
-          n.className = 'landing-lock-note';
-          n.textContent = nTxt2;
-          els.question.appendChild(n);
-        } else if (lockNote.textContent !== nTxt2) {
-          lockNote.textContent = nTxt2;
-        }
-      } else {
-        if (cta && cta.classList.contains('locked')) {
-          cta.classList.remove('locked');
-          cta.removeAttribute('aria-disabled');
-          cta.setAttribute('tabindex', '0');
-        }
-        lockNote?.remove();
-      }
-      if (cta && cta.textContent !== _ci2.text) cta.textContent = _ci2.text;
-      if (cta) {
-        const _newState = _resolveCtaState(_ci2);
-        if (cta.dataset.cta !== _newState) cta.dataset.cta = _newState;
-      }
-    }
-
-    els.question.style.opacity = '1';
-    els.question.style.transform = 'scale(1)';
-    els.question.style.pointerEvents = locked ? 'none' : 'auto';
-  }
-
-  function maybeRenderLanding() {
-    if (els.checklistPanel.classList.contains('show')) return;
-    renderLandingState();
+  /* Wire hooks */
+  S.onAfterRenderLanding = () => {
     _lastLockCheck = Date.now();
     _cachedLocked = isChecklistLocked();
-  }
-
-  /* ───── RESET HOME ───── */
-  function resetHome() {
-    document.getElementById('q2answers')?.remove();
-    window.__clV6?.close?.();
+  };
+  S.onResetHome = () => {
     restartAutoSync();
     syncQuickTools();
-    _lastTop3Signature = '';
-    renderLandingState(true);
-    els.hint.textContent = isChecklistLocked() ? '' : (names.length ? 'Chạm vào câu hỏi' : 'Đang tải dữ liệu…');
-  }
+  };
+  S.onLockSettingsChanged = () => {
+    _lastLockCheck = 0;
+    _cachedLocked = isChecklistLocked();
+  };
 
-  /* ───── CAPTURE CHECKLIST ───── */
+  /* ═══════════════════════════════════════════════════════
+     12. CAPTURE CHECKLIST
+     ═══════════════════════════════════════════════════════ */
   let html2canvasPromise = null;
   function ensureHtml2Canvas() {
     if (typeof html2canvas === 'function') return Promise.resolve();
@@ -1096,456 +652,9 @@
   }
   els.captureBtn?.addEventListener('click', captureChecklist);
 
-  /* ───── ADMIN PANEL ───── */
-  let _adminFilter = 'all';
-  let _adminSearchTerm = '';
-
-  function renderAdminChecklistEditor() {
-    if (!els.adminChecklistRows) return;
-    if (!names.length) {
-      els.adminChecklistRows.innerHTML = '<div class="admin-list-empty">Chưa có danh sách kiểm duyệt viên</div>';
-      if (els.adminChecklistStats) els.adminChecklistStats.innerHTML = '';
-      return;
-    }
-    const frag = document.createDocumentFragment();
-    names.forEach((name, i) => {
-      const isChecked = !!checked[i];
-      const time = times[i] || '';
-      const row = document.createElement('div');
-      row.className = 'admin-row-item' + (isChecked ? ' checked' : '');
-      row.dataset.name = String(name || '').toLowerCase();
-      row.dataset.checked = isChecked ? '1' : '0';
-
-      const nameEl = document.createElement('span');
-      nameEl.className = 'admin-row-name';
-      nameEl.textContent = (window.DN ? window.DN(name) : name) || 'Kiểm duyệt viên ' + (i + 1);
-
-      const timeEl = document.createElement('span');
-      timeEl.className = 'admin-row-time' + (time ? '' : ' empty');
-      timeEl.textContent = time || '—';
-
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'admin-row-btn' + (isChecked ? ' checked' : '');
-      btn.textContent = isChecked ? 'Bỏ check' : 'Check';
-      btn.addEventListener('click', () => adminToggleCheck(i, btn));
-
-      row.append(nameEl, timeEl, btn);
-      frag.appendChild(row);
-    });
-    els.adminChecklistRows.innerHTML = '';
-    els.adminChecklistRows.appendChild(frag);
-
-    const checkedCount = checked.filter(Boolean).length;
-    if (els.adminChecklistStats) {
-      els.adminChecklistStats.innerHTML = `<span>👥 ${names.length} người</span><span>✓ ${checkedCount} đã check</span><span>○ ${names.length - checkedCount} chưa check</span>`;
-    }
-    applyChecklistFilter();
-  }
-
-  async function adminToggleCheck(i, btn) {
-    const next = !checked[i];
-    btn.disabled = true;
-    btn.textContent = '...';
-    try {
-      const token = AdminSession.get();
-      if (!token) throw new Error('Không có quyền admin');
-      const r = await window.__srankApi('adminSetCheck', {
-        token, name: names[i], checked: next ? 'true' : 'false'
-      }, TIMEOUT.FAST);
-      if (!r.ok) throw new Error(r.error || 'Không cập nhật được');
-      checked[i] = next;
-      times[i] = next ? (r.data && r.data.time || hhmm()) : '';
-      if (r.data && Number.isFinite(Number(r.data.points))) {
-        points[i] = Number(r.data.points);
-        ranks[i] = normalizeServerRank(r.data.rank, points[i]);
-      }
-      stateDay = todayKey();
-      cacheSave();
-      renderChecklist(true);
-      renderAdminChecklistEditor();
-      renderAdminStats();
-      if (!els.checklistPanel.classList.contains('show')) renderLandingState();
-      setStatus(next ? 'Đã check ✓' : 'Đã bỏ check ✓');
-    } catch (e) {
-      const _em = (e && e.message) || 'Không cập nhật được';
-      console.error('[Admin] toggle check failed:', e);
-      try { Toast.show(_em, { type: 'error', duration: 4000 }); } catch (_) {}
-      try {
-        els.adminStatus.textContent = _em;
-        els.adminStatus.classList.remove('warn');
-        els.adminStatus.classList.add('error');
-      } catch (_) {}
-      btn.disabled = false;
-      btn.textContent = checked[i] ? 'Bỏ check' : 'Check';
-    }
-  }
-
-  function applyChecklistFilter() {
-    if (!els.adminChecklistRows) return;
-    els.adminChecklistRows.querySelectorAll('.admin-row-item').forEach(row => {
-      const name = row.dataset.name || '';
-      const isChecked = row.dataset.checked === '1';
-      const matchSearch = !_adminSearchTerm || name.includes(_adminSearchTerm);
-      const matchFilter = _adminFilter === 'all'
-        || (_adminFilter === 'checked' && isChecked)
-        || (_adminFilter === 'unchecked' && !isChecked);
-      row.style.display = (matchSearch && matchFilter) ? '' : 'none';
-    });
-  }
-
-  function renderAdminStats() {
-    const total = names.length;
-    const checkedCount = checked.filter(Boolean).length;
-    if (els.adminStatTotal) els.adminStatTotal.textContent = String(total);
-    if (els.adminStatChecked) els.adminStatChecked.textContent = String(checkedCount);
-    if (els.adminStatUnchecked) els.adminStatUnchecked.textContent = String(total - checkedCount);
-    if (els.adminStatTop3) {
-      const top3 = names.map((name, i) => ({
-        name: String(name || '').trim(),
-        time: String(times[i] || '').trim(),
-        checked: !!checked[i]
-      })).filter(p => p.checked && p.time && p.name)
-        .sort((a, b) => a.time.localeCompare(b.time))
-        .slice(0, 3);
-      els.adminStatTop3.innerHTML = top3.length
-        ? top3.map((p, i) => `<div class="admin-row-item checked"><span class="admin-row-name">${['🥇', '🥈', '🥉'][i]} ${escapeHtml(window.DN ? window.DN(p.name) : p.name)}</span><span class="admin-row-time">${escapeHtml(p.time)}</span></div>`).join('')
-        : '<div class="admin-list-empty">Chưa có ai check hôm nay</div>';
-    }
-  }
-
-  function switchAdminTab(tabName) {
-    els.adminTabs.forEach(t => t.classList.toggle('active', t.dataset.adminTab === tabName));
-    els.adminViews.forEach(v => v.classList.toggle('active', v.dataset.adminView === tabName));
-    if (tabName === 'checklist') renderAdminChecklistEditor();
-    else if (tabName === 'stats') renderAdminStats();
-    else if (tabName === 'users') renderAdminUsers();
-  }
-
-  function openAdminSettings() {
-    if (!AdminSession.isValid()) { setStatus('Bạn không có quyền admin'); return; }
-    syncQuickTools();
-    els.adminPage.classList.add('show');
-    els.adminPage.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-    switchAdminTab('schedule');
-
-    if (settingsCache) {
-      els.resetTimeInput.value = settingsCache.resetTime || resetTime;
-      els.checklistLockTimeInput.value = settingsCache.checklistLockTime || checklistLockTime;
-      els.adminStatus.textContent = `Giờ reset: ${resetTime} • Khoá: ${checklistLockTime}`;
-    } else {
-      els.resetTimeInput.value = resetTime;
-      els.checklistLockTimeInput.value = checklistLockTime;
-      els.adminStatus.textContent = 'Đang tải cài đặt…';
-    }
-    els.adminStatus.classList.remove('error', 'warn');
-    renderAdminChecklistEditor();
-    renderAdminStats();
-    renderAdminUsers();
-
-    getSettingsCached(false).then(s => {
-      if (!s) return;
-      resetTime = s.resetTime || resetTime;
-      els.resetTimeInput.value = resetTime;
-      if (isValid24hTime(s.checklistLockTime)) {
-        checklistLockTime = s.checklistLockTime;
-        saveChecklistLockTime(checklistLockTime);
-      }
-      els.checklistLockTimeInput.value = checklistLockTime;
-      els.adminStatus.textContent = `Giờ reset: ${resetTime} • Khoá: ${checklistLockTime}`;
-      els.adminStatus.classList.remove('error', 'warn');
-    }).catch(() => {
-      els.adminStatus.textContent = 'Không tải được cài đặt mới. Đang dùng giá trị trên máy.';
-      els.adminStatus.classList.remove('error');
-      els.adminStatus.classList.add('warn');
-    });
-  }
-
-  const closeAdmin = () => {
-    els.adminPage.classList.remove('show');
-    els.adminPage.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-    syncQuickTools();
-  };
-
-  /* ───── ADMIN USERS ───── */
-  let _adminUsersSearchTerm = '';
-  let _adminUsersList = [];
-
-  function _currentUsername() {
-    try {
-      const u = window.SRank?.Auth?.getCurrentUser?.();
-      if (!u || !u.email) return '';
-      return String(u.email).split('@')[0].toLowerCase();
-    } catch (_) { return ''; }
-  }
-
-  function _renderAdminUsersList() {
-    if (!els.adminUsersRows) return;
-    const q = _adminUsersSearchTerm;
-
-    /* ✅ v3.0.6: Ẩn admin khỏi danh sách — dùng Role.getAdminUsernames()
-       thay vì hard-code 'tienloi'. Admin whitelist ở config.js. */
-    const adminNames = (window.Role?.getAdminUsernames?.() || []);
-    const base = _adminUsersList.filter(u =>
-      !adminNames.includes(String(u.username || '').toLowerCase())
-    );
-    const filtered = !q ? base : base.filter(u =>
-      String(u.username || '').toLowerCase().includes(q) ||
-      String(u.displayName || '').toLowerCase().includes(q)
-    );
-    if (!filtered.length) {
-      els.adminUsersRows.innerHTML = '<div class="admin-list-empty">Không có user nào</div>';
-      return;
-    }
-    const me = _currentUsername();
-    const frag = document.createDocumentFragment();
-    filtered.forEach(u => {
-      const isMe = u.username === me;
-      const row = document.createElement('div');
-      row.className = 'admin-row-item' + (u.active ? ' checked' : '');
-
-      const nameEl = document.createElement('span');
-      nameEl.className = 'admin-row-name';
-      nameEl.textContent = (u.isAdmin ? '👑 ' : '') + (u.displayName || u.username);
-
-      const userEl = document.createElement('span');
-      userEl.className = 'admin-row-time';
-      userEl.textContent = '@' + u.username + (u.active ? '' : ' · tắt');
-
-      // Wrapper chứa 2 nút: Tắt/Bật + Xoá
-      const actions = document.createElement('span');
-      actions.style.cssText = 'display:inline-flex;gap:6px;flex-shrink:0;align-items:center;';
-
-      const btnToggle = document.createElement('button');
-      btnToggle.type = 'button';
-      btnToggle.className = 'admin-row-btn' + (u.active ? ' checked' : '');
-      if (isMe) {
-        btnToggle.disabled = true;
-        btnToggle.textContent = '(bạn)';
-      } else {
-        btnToggle.textContent = u.active ? 'Tắt' : 'Bật';
-        btnToggle.addEventListener('click', () => adminToggleUser(u.username, !u.active, btnToggle));
-      }
-
-      const btnDel = document.createElement('button');
-      btnDel.type = 'button';
-      btnDel.className = 'admin-row-btn';
-      btnDel.style.cssText = 'background:#dc2626;color:#fff;border-color:#dc2626;';
-      if (isMe) {
-        btnDel.disabled = true;
-        btnDel.textContent = 'Xoá';
-      } else {
-        btnDel.textContent = 'Xoá';
-        btnDel.addEventListener('click', () => adminDeleteUser(u.username, u.displayName, btnDel));
-      }
-
-      actions.append(btnToggle, btnDel);
-      row.append(nameEl, userEl, actions);
-      frag.appendChild(row);
-    });
-    els.adminUsersRows.innerHTML = '';
-    els.adminUsersRows.appendChild(frag);
-  }
-
-  async function renderAdminUsers() {
-    if (!els.adminUsersRows) return;
-    const token = AdminSession.get();
-    if (!token) return;
-    const sb = window.__sb;
-    if (!sb || !sb.rpc) {
-      els.adminUsersRows.innerHTML = '<div class="admin-list-empty">Chưa kết nối máy chủ</div>';
-      return;
-    }
-    els.adminUsersRows.innerHTML = '<div class="admin-list-empty">Đang tải…</div>';
-    try {
-      const res = await sb.rpc('rpc_admin_list_users', { p_token: token });
-      if (res.error) throw res.error;
-      const d = res.data || {};
-      if (d.ok !== true) throw new Error(d.error || 'Không tải được');
-      _adminUsersList = Array.isArray(d.data) ? d.data : [];
-      _renderAdminUsersList();
-    } catch (e) {
-      els.adminUsersRows.innerHTML = '<div class="admin-list-empty">Lỗi: ' + escapeHtml(String(e?.message || e)) + '</div>';
-    }
-  }
-
-  async function adminCreateUser() {
-    if (!els.adminCreateUserBtn) return;
-    const username = String(els.adminNewUsername?.value || '').trim().toLowerCase();
-    const password = String(els.adminNewPassword?.value || '');
-    const displayName = String(els.adminNewDisplayName?.value || '').trim();
-    const attRowRaw = String(els.adminNewAttRow?.value || '').trim();
-    const attRow = attRowRaw ? parseInt(attRowRaw, 10) : null;
-
-    const setErr = (m) => {
-      if (!els.adminUsersStatus) return;
-      els.adminUsersStatus.textContent = m;
-      els.adminUsersStatus.classList.remove('warn');
-      els.adminUsersStatus.classList.add('error');
-    };
-    if (!/^[a-z0-9_]{3,32}$/.test(username)) return setErr('Username không hợp lệ (3-32 ký tự: a-z, 0-9, _)');
-    if (password.length < 6) return setErr('Mật khẩu tối thiểu 6 ký tự');
-    if (!displayName) return setErr('Thiếu tên hiển thị');
-    if (displayName.length > 100) return setErr('Tên hiển thị tối đa 100 ký tự');
-    if (attRowRaw && (!Number.isFinite(attRow) || attRow < 0 || attRow > 999)) return setErr('Thứ tự không hợp lệ (0-999)');
-
-    const token = AdminSession.get();
-    if (!token) return setErr('Không có quyền admin');
-    const sb = window.__sb;
-    if (!sb || !sb.rpc) return setErr('Chưa kết nối máy chủ');
-
-    els.adminCreateUserBtn.disabled = true;
-    els.adminUsersStatus?.classList.remove('error', 'warn');
-    if (els.adminUsersStatus) els.adminUsersStatus.textContent = 'Đang tạo…';
-
-    try {
-      const res = await sb.rpc('rpc_admin_create_user', {
-        p_token: token,
-        p_username: username,
-        p_password: password,
-        p_display_name: displayName,
-        p_att_row: attRow
-      });
-      if (res.error) throw res.error;
-      const d = res.data || {};
-      if (d.ok !== true) throw new Error(d.error || 'Không tạo được');
-
-      if (els.adminUsersStatus) {
-        els.adminUsersStatus.classList.remove('error', 'warn');
-        els.adminUsersStatus.textContent = `Đã tạo: @${username} → ${displayName} ✓`;
-      }
-      try { Toast.show(`Đã tạo tài khoản: ${displayName}`, { type: 'success', duration: 3500 }); } catch (_) {}
-
-      if (els.adminNewUsername) els.adminNewUsername.value = '';
-      if (els.adminNewPassword) els.adminNewPassword.value = '';
-      if (els.adminNewDisplayName) els.adminNewDisplayName.value = '';
-      if (els.adminNewAttRow) els.adminNewAttRow.value = '';
-
-      await renderAdminUsers();
-
-      // Clear cache chấm công để force reload danh sách KDV
-      try {
-        Object.keys(localStorage).forEach(k => {
-          if (k.startsWith('srank_attendance_check_v2_')) localStorage.removeItem(k);
-        });
-      } catch (_) {}
-
-      // Refresh list KDV cho landing + checklist + chấm công
-      try { await loadData(false, true); } catch (_) {}
-      try { window.syncAttendanceEmployees?.(true); } catch (_) {}
-    } catch (e) {
-      const msg = String(e?.message || e || 'Lỗi');
-      setErr('Lỗi: ' + msg);
-      try { Toast.show('Lỗi tạo user: ' + msg, { type: 'error', duration: 4000 }); } catch (_) {}
-    } finally {
-      if (els.adminCreateUserBtn) els.adminCreateUserBtn.disabled = false;
-    }
-  }
-
-  async function adminToggleUser(username, nextActive, btn) {
-    const token = AdminSession.get();
-    if (!token) return;
-    const sb = window.__sb;
-    if (!sb || !sb.rpc) return;
-
-    btn.disabled = true;
-    const old = btn.textContent;
-    btn.textContent = '…';
-    try {
-      const res = await sb.rpc('rpc_admin_toggle_user', {
-        p_token: token,
-        p_username: username,
-        p_active: nextActive
-      });
-      if (res.error) throw res.error;
-      const d = res.data || {};
-      if (d.ok !== true) throw new Error(d.error || 'Không cập nhật được');
-      try { Toast.show(`${nextActive ? 'Bật' : 'Tắt'}: @${username}`, { type: 'success', duration: 2500 }); } catch (_) {}
-      await renderAdminUsers();
-    } catch (e) {
-      btn.disabled = false;
-      btn.textContent = old;
-      const msg = String(e?.message || e || 'Lỗi');
-      try { Toast.show('Lỗi: ' + msg, { type: 'error', duration: 4000 }); } catch (_) {}
-    }
-  }
-
-  /* ⭐ Xoá vĩnh viễn user — double confirm bằng cách gõ username */
-  async function adminDeleteUser(username, displayName, btn) {
-    if (!username) return;
-
-    // Confirm 1: cảnh báo
-    const label = displayName || username;
-    if (!confirm(`Xoá VĨNH VIỄN user "${label}" (@${username})?\n\nHành động này KHÔNG THỂ hoàn tác.\n- User không login được nữa\n- Xoá khỏi mọi danh sách\n- Lịch sử điểm/top3 của user sẽ MỒ CÔI (vẫn còn trong DB nhưng không hiện)`)) {
-      return;
-    }
-
-    // Confirm 2: gõ chính xác username
-    const typed = prompt(`Xác nhận lần cuối — gõ CHÍNH XÁC username:\n\n${username}`);
-    if (String(typed || '').trim().toLowerCase() !== username.toLowerCase()) {
-      try { Toast.show('Username không khớp — huỷ xoá', { type: 'warning', duration: 2500 }); } catch (_) {}
-      return;
-    }
-
-    const token = AdminSession.get();
-    if (!token) return;
-    const sb = window.__sb;
-    if (!sb || !sb.rpc) return;
-
-    btn.disabled = true;
-    const old = btn.textContent;
-    btn.textContent = '…';
-    try {
-      const res = await sb.rpc('rpc_admin_delete_user', {
-        p_token: token,
-        p_username: username
-      });
-      if (res.error) throw res.error;
-      const d = res.data || {};
-      if (d.ok !== true) throw new Error(d.error || 'Không xoá được');
-
-      try { Toast.show(`Đã xoá: @${username}`, { type: 'success', duration: 3000 }); } catch (_) {}
-
-      // Clear cache chấm công + refresh
-      try {
-        Object.keys(localStorage).forEach(k => {
-          if (k.startsWith('srank_attendance_check_v2_')) localStorage.removeItem(k);
-        });
-      } catch (_) {}
-
-      await renderAdminUsers();
-      try { await loadData(false, true); } catch (_) {}
-      try { window.syncAttendanceEmployees?.(true); } catch (_) {}
-    } catch (e) {
-      btn.disabled = false;
-      btn.textContent = old;
-      const msg = String(e?.message || e || 'Lỗi');
-      try { Toast.show('Lỗi xoá: ' + msg, { type: 'error', duration: 4000 }); } catch (_) {}
-    }
-  }
-
-  els.adminUsersSearch?.addEventListener('input', e => {
-    _adminUsersSearchTerm = String(e.target.value || '').trim().toLowerCase();
-    _renderAdminUsersList();
-  });
-  els.adminCreateUserBtn?.addEventListener('click', adminCreateUser);
-
-  /* ───── SYNC QUICK TOOLS ───── */
-  function _syncQuickTools() {
-    const otherOpen =
-      els.checklistPanel.classList.contains('show') ||
-      els.adminPage.classList.contains('show') ||
-      document.getElementById('attendanceNameWheel')?.classList.contains('show') ||
-      document.getElementById('attendancePage')?.classList.contains('show') ||
-      document.getElementById('loginOverlay')?.classList.contains('show');
-    document.body.classList.toggle('overlay-open', otherOpen);
-  }
-  const syncQuickTools = throttleRAF(_syncQuickTools);
-  window.syncQuickTools = syncQuickTools;
-
-  /* ───── ADMIN LONG-PRESS ĐỔI TÊN HIỂN THỊ ───── */
+  /* ═══════════════════════════════════════════════════════
+     13. ADMIN LONG-PRESS RENAME
+     ═══════════════════════════════════════════════════════ */
   const LP_DURATION = 600;
   const LP_MOVE_THRESHOLD = 12;
   let _lpTimer = null, _lpStartX = 0, _lpStartY = 0, _lpTarget = '';
@@ -1575,9 +684,7 @@
 
     try {
       setStatus('Đang lưu…');
-      const res = await sb.rpc('rpc_admin_set_profile', {
-        p_token: token, p_name: rawName, p_display: val
-      });
+      const res = await sb.rpc('rpc_admin_set_profile', { p_token: token, p_name: rawName, p_display: val });
       if (res.error) throw res.error;
       const d = res.data || {};
       if (d.ok !== true) throw new Error(d.error || 'Không lưu được');
@@ -1604,7 +711,7 @@
     }
   }
 
-  els.question.addEventListener('pointerdown', e => {
+  els.question?.addEventListener('pointerdown', e => {
     if (!AdminSession.isValid()) return;
     const card = e.target?.closest?.('[data-name]');
     if (!card) return;
@@ -1624,26 +731,27 @@
     }, LP_DURATION);
   });
 
-  els.question.addEventListener('pointermove', e => {
+  els.question?.addEventListener('pointermove', e => {
     if (!_lpTimer) return;
     const dx = Math.abs(e.clientX - _lpStartX);
     const dy = Math.abs(e.clientY - _lpStartY);
     if (dx > LP_MOVE_THRESHOLD || dy > LP_MOVE_THRESHOLD) _cancelLongPress();
   });
 
-  els.question.addEventListener('pointerup', _cancelLongPress);
-  els.question.addEventListener('pointercancel', _cancelLongPress);
-  els.question.addEventListener('pointerleave', _cancelLongPress);
-
-  els.question.addEventListener('contextmenu', e => {
+  els.question?.addEventListener('pointerup', _cancelLongPress);
+  els.question?.addEventListener('pointercancel', _cancelLongPress);
+  els.question?.addEventListener('pointerleave', _cancelLongPress);
+  els.question?.addEventListener('contextmenu', e => {
     if (!AdminSession.isValid()) return;
     const card = e.target?.closest?.('[data-name]');
     if (card) e.preventDefault();
   });
 
-  /* ───── EVENT LISTENERS ───── */
-  els.homeBtn.addEventListener('click', () => {
-    resetHome();
+  /* ═══════════════════════════════════════════════════════
+     14. EVENT LISTENERS — main buttons
+     ═══════════════════════════════════════════════════════ */
+  els.homeBtn?.addEventListener('click', () => {
+    S.callbacks.resetHome?.();
     syncQuickTools();
     if (syncInFlight || !initialSheetLoaded) return;
     if (Date.now() - _lastUserActionAt < USER_ACTION_PAUSE_MS) return;
@@ -1652,79 +760,21 @@
     loadData(false, true);
   });
 
-  els.syncBtn.addEventListener('click', () => {
+  els.syncBtn?.addEventListener('click', () => {
     lastAutoSyncAt = Date.now();
     loadData(true, true);
   });
 
-  els.adminBtn.addEventListener('click', () => {
-    if (AdminSession.isValid()) openAdminSettings();
+  els.adminBtn?.addEventListener('click', () => {
+    if (AdminSession.isValid()) S.callbacks.openAdmin?.();
     else setStatus('Bạn không có quyền admin');
   });
-  els.adminPageBack?.addEventListener('click', closeAdmin);
+  els.adminPageBack?.addEventListener('click', () => S.callbacks.closeAdmin?.());
   els.adminPageLogout?.addEventListener('click', () => {
     if (confirm('Đăng xuất khỏi Admin?')) {
       AdminSession.clear();
-      closeAdmin();
+      S.callbacks.closeAdmin?.();
       setStatus('Đã đăng xuất admin');
-    }
-  });
-  els.adminTabs.forEach(tab => tab.addEventListener('click', () => switchAdminTab(tab.dataset.adminTab)));
-  els.adminFilterBtns.forEach(btn => btn.addEventListener('click', () => {
-    els.adminFilterBtns.forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    _adminFilter = btn.dataset.filter;
-    applyChecklistFilter();
-  }));
-  els.adminChecklistSearch?.addEventListener('input', e => {
-    _adminSearchTerm = String(e.target.value || '').trim().toLowerCase();
-    applyChecklistFilter();
-  });
-
-  els.resetTimeInput.addEventListener('input', () => {
-    let v = els.resetTimeInput.value.replace(/\D/g, '').slice(0, 4);
-    if (v.length > 2) v = v.slice(0, 2) + ':' + v.slice(2);
-    els.resetTimeInput.value = v;
-  });
-  els.checklistLockTimeInput.addEventListener('input', () => {
-    let v = els.checklistLockTimeInput.value.replace(/\D/g, '').slice(0, 4);
-    if (v.length > 2) v = v.slice(0, 2) + ':' + v.slice(2);
-    els.checklistLockTimeInput.value = v;
-  });
-
-  els.adminSaveBtn.addEventListener('click', async () => {
-    const time = els.resetTimeInput.value.trim();
-    const lockTime = els.checklistLockTimeInput.value.trim();
-    if (!isValid24hTime(time) || !isValid24hTime(lockTime)) {
-      els.adminStatus.textContent = 'Giờ không hợp lệ.';
-      return;
-    }
-    els.adminSaveBtn.disabled = true;
-    els.adminStatus.textContent = 'Đang lưu…';
-    try {
-      const token = AdminSession.get();
-      if (!token) throw new Error('Không có quyền admin');
-      const r = await window.__srankApi('setSettings', { token, resetTime: time, checklistLockTime: lockTime }, TIMEOUT.FAST);
-      if (!r.ok) throw new Error(r.error || 'Không lưu được');
-      resetTime = r.data.resetTime || time;
-      checklistLockTime = r.data.checklistLockTime || lockTime;
-      saveChecklistLockTime(checklistLockTime);
-      els.checklistLockTimeInput.value = checklistLockTime;
-      settingsCache = { resetTime, checklistLockTime };
-      settingsFetchedAt = Date.now();
-      scheduleNextReset();
-      _lastLockCheck = 0;
-      _cachedLocked = isChecklistLocked();
-      renderLandingState();
-      els.adminStatus.classList.remove('error', 'warn');
-      els.adminStatus.textContent = `Đã lưu • Reset ${resetTime} • Khoá Checklist ${checklistLockTime}`;
-    } catch (_) {
-      saveChecklistLockTime(lockTime);
-      els.checklistLockTimeInput.value = checklistLockTime;
-      renderLandingState();
-      els.adminStatus.textContent = 'Chưa lưu được lên hệ thống. Kiểm tra kết nối rồi thử lại.';
-    } finally {
-      els.adminSaveBtn.disabled = false;
     }
   });
 
@@ -1733,7 +783,7 @@
     const capturePreview = document.getElementById('capturePreview');
     if (capturePreview) { capturePreview.remove(); e.preventDefault(); return; }
     if (els.checklistPanel.classList.contains('show')) { window.__clV6?.close?.(); e.preventDefault(); return; }
-    if (els.adminPage.classList.contains('show')) { closeAdmin(); e.preventDefault(); return; }
+    if (els.adminPage.classList.contains('show')) { S.callbacks.closeAdmin?.(); e.preventDefault(); return; }
     const attendanceNameWheel = document.getElementById('attendanceNameWheel');
     if (attendanceNameWheel && attendanceNameWheel.classList.contains('show')) {
       attendanceNameWheel.classList.remove('show');
@@ -1782,7 +832,9 @@
     }, 300);
   });
 
-  /* ───── PUBLIC API ───── */
+  /* ═══════════════════════════════════════════════════════
+     15. PUBLIC API — backward compat
+     ═══════════════════════════════════════════════════════ */
   window.__getChecklistNames = () => Array.isArray(names) ? names.slice() : [];
   window.__getChecklistState = () => ({
     names: Array.isArray(names) ? names.slice() : [],
@@ -1803,8 +855,8 @@
     times[idx] = '';
     stateDay = todayKey();
     cacheSave();
-    renderChecklist(true);
-    if (!els.checklistPanel.classList.contains('show')) renderLandingState();
+    S.callbacks.renderChecklist?.(true);
+    if (!els.checklistPanel.classList.contains('show')) S.callbacks.renderLanding?.();
 
     try {
       const token = AdminSession.get();
@@ -1820,8 +872,8 @@
       checked[idx] = prevChecked;
       times[idx] = prevTime;
       cacheSave();
-      renderChecklist(true);
-      if (!els.checklistPanel.classList.contains('show')) renderLandingState();
+      S.callbacks.renderChecklist?.(true);
+      if (!els.checklistPanel.classList.contains('show')) S.callbacks.renderLanding?.();
       throw e;
     }
   };
@@ -1829,21 +881,21 @@
   window.SRank = window.SRank || {};
   Object.assign(window.SRank, {
     api: window.__srankApi,
-    uuid,
-    rankClient,
+    rankClient: v => Store.rankClient ? Store.rankClient(v) : v,
     normalizeServerRank,
     setStatus,
     ensureHtml2Canvas,
     showCapturePreview,
     syncQuickTools,
     getAvatarUrl,
-    onTopOpen: () => { try { closeAdmin(); } catch (_) {} window.__clV6?.close?.(); },
+    onTopOpen: () => { try { S.callbacks.closeAdmin?.(); } catch (_) {} window.__clV6?.close?.(); },
     requestCheckin: n => {
       const i = names.indexOf(n);
       if (i < 0) return Promise.reject(new Error('Không tìm thấy ' + n));
-      return checkin(n, i);
+      if (!S.callbacks.checkin) return Promise.reject(new Error('ChecklistView chưa ready'));
+      return S.callbacks.checkin(n, i);
     },
-    rerenderLanding: () => renderLandingState(),
+    rerenderLanding: () => S.callbacks.renderLanding?.(),
     getCurrentState: () => ({
       names: names.slice(),
       checked: checked.slice(),
@@ -1855,8 +907,8 @@
           const k = String(name || '').trim();
           if (!k) return;
           _avatarCache.set(k, String(url || ''));
-          try { renderLandingState(true); } catch (_) {}
-          try { renderChecklist(true); } catch (_) {}
+          try { S.callbacks.renderLanding?.(true); } catch (_) {}
+          try { S.callbacks.renderChecklist?.(true); } catch (_) {}
         } catch (_) {}
       },
       getCache: (name) => {
@@ -1869,90 +921,100 @@
     }
   });
 
-  /* ───── BOOT ───── */
-  loadChecklistLockTime();
-  if (els.checklistLockTimeInput) els.checklistLockTimeInput.value = checklistLockTime;
+  /* ═══════════════════════════════════════════════════════
+     16. BOOT — đợi DOMContentLoaded để views kịp đăng ký
+     ═══════════════════════════════════════════════════════ */
+  function boot() {
+    loadChecklistLockTime();
+    if (els.checklistLockTimeInput) els.checklistLockTimeInput.value = checklistLockTime;
 
-  try {
-    if (window.SRank?.Auth?.onChange) {
-      window.SRank.Auth.onChange(() => {
-        loadAvatarsFromSupabase().then((hasData) => {
-          if (hasData){
-            try { renderLandingState(true); } catch (_) {}
-            try { renderChecklist(true); } catch (_) {}
-          }
-        }).catch(() => {});
-      });
-    }
-  } catch (_) {}
-
-  bootstrapAvatars(5);
-
-  let _loadDataPromise = null;
-  if (cacheLoad()) {
-    initialSheetLoaded = true;
-    renderChecklist(true);
-    if (els.hint) els.hint.textContent = names.length ? 'Chạm vào câu hỏi' : 'Đang tải dữ liệu…';
-    setStatus('Đã tải dữ liệu lưu ✓');
-    _loadDataPromise = loadData(false, true);
-  } else {
-    _loadDataPromise = loadData(true);
-  }
-  renderLandingState();
-
-  (async () => {
     try {
-      await _loadDataPromise;
-      const s = await getSettingsCached(false);
-      if (isValid24hTime(s.resetTime)) resetTime = s.resetTime;
-      if (isValid24hTime(s.checklistLockTime)) {
-        checklistLockTime = s.checklistLockTime;
-        saveChecklistLockTime(checklistLockTime);
-        if (els.checklistLockTimeInput) els.checklistLockTimeInput.value = checklistLockTime;
+      if (window.SRank?.Auth?.onChange) {
+        window.SRank.Auth.onChange(() => {
+          loadAvatarsFromSupabase().then((hasData) => {
+            if (hasData){
+              try { S.callbacks.renderLanding?.(true); } catch (_) {}
+              try { S.callbacks.renderChecklist?.(true); } catch (_) {}
+            }
+          }).catch(() => {});
+        });
       }
-      renderLandingState();
     } catch (_) {}
-  })();
 
-  scheduleNextReset();
-  _cachedLocked = isChecklistLocked();
+    bootstrapAvatars(5);
 
-  setInterval(() => {
-    if (document.hidden) return;
-    const now = Date.now();
-    if (now - _lastLockCheck > 30000) {
-      _lastLockCheck = now;
-      const nextLocked = isChecklistLocked();
-      const lockChanged = nextLocked !== _cachedLocked;
-      _cachedLocked = nextLocked;
-      if (lockChanged && !els.checklistPanel.classList.contains('show')) {
-        renderLandingState();
-      }
+    let _loadDataPromise = null;
+    if (cacheLoad()) {
+      initialSheetLoaded = true;
+      S.callbacks.renderChecklist?.(true);
+      if (els.hint) els.hint.textContent = names.length ? 'Chạm vào câu hỏi' : 'Đang tải dữ liệu…';
+      setStatus('Đã tải dữ liệu lưu ✓');
+      _loadDataPromise = loadData(false, true);
+    } else {
+      _loadDataPromise = loadData(true);
     }
-    if (!els.checklistPanel.classList.contains('show')) {
-      if (_cachedLocked) {
-        if (els.hint && els.hint.textContent !== '') els.hint.textContent = '';
-      } else if (names.length && els.hint && els.hint.textContent !== 'Chạm vào câu hỏi') {
-        els.hint.textContent = 'Chạm vào câu hỏi';
+    S.callbacks.renderLanding?.();
+
+    (async () => {
+      try {
+        await _loadDataPromise;
+        const s = await getSettingsCached(false);
+        if (isValid24hTime(s.resetTime)) resetTime = s.resetTime;
+        if (isValid24hTime(s.checklistLockTime)) {
+          checklistLockTime = s.checklistLockTime;
+          saveChecklistLockTime(checklistLockTime);
+          if (els.checklistLockTimeInput) els.checklistLockTimeInput.value = checklistLockTime;
+        }
+        S.callbacks.renderLanding?.();
+      } catch (_) {}
+    })();
+
+    scheduleNextReset();
+    _cachedLocked = isChecklistLocked();
+
+    setInterval(() => {
+      if (document.hidden) return;
+      const now = Date.now();
+      if (now - _lastLockCheck > 30000) {
+        _lastLockCheck = now;
+        const nextLocked = isChecklistLocked();
+        const lockChanged = nextLocked !== _cachedLocked;
+        _cachedLocked = nextLocked;
+        if (lockChanged && !els.checklistPanel.classList.contains('show')) {
+          S.callbacks.renderLanding?.();
+        }
       }
-    }
-  }, 1000);
+      if (!els.checklistPanel.classList.contains('show')) {
+        if (_cachedLocked) {
+          if (els.hint && els.hint.textContent !== '') els.hint.textContent = '';
+        } else if (names.length && els.hint && els.hint.textContent !== 'Chạm vào câu hỏi') {
+          els.hint.textContent = 'Chạm vào câu hỏi';
+        }
+      }
+    }, 1000);
 
-  startAutoSync();
+    restartAutoSync();
 
-  window.addEventListener('displayNameUpdated', () => {
-    try { renderLandingState(true); } catch (_) {}
-    try { renderChecklist(true); } catch (_) {}
-    try { renderAdminChecklistEditor(); } catch (_) {}
-    try { renderAdminStats(); } catch (_) {}
-  });
+    window.addEventListener('displayNameUpdated', () => {
+      try { S.callbacks.renderLanding?.(true); } catch (_) {}
+      try { S.callbacks.renderChecklist?.(true); } catch (_) {}
+      try { S.callbacks.renderAdminChecklist?.(); } catch (_) {}
+      try { S.callbacks.renderAdminStats?.(); } catch (_) {}
+    });
 
-  window.addEventListener('avatarUpdated', () => {
-    loadAvatarsFromSupabase().then(() => {
-      try { renderLandingState(true); } catch (_) {}
-      try { renderChecklist(true); } catch (_) {}
-    }).catch(() => {});
-  });
+    window.addEventListener('avatarUpdated', () => {
+      loadAvatarsFromSupabase().then(() => {
+        try { S.callbacks.renderLanding?.(true); } catch (_) {}
+        try { S.callbacks.renderChecklist?.(true); } catch (_) {}
+      }).catch(() => {});
+    });
 
-  console.log('[main] ready ✓ v3.0.6');
+    console.log('[main] ready ✓ v4.0.0 (orchestrator, 3 view modules)');
+  }
+
+  if (document.readyState === 'complete') {
+    boot();
+  } else {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  }
 })();
