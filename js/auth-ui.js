@@ -1,6 +1,10 @@
 /* =========================================================
-   SRANK AUTH UI — v10.7 (Role-based + CTA Morph + Verify User)
+   SRANK AUTH UI — v10.8 (Role-based + CTA Morph + Verify User)
    ---------------------------------------------------------
+   v10.8 CHANGES:
+   - Bỏ BOSS_WHITELIST hard-code ['tienloi']
+   - isBossMode() delegate sang window.Role.isAdmin()
+   - Single source of truth: admin whitelist ở config.js
    v10.7 CHANGES:
    - Verify user còn tồn tại trong employees sau login
    - Force logout nếu user đã bị admin xoá
@@ -241,8 +245,6 @@
   window.__getCtaInfo = getCtaInfo;
 
   /* ============ KICKER CONFIG ============ */
-  /* ⭐ v10.5: whitelist chỉ còn tienloi */
-  const BOSS_WHITELIST = ['tienloi'];
   const MINO_USERNAME = 'thaouyen';
 
   const KICKER_DEFAULT = '🐱 DAILY TEAM HUB';
@@ -255,17 +257,19 @@
     return un === MINO_USERNAME;
   }
 
-  /* ⭐ v10.3: role-based, không đọc password */
+  /* ✅ v10.8: delegate sang window.Role — single source of truth
+     Role.get() tự xử lý: exact match role + whitelist từ config.js */
   function isBossMode(){
     if (!currentUser) return false;
+    if (!window.Role) {
+      console.warn('[AUTH-UI] window.Role chưa load — kiểm tra load order');
+      return false;
+    }
     try {
-      const appMeta = currentUser.app_metadata || {};
-      const userMeta = currentUser.user_metadata || {};
-      const role = String(appMeta.role || userMeta.role || currentUser.role || '').toLowerCase();
-      if (/admin|super|owner|quản|quan/.test(role)) return true;
-    } catch(_) {}
-    const un = String(currentUser.username || '').trim().toLowerCase();
-    return un && BOSS_WHITELIST.indexOf(un) >= 0;
+      return window.Role.isAdmin(currentUser);
+    } catch(_) {
+      return false;
+    }
   }
 
   function splitGraphemes(text){
@@ -620,5 +624,5 @@
 
   window.SRank.openLogin = openLoginForm;
 
-  console.log("[AUTH-UI] ready ✓ v10.7 — role-based + remember me + morph + verify user");
+  console.log("[AUTH-UI] ready ✓ v10.8 — role-based + remember me + morph + verify user");
 })();
