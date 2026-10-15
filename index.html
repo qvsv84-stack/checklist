@@ -499,10 +499,23 @@ html body #question .landing-cta[data-cta="checkin"]:active {
   <button class="att-multi-action clear" data-multi-status="" type="button">Xóa</button>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
+<!-- ══════════════════════════════════════════════════════════════
      SCRIPT LOAD ORDER — KHÔNG THAY ĐỔI
-     ✅ v1.1: role.js load sau config.js, TRƯỚC admin-session.js
-     ═══════════════════════════════════════════════════════ -->
+     ══════════════════════════════════════════════════════════════
+     v1.2 (Task 2 refactor):
+       - main.js giờ là orchestrator, expose window.SrankCore
+       - 3 view modules: landing.js, admin.js, checklist-view.js
+       - Views đọc SrankCore → đăng ký callbacks
+       - main.js boot đợi DOMContentLoaded → callbacks đã sẵn sàng
+
+     THỨ TỰ BẮT BUỘC:
+       config → role → toast → admin-session → store → scheduler
+       → supabase CDN → supabase-adapter → display-name → auth
+       → main (define SrankCore, đợi DOMContentLoaded)
+       → landing / admin / checklist-view (đăng ký callbacks)
+       → cta-morph / auth-ui / avatar-upload / checklist-ui / bridge
+       → attendance / attendance-top3 / realtime / menu
+     ══════════════════════════════════════════════════════════════ -->
 <script src="js/config.js"></script>
 <script src="js/role.js" defer></script>
 <script src="js/toast.js" defer></script>
@@ -514,6 +527,11 @@ html body #question .landing-cta[data-cta="checkin"]:active {
 <script src="js/display-name.js" defer></script>
 <script src="js/auth.js" defer></script>
 <script src="js/main.js" defer></script>
+<!-- ⬇️ View modules — load NGAY SAU main.js -->
+<script src="js/landing.js" defer></script>
+<script src="js/admin.js" defer></script>
+<script src="js/checklist-view.js" defer></script>
+<!-- ⬇️ Feature modules -->
 <script src="js/cta-morph.js" defer></script>
 <script src="js/auth-ui.js" defer></script>
 <script src="js/avatar-upload.js" defer></script>
