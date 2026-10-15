@@ -1,16 +1,17 @@
 /* =========================================================
-   DEBUG MENU — v1.0
+   DEBUG MENU — v2.0 (menu item trong menu 3 gạch)
    ---------------------------------------------------------
-   Nút 🐛 nổi góc dưới-trái. Bấm → hiện panel debug với:
-     - Trạng thái load của TẤT CẢ module
-     - DOM elements có/không
-     - Login / Admin / Role state
-     - Lỗi runtime đã bắt được (error, promise, script load)
-     - Performance resource timings
-   Nút "Copy" để gửi cho dev fix.
+   v2.0 CHANGES:
+   - BỎ nút nổi 🐛 ngoài màn hình
+   - THÊM menu item "🐛 Debug" vào section "Công cụ"
+     của #menuOverlay → bấm 3 gạch → Debug
+   - Tự gắn listener (không phụ thuộc menu.js proxy)
 
-   LOAD ORDER: NGAY SAU config.js (trước mọi thứ khác để bắt
-   được cả lỗi load script).
+   v1.0:
+   - Bắt error / promise / script-load
+   - Panel debug + nút Copy
+
+   LOAD ORDER: NGAY SAU config.js (không defer)
    ========================================================= */
 (function () {
   "use strict";
@@ -127,6 +128,7 @@
       ["__clV6",                () => !!window.__clV6],
       ["__clBridgeLoaded",      () => !!window.__clBridgeLoaded],
       ["createWheel",           () => typeof window.createWheel === "function"],
+      ["__wheelFallbackV2",     () => !!window.__wheelFallbackV2],
       ["__openAttendancePage",  () => typeof window.__openAttendancePage === "function"],
       ["__getAttendanceSelectedName", () => typeof window.__getAttendanceSelectedName === "function"],
       ["__attendanceTop3Loaded",() => !!window.__attendanceTop3Loaded],
@@ -200,6 +202,7 @@
       adminPage_show: !!document.getElementById("adminPage")?.classList.contains("show"),
       loginOverlay_show: !!document.getElementById("loginOverlay")?.classList.contains("show"),
       checklistPanel_show: !!document.getElementById("checklistPanel")?.classList.contains("show"),
+      attendanceNameWheel_show: !!document.getElementById("attendanceNameWheel")?.classList.contains("show"),
       body_menuOpen: document.body.classList.contains("menu-open"),
       body_overlayOpen: document.body.classList.contains("overlay-open")
     };
@@ -247,37 +250,13 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     3. STYLES
+     3. STYLES (chỉ panel — bỏ nút nổi)
      ═══════════════════════════════════════════════════════ */
   function injectStyles() {
     if (document.getElementById("__dbgStyles")) return;
     const s = document.createElement("style");
     s.id = "__dbgStyles";
     s.textContent = `
-      #__dbgBtn {
-        position: fixed;
-        left: 12px;
-        bottom: calc(140px + env(safe-area-inset-bottom, 0px));
-        width: 48px; height: 48px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #ef4444, #b91c1c);
-        color: #fff;
-        border: 2px solid #fff;
-        box-shadow: 0 6px 20px -4px rgba(185,28,28,.55), 0 0 0 2px rgba(239,68,68,.3);
-        font-size: 22px;
-        display: flex; align-items: center; justify-content: center;
-        cursor: pointer;
-        z-index: 99998;
-        font-family: system-ui, -apple-system, sans-serif;
-        padding: 0;
-        line-height: 1;
-        touch-action: manipulation;
-        -webkit-tap-highlight-color: transparent;
-      }
-      #__dbgBtn:active { transform: scale(.9); }
-      #__dbgBtn.busy { animation: __dbgSpin 1s linear infinite; }
-      @keyframes __dbgSpin { to { transform: rotate(360deg); } }
-
       #__dbgPanel {
         position: fixed; inset: 0;
         background: rgba(0,0,0,.85);
@@ -364,7 +343,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     4. UI
+     4. TOAST / PANEL
      ═══════════════════════════════════════════════════════ */
   function ensureToast() {
     let el = document.getElementById("__dbgToast");
@@ -396,7 +375,6 @@
     const text = ta.value;
 
     let ok = false;
-    // Try modern clipboard API first
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(text);
@@ -404,7 +382,6 @@
       }
     } catch (_) {}
 
-    // Fallback: select + execCommand
     if (!ok) {
       try {
         ta.removeAttribute("readonly");
@@ -430,7 +407,6 @@
         toast("✅ Đã copy");
       }
     } else {
-      // Last resort: select all so user can long-press copy manually
       try {
         ta.removeAttribute("readonly");
         ta.focus();
@@ -458,16 +434,9 @@
     document.body.style.overflow = "";
   }
 
-  function injectButton() {
-    if (document.getElementById("__dbgBtn")) return;
+  function injectPanel() {
+    if (document.getElementById("__dbgPanel")) return;
     injectStyles();
-
-    const btn = document.createElement("button");
-    btn.id = "__dbgBtn";
-    btn.type = "button";
-    btn.setAttribute("aria-label", "Debug");
-    btn.textContent = "🐛";
-    document.body.appendChild(btn);
 
     const panel = document.createElement("div");
     panel.id = "__dbgPanel";
@@ -486,7 +455,6 @@
     `;
     document.body.appendChild(panel);
 
-    btn.addEventListener("click", openPanel);
     panel.querySelector("#__dbgClose").addEventListener("click", closePanel);
     panel.querySelector("#__dbgCloseBtn").addEventListener("click", closePanel);
     panel.querySelector("#__dbgRefBtn").addEventListener("click", function () {
@@ -497,29 +465,107 @@
     panel.addEventListener("click", function (e) {
       if (e.target === panel) closePanel();
     });
-
-    // Expose API để debug bằng tay nếu cần
-    window.__debugMenu = {
-      open: openPanel,
-      close: closePanel,
-      collect: collect,
-      copy: doCopy,
-      errors: function () { return window.__debugErrors.slice(); },
-      clearErrors: function () { window.__debugErrors.length = 0; }
-    };
-
-    console.log("[debug-menu] 🐛 ready — bấm nút đỏ dưới-trái để xem report");
   }
 
   /* ═══════════════════════════════════════════════════════
-     5. BOOT
+     5. INJECT MENU ITEM vào menu 3 gạch
+     ═══════════════════════════════════════════════════════ */
+  function injectMenuOverlayItem() {
+    const overlay = document.getElementById("menuOverlay");
+    if (!overlay) return false;
+
+    // Nếu đã có → xong
+    if (overlay.querySelector('[data-debug-item="1"]')) return true;
+
+    // Tìm section "Công cụ"
+    let targetGrid = null;
+    const sections = overlay.querySelectorAll(".menu-section");
+    sections.forEach(function (section) {
+      const title = section.querySelector(".menu-section-title");
+      if (title && /công cụ/i.test(title.textContent || "")) {
+        targetGrid = section.querySelector(".menu-grid");
+      }
+    });
+
+    // Fallback: lấy .menu-grid cuối cùng
+    if (!targetGrid) {
+      const grids = overlay.querySelectorAll(".menu-grid");
+      targetGrid = grids[grids.length - 1];
+    }
+    if (!targetGrid) {
+      console.warn("[debug-menu] không tìm thấy .menu-grid");
+      return false;
+    }
+
+    // Tạo menu item
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "menu-item";
+    item.setAttribute("data-debug-item", "1");
+    item.innerHTML =
+      '<span class="menu-item-icon">🐛</span>' +
+      '<span class="menu-item-label">Debug</span>';
+
+    // Gắn listener riêng (không dựa vào menu.js proxy)
+    item.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Đóng menu
+      overlay.classList.remove("open");
+      overlay.setAttribute("aria-hidden", "true");
+      const toggle = document.getElementById("menuToggle");
+      if (toggle) toggle.setAttribute("aria-expanded", "false");
+      document.body.classList.remove("menu-open");
+
+      // Mở panel sau khi menu đóng xong (transition ~180ms)
+      setTimeout(openPanel, 180);
+    });
+
+    targetGrid.appendChild(item);
+    console.log("[debug-menu] ✓ đã thêm menu item Debug vào section Công cụ");
+    return true;
+  }
+
+  /* ═══════════════════════════════════════════════════════
+     6. BOOT
      ═══════════════════════════════════════════════════════ */
   function boot() {
-    try { injectButton(); } catch (e) { console.error("[debug-menu] inject fail:", e); }
+    try {
+      injectPanel();
+
+      // Chờ #menuOverlay xuất hiện (có thể chưa parse xong)
+      let tries = 0;
+      (function waitMenu() {
+        if (injectMenuOverlayItem()) return;
+        if (++tries > 50) {
+          console.warn("[debug-menu] không tìm thấy #menuOverlay sau 5s");
+          return;
+        }
+        setTimeout(waitMenu, 100);
+      })();
+    } catch (e) {
+      console.error("[debug-menu] boot fail:", e);
+    }
   }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot, { once: true });
   } else {
     boot();
   }
+
+  /* ═══════════════════════════════════════════════════════
+     7. EXPOSE API
+     ═══════════════════════════════════════════════════════ */
+  window.__debugMenu = {
+    open: openPanel,
+    close: closePanel,
+    collect: collect,
+    copy: doCopy,
+    errors: function () { return window.__debugErrors.slice(); },
+    clearErrors: function () { window.__debugErrors.length = 0; }
+  };
+
+  console.log("[debug-menu] 🐛 v2.0 ready — Debug trong menu 3 gạch");
 })();
