@@ -2,9 +2,9 @@
    SRANK AUTH UI — v10.6 (Role-based + CTA Morph)
    ---------------------------------------------------------
    v10.6 CHANGES:
-   - handleCheckin(cta) → dùng window.__ctaMorph.start() nếu có
+   - handleCheckin(cta) → gọi window.__ctaMorph.start() nếu có
    - intercept truyền cta vào handleCheckin
-   - Fallback: miniBurst + requestCheckin nếu morph fail
+   - Fallback miniBurst nếu morph không tồn tại
    v10.5 CHANGES:
    - BOSS_WHITELIST chỉ còn ['tienloi']
    v10.4 CHANGES:
