@@ -1,7 +1,21 @@
 (function(){"use strict";
+
+/* ✅ v1.5 FIX: Bắt lỗi runtime của chính file này → hiện lên UI (user không cần console) */
+window.addEventListener('error', function(e){
+  try {
+    if (e && e.filename && /attendance\.js/.test(e.filename)){
+      var m = '[ATT] Lỗi: ' + (e.message || 'unknown') + ' (dòng ' + (e.lineno || '?') + ')';
+      console.error(m);
+      if (window.SRank && typeof window.SRank.setStatus === 'function'){
+        window.SRank.setStatus(m);
+      }
+    }
+  } catch(_){}
+}, true);
+
 const $=id=>document.getElementById(id),page=$("attendancePage"),back=$("attendanceBack"),employee=$("attendanceEmployee"),grid=$("attendanceGrid"),monthLabel=$("attendanceMonthLabel"),yearLabel=$("attendanceYearLabel"),workCount=$("attendanceWorkCount"),offCount=$("attendanceOffCount"),leaveCount=$("attendanceLeaveCount"),prev=$("attendancePrev"),next=$("attendanceNext"),attendanceBtn=$("attendanceBtn"),attendanceSyncBtn=$("attendanceSyncBtn");
 
-/* ✅ v1.4 FIX: log rõ ràng khi thiếu DOM — trước đây silent return gây khó debug */
+/* ✅ v1.4: log rõ ràng khi thiếu DOM — trước đây silent return gây khó debug */
 if(!page||!employee||!grid){
   console.error('[ATT] thiếu DOM — không gắn event listener', {
     attendancePage: !!page,
@@ -10,6 +24,23 @@ if(!page||!employee||!grid){
   });
   return;
 }
+
+/* ✅ v1.5 FIX: GẮN LISTENER CHO NÚT CHẤM CÔNG NGAY ĐẦU FILE
+   (trước createWheel) → dù createWheel crash thì nút vẫn hoạt động.
+   openPage/closePage là function declarations → hoisted → an toàn gọi trước khi định nghĩa. */
+if(attendanceBtn)attendanceBtn.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();openPage()});
+if(attendanceSyncBtn)attendanceSyncBtn.addEventListener("click",function(e){
+  e.preventDefault();e.stopPropagation();
+  if(!canEditAttendance())return;
+  attendanceSyncBtn.classList.add("spinning");
+  setAttendanceFooterState("syncing","Đang đồng bộ…");
+  attendanceAutoRefreshCountdown=ATTENDANCE_AUTO_REFRESH_SEC;
+  updateAttendanceCountdown();
+  loadAttendanceMonth(!0).then(function(){setAttendanceFooterState("ok","Đã đồng bộ ✓")}).catch(function(err){setAttendanceFooterState("error","Lỗi đồng bộ: "+attendanceErrorText(err))}).finally(function(){setTimeout(function(){attendanceSyncBtn.classList.remove("spinning")},400)});
+});
+if(back)back.addEventListener("click",closePage);
+window.__openAttendancePage=openPage;
+window.__closeAttendancePage=closePage;
 
 function getAuthUser(){try{return(window.SRank&&window.SRank.Auth&&typeof window.SRank.Auth.getCurrentUser==="function"&&window.SRank.Auth.getCurrentUser())||null}catch(_){return null}}
 function isAdminAuthed(){try{return!!(window.AdminSession&&typeof window.AdminSession.isValid==="function"&&window.AdminSession.isValid())}catch(_){return false}}
@@ -41,7 +72,7 @@ function applyAttendanceCache(year,month){const cache=loadAttendanceCache(year,m
 function statusInfo(status){const s=String(status||"").trim().toUpperCase();if(s==="V")return{className:"work",label:"✓",icon:"✓",shortLabel:""};if(s==="P")return{className:"leave",label:"Phép",icon:"🌴",shortLabel:"phép"};if(s==="O")return{className:"off",label:"OFF",icon:"—",shortLabel:"off"};if(s==="T")return{className:"ot",label:"OT",icon:"⚡",shortLabel:"ot"};if(s==="Q")return{className:"q",label:"Quên",icon:"❓",shortLabel:"quên"};if(s==="X")return{className:"x",label:"X",icon:"⚠️",shortLabel:"kp"};if(s==="U")return{className:"empty",label:"",icon:"🥥",shortLabel:""};return{className:"empty",label:"",icon:"",shortLabel:""}}
 function rebuildAttendanceCacheFromCurrent(year,month){const employees=ATTENDANCE_EMPLOYEES.map(name=>{const days={};for(let d=1;d<=31;d++){const value=ATTENDANCE_DATA[name]?.[key(year,month,d)];if(["P","O","T","Q","X"].includes(value))days[String(d)]=value}return{name,days}});rememberAttendanceRaw(year,month,employees);saveAttendanceCache(year,month,employees)}
 
-/* ═══ ⭐ v1.3: SCORE STATS — Điểm + Rank cho card user ═══ */
+/* ═══ ⭐ v1.3: SCORE STATS ═══ */
 let _scoreStatsCache={month:0,ts:0,map:new Map()};
 const SCORE_STATS_TTL=60000;
 
@@ -87,12 +118,25 @@ async function updateEmployeeStats(){
     +'<span class="att-stats-sep">·</span>'
     +'<span class="att-stats-rank rank-'+rankKey+'">'+rankKey+'</span>';
 }
-
 /* ═══ end SCORE STATS ═══ */
 
-/* ✅ FIX v1.4: KHÔNG ép selectedName về authName mỗi lần gọi.
-   Chỉ set khi chưa có ai được chọn (lần đầu). Sau đó tôn trọng lựa chọn user. */
-function syncAttendanceEmployeeControls(){const authName=isAuthUser()?getAuthDisplayName():"";if(authName&&!selectedName)selectedName=authName;const cur=selectedName;if(ATTENDANCE_EMPLOYEES.includes(cur)){wheelIndex=ATTENDANCE_EMPLOYEES.indexOf(cur)}else{wheelIndex=0;if(!authName)selectedName=ATTENDANCE_EMPLOYEES[0]||""}const sameList=employee.options.length===ATTENDANCE_EMPLOYEES.length&&ATTENDANCE_EMPLOYEES.every((name,i)=>employee.options[i]?.value===name);if(!sameList){const frag=document.createDocumentFragment();ATTENDANCE_EMPLOYEES.forEach(name=>{const opt=document.createElement("option");opt.value=name;opt.textContent=(window.DN?window.DN(name):name);frag.appendChild(opt)});employee.innerHTML="";employee.appendChild(frag);nameWheel.setItems(ATTENDANCE_EMPLOYEES.map(n=>window.DN?window.DN(n):n))}employee.value=selectedName;updateWheelButton();updateEmployeeAvatar();try{updateEmployeeStats()}catch(_){}}
+function syncAttendanceEmployeeControls(){
+  const authName=isAuthUser()?getAuthDisplayName():"";
+  if(authName&&!selectedName)selectedName=authName;
+  const cur=selectedName;
+  if(ATTENDANCE_EMPLOYEES.includes(cur)){wheelIndex=ATTENDANCE_EMPLOYEES.indexOf(cur)}
+  else{wheelIndex=0;if(!authName)selectedName=ATTENDANCE_EMPLOYEES[0]||""}
+  const sameList=employee.options.length===ATTENDANCE_EMPLOYEES.length&&ATTENDANCE_EMPLOYEES.every((name,i)=>employee.options[i]?.value===name);
+  if(!sameList){
+    const frag=document.createDocumentFragment();
+    ATTENDANCE_EMPLOYEES.forEach(name=>{const opt=document.createElement("option");opt.value=name;opt.textContent=(window.DN?window.DN(name):name);frag.appendChild(opt)});
+    employee.innerHTML="";employee.appendChild(frag);
+    if(nameWheel)nameWheel.setItems(ATTENDANCE_EMPLOYEES.map(n=>window.DN?window.DN(n):n));
+  }
+  employee.value=selectedName;
+  updateWheelButton();updateEmployeeAvatar();
+  try{updateEmployeeStats()}catch(_){}
+}
 async function loadAttendanceMonth(force=!1){if(!force&&Date.now()<attendanceLockUntil)return{ok:!0,locked:!0};const y=viewDate.getFullYear(),m=viewDate.getMonth(),requestKey=y+"-"+(m+1);if(attendanceLoadPromise&&attendanceLoadPromiseKey===requestKey)return attendanceLoadPromise;const token=++attendanceLoadToken;if(!force&&attendanceServerLoaded&&attendanceServerLoadedKey===requestKey)return{ok:!0,cached:!0};if(force)setAttendanceFooterState("syncing","Đang đồng bộ…");else if(!ATTENDANCE_EMPLOYEES.length){applyAttendanceCache(y,m);render()}const promise=(async()=>{try{const r=await(window.SRankScheduler?window.SRankScheduler.enqueuePoll(()=>window.__srankApi("getAttendance",{month:m+1,_ts:Date.now()},2e4)):window.__srankApi("getAttendance",{month:m+1,_ts:Date.now()},2e4));if(!r||r.ok!==!0)throw new Error(r?.error||"Google Sheet trả về dữ liệu không hợp lệ");if(!r.data||!Array.isArray(r.data.employees))throw new Error("Phản hồi getAttendance thiếu danh sách employees");if(viewDate.getFullYear()===y&&viewDate.getMonth()===m){applyAttendanceData(r.data,y,m);attendanceServerLoaded=!0;attendanceServerLoadedKey=requestKey;render()}return r}catch(e){const msg=attendanceErrorText(e),hasCache=applyAttendanceCache(y,m);setAttendanceFooterState("error",hasCache?`Lỗi đồng bộ: ${msg} • đang dùng dữ liệu đã lưu`:`Lỗi đồng bộ: ${msg}`);render();throw e}finally{if(attendanceLoadPromiseKey===requestKey){attendanceLoadPromise=null;attendanceLoadPromiseKey=""}}})();attendanceLoadPromise=promise;attendanceLoadPromiseKey=requestKey;return promise}
 async function preloadAdjacentMonths(){const y=viewDate.getFullYear(),m=viewDate.getMonth(),tasks=[];for(let offset=-2;offset<=2;offset++){if(offset===0)continue;let ny=y,nm=m+offset;while(nm<0){nm+=12;ny-=1}while(nm>11){nm-=12;ny+=1}tasks.push({year:ny,month:nm+1})}for(const t of tasks){const cacheKey=t.year+"-"+t.month;if(attendancePreloadedKeys.has(cacheKey))continue;if(getAttendanceRawMemory(t.year,t.month-1)){attendancePreloadedKeys.add(cacheKey);continue}attendancePreloadedKeys.add(cacheKey);try{const r=await(window.SRankScheduler?window.SRankScheduler.enqueuePoll(()=>window.__srankApi("getAttendance",{month:t.month,_ts:Date.now()},15e3)):window.__srankApi("getAttendance",{month:t.month,_ts:Date.now()},15e3));if(r&&r.ok&&Array.isArray(r.data?.employees)){rememberAttendanceRaw(t.year,t.month-1,r.data.employees);saveAttendanceCache(t.year,t.month-1,r.data.employees)}}catch(_){}}}
 function updateEmployeeAvatar(){const el=$("attendanceEmployeeAvatar");if(!el)return;const name=selectedName||"";let url="";try{if(typeof window.getAvatarUrl==="function")url=window.getAvatarUrl(name);else if(window.SRank&&typeof window.SRank.getAvatarUrl==="function")url=window.SRank.getAvatarUrl(name)}catch(_){}if(url){el.style.backgroundImage=`url("${url.replace(/"/g,'\\"')}")`;el.textContent=""}else{el.style.backgroundImage="";const _dnName=window.DN?window.DN(name):name;el.textContent=_dnName?_dnName.slice(0,1).toUpperCase():"?"}}
@@ -194,9 +238,45 @@ async function saveAttendanceStatus(status){
     setAttendanceFooterState("error","Không lưu được: "+attendanceErrorText(e))
   }
 }
-const viewport=$("attendanceNameWheelViewport"),itemsBox=$("attendanceNameWheelItems"),wheelOverlay=$("attendanceNameWheel"),wheelClose=$("attendanceNameWheelClose"),wheelConfirm=$("attendanceNameWheelConfirm"),wheelBtn=$("attendanceEmployeeWheelBtn"),nameWheel=window.createWheel({viewport,itemsBox,itemHeight:58,itemClass:"att-name-wheel-item"});nameWheel.attach();
+
+/* ═══════════════════════════════════════════════════════════
+   WHEEL SETUP — ✅ v1.5: Wrap trong try-catch để KHÔNG crash IIFE
+   Nếu window.createWheel không tồn tại (thiếu file wheel.js, lỗi
+   load order, WebView không hỗ trợ...) → dùng stub no-op để toàn bộ
+   code phía sau vẫn chạy, trang chấm công vẫn mở được.
+   ═══════════════════════════════════════════════════════════ */
+const viewport=$("attendanceNameWheelViewport"),
+      itemsBox=$("attendanceNameWheelItems"),
+      wheelOverlay=$("attendanceNameWheel"),
+      wheelClose=$("attendanceNameWheelClose"),
+      wheelConfirm=$("attendanceNameWheelConfirm"),
+      wheelBtn=$("attendanceEmployeeWheelBtn");
+let nameWheel;
+try {
+  if (typeof window.createWheel !== 'function') {
+    throw new Error('window.createWheel không tồn tại (thiếu file wheel.js hoặc load order sai)');
+  }
+  nameWheel = window.createWheel({viewport,itemsBox,itemHeight:58,itemClass:"att-name-wheel-item"});
+  nameWheel.attach();
+} catch(err){
+  console.error('[ATT] createWheel failed, dùng stub:', err);
+  nameWheel = {
+    setItems: function(){}, setIndex: function(){}, getIndex: function(){return 0;},
+    schedule: function(){}, attach: function(){},
+    _isStub: true
+  };
+  // Báo user sau 1s (để main.js kịp load nếu chưa)
+  setTimeout(function(){
+    try {
+      if (window.SRank && typeof window.SRank.setStatus === 'function'){
+        window.SRank.setStatus('⚠ Không tải được bộ chọn tên — vẫn xem được chấm công');
+      }
+    } catch(_){}
+  }, 1000);
+}
+
 let wheelIndex=0,selectedName="";
-function buildNameWheel(){nameWheel.setItems(ATTENDANCE_EMPLOYEES.map(n=>window.DN?window.DN(n):n))}
+function buildNameWheel(){if(nameWheel&&typeof nameWheel.setItems==="function")nameWheel.setItems(ATTENDANCE_EMPLOYEES.map(n=>window.DN?window.DN(n):n))}
 function updateWheelButton(){const value=wheelBtn?.querySelector(".wheel-value");if(value)value.textContent=(window.DN?window.DN(selectedName):selectedName)||"Chọn kiểm duyệt viên"}
 
 function updateEmployeeCardVisibility(){
@@ -225,10 +305,14 @@ function openNameWheel(){
   if(isRegularUser()){console.log("[ATT] openNameWheel blocked — user thường");return}
   if(!isLoggedIn()){requestLogin();return}
   if(!ATTENDANCE_EMPLOYEES.length){setAttendanceFooterState("syncing","Đang tải danh sách…");loadAttendanceMonth(!0).then(()=>{if(ATTENDANCE_EMPLOYEES.length)openNameWheel();else setAttendanceFooterState("error","Chưa có danh sách kiểm duyệt viên")}).catch(()=>{});return}
-  nameWheel.setIndex(Math.max(0,ATTENDANCE_EMPLOYEES.indexOf(selectedName)));
+  if(nameWheel&&typeof nameWheel.setIndex==="function"){
+    nameWheel.setIndex(Math.max(0,ATTENDANCE_EMPLOYEES.indexOf(selectedName)));
+  }
   wheelOverlay.classList.add("show");wheelOverlay.setAttribute("aria-hidden","false");
-  nameWheel.schedule();
-  requestAnimationFrame(()=>{nameWheel.schedule();requestAnimationFrame(()=>nameWheel.schedule())});
+  if(nameWheel&&typeof nameWheel.schedule==="function"){
+    nameWheel.schedule();
+    requestAnimationFrame(()=>{nameWheel.schedule();requestAnimationFrame(()=>nameWheel.schedule())});
+  }
   if(typeof window.syncQuickTools==="function")window.syncQuickTools()
 }
 function closeNameWheel(){wheelOverlay.classList.remove("show");wheelOverlay.setAttribute("aria-hidden","true");if(typeof window.syncQuickTools==="function")window.syncQuickTools()}
@@ -244,8 +328,7 @@ document.querySelectorAll("[data-multi-status]").forEach(btn=>btn.addEventListen
 if(attendanceStatusOverlay)attendanceStatusOverlay.addEventListener("click",e=>{if(e.target===attendanceStatusOverlay)closeAttendanceStatus()});
 document.querySelectorAll("#attendanceStatusOptions [data-status]").forEach(btn=>btn.addEventListener("click",()=>saveAttendanceStatus(btn.dataset.status)));
 
-/* ✅ v1.4 FIX: thông báo rõ khi user chưa login — trước đây silent return
-   khiến user tưởng nút "không hoạt động" (thực ra chỉ mở form login). */
+/* ✅ v1.4 + v1.5: openPage — báo rõ nếu chưa login */
 async function openPage(){
   debugState();
   if(!isLoggedIn()){
@@ -271,10 +354,6 @@ function closePage(){
   if(attendanceMultiMode||attendanceMultiDays.size){attendanceMultiMode=!1;attendanceMultiDays.clear();updateAttendanceMultiUI()}
   if(typeof window.syncQuickTools==="function")window.syncQuickTools()
 }
-if(attendanceBtn)attendanceBtn.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();openPage()});
-if(attendanceSyncBtn)attendanceSyncBtn.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();if(!canEditAttendance())return;attendanceSyncBtn.classList.add("spinning");setAttendanceFooterState("syncing","Đang đồng bộ…");attendanceAutoRefreshCountdown=ATTENDANCE_AUTO_REFRESH_SEC;updateAttendanceCountdown();loadAttendanceMonth(!0).then(()=>setAttendanceFooterState("ok","Đã đồng bộ ✓")).catch(err=>setAttendanceFooterState("error","Lỗi đồng bộ: "+attendanceErrorText(err))).finally(()=>setTimeout(()=>attendanceSyncBtn.classList.remove("spinning"),400))});
-window.__openAttendancePage=openPage;window.__closeAttendancePage=closePage;
-if(back)back.addEventListener("click",closePage);
 
 if(wheelBtn)wheelBtn.addEventListener("click",e=>{
   debugState();
@@ -284,8 +363,26 @@ if(wheelBtn)wheelBtn.addEventListener("click",e=>{
 });
 if(wheelClose)wheelClose.addEventListener("click",closeNameWheel);
 if(wheelOverlay)wheelOverlay.addEventListener("click",e=>{if(e.target===wheelOverlay)closeNameWheel()});
-if(wheelConfirm)wheelConfirm.addEventListener("click",()=>{if(isRegularUser()){closeNameWheel();return}selectedName=ATTENDANCE_EMPLOYEES[nameWheel.getIndex()]||"";employee.value=selectedName;updateWheelButton();updateEmployeeAvatar();try{updateEmployeeStats()}catch(_){}closeNameWheel();render()});
-document.addEventListener("keydown",e=>{if(!wheelOverlay||!wheelOverlay.classList.contains("show")||!ATTENDANCE_EMPLOYEES.length)return;if(e.key==="ArrowDown"){e.preventDefault();nameWheel.setIndex(nameWheel.getIndex()+1)}else if(e.key==="ArrowUp"){e.preventDefault();nameWheel.setIndex(nameWheel.getIndex()-1)}else if(e.key==="Enter"){e.preventDefault();if(isRegularUser()){closeNameWheel();return}selectedName=ATTENDANCE_EMPLOYEES[nameWheel.getIndex()]||"";employee.value=selectedName;updateWheelButton();try{updateEmployeeStats()}catch(_){}closeNameWheel();render()}});
+if(wheelConfirm)wheelConfirm.addEventListener("click",()=>{
+  if(isRegularUser()){closeNameWheel();return}
+  selectedName=ATTENDANCE_EMPLOYEES[nameWheel.getIndex()]||"";
+  employee.value=selectedName;updateWheelButton();updateEmployeeAvatar();
+  try{updateEmployeeStats()}catch(_){}
+  closeNameWheel();render()
+});
+document.addEventListener("keydown",e=>{
+  if(!wheelOverlay||!wheelOverlay.classList.contains("show")||!ATTENDANCE_EMPLOYEES.length)return;
+  if(e.key==="ArrowDown"){e.preventDefault();nameWheel.setIndex(nameWheel.getIndex()+1)}
+  else if(e.key==="ArrowUp"){e.preventDefault();nameWheel.setIndex(nameWheel.getIndex()-1)}
+  else if(e.key==="Enter"){
+    e.preventDefault();
+    if(isRegularUser()){closeNameWheel();return}
+    selectedName=ATTENDANCE_EMPLOYEES[nameWheel.getIndex()]||"";
+    employee.value=selectedName;updateWheelButton();
+    try{updateEmployeeStats()}catch(_){}
+    closeNameWheel();render()
+  }
+});
 function goToMonth(delta){
   viewDate.setMonth(viewDate.getMonth()+delta);
   attendanceLoadPromise=null;attendanceLoadPromiseKey="";
@@ -297,9 +394,18 @@ function goToMonth(delta){
 if(prev)prev.addEventListener("click",()=>goToMonth(-1));
 if(next)next.addEventListener("click",()=>goToMonth(1));
 const attendanceTodayBtn=$("attendanceTodayBtn");
-if(attendanceTodayBtn)attendanceTodayBtn.addEventListener("click",()=>{const now=new Date();if(viewDate.getFullYear()===now.getFullYear()&&viewDate.getMonth()===now.getMonth()){loadAttendanceMonth(!0).catch(()=>{});return}
+if(attendanceTodayBtn)attendanceTodayBtn.addEventListener("click",()=>{
+  const now=new Date();
+  if(viewDate.getFullYear()===now.getFullYear()&&viewDate.getMonth()===now.getMonth()){loadAttendanceMonth(!0).catch(()=>{});return}
   if(attendanceMultiMode||attendanceMultiDays.size){attendanceMultiMode=!1;attendanceMultiDays.clear();updateAttendanceMultiUI()}
-  viewDate.setMonth(now.getMonth());viewDate.setFullYear(now.getFullYear());attendanceLoadPromise=null;attendanceLoadPromiseKey="";const hasCache=applyAttendanceCache(now.getFullYear(),now.getMonth());if(hasCache)render();try{updateEmployeeStats()}catch(_){}loadAttendanceMonth(!1).catch(()=>{});setAttendanceFooterState("syncing","Đang tải tháng hiện tại…")});
+  viewDate.setMonth(now.getMonth());viewDate.setFullYear(now.getFullYear());
+  attendanceLoadPromise=null;attendanceLoadPromiseKey="";
+  const hasCache=applyAttendanceCache(now.getFullYear(),now.getMonth());
+  if(hasCache)render();
+  try{updateEmployeeStats()}catch(_){}
+  loadAttendanceMonth(!1).catch(()=>{});
+  setAttendanceFooterState("syncing","Đang tải tháng hiện tại…")
+});
 if(isAuthUser()){const n=getAuthDisplayName();if(n)selectedName=n}
 updateEmployeeCardVisibility();
 updateAdminControlsVisibility();
@@ -312,7 +418,21 @@ document.addEventListener("visibilitychange",()=>{if(document.hidden||!page.clas
 /* ✅ v1.2: expose tên GỐC cho attendance-top3.js */
 window.__getAttendanceSelectedName=function(){return selectedName||""};
 
-window.__getAttendanceTopDataForMonth=async function(monthNumber,force=!1){const now=new Date(),year=now.getFullYear(),month=Math.max(1,Math.min(12,Number(monthNumber)||now.getMonth()+1)),monthIndex=month-1;let employees=!force?getAttendanceRawMemory(year,monthIndex):null;if(!employees&&!force){const cache=loadAttendanceCache(year,monthIndex);if(cache&&Array.isArray(cache.employees)){employees=cache.employees;rememberAttendanceRaw(year,monthIndex,employees)}}if(!(Array.isArray(employees)&&employees.length)){const r=await(window.SRankScheduler?window.SRankScheduler.enqueuePoll(()=>window.__srankApi("getAttendance",{month,_ts:Date.now()},2e4)):window.__srankApi("getAttendance",{month,_ts:Date.now()},2e4));if(!r||r.ok!==!0)throw new Error(r?.error||"Google Sheet trả về dữ liệu không hợp lệ");employees=Array.isArray(r.data?.employees)?r.data.employees:[];rememberAttendanceRaw(year,monthIndex,employees);saveAttendanceCache(year,monthIndex,employees)}return{year,month,employees}};
+window.__getAttendanceTopDataForMonth=async function(monthNumber,force=!1){
+  const now=new Date(),year=now.getFullYear(),month=Math.max(1,Math.min(12,Number(monthNumber)||now.getMonth()+1)),monthIndex=month-1;
+  let employees=!force?getAttendanceRawMemory(year,monthIndex):null;
+  if(!employees&&!force){
+    const cache=loadAttendanceCache(year,monthIndex);
+    if(cache&&Array.isArray(cache.employees)){employees=cache.employees;rememberAttendanceRaw(year,monthIndex,employees)}
+  }
+  if(!(Array.isArray(employees)&&employees.length)){
+    const r=await(window.SRankScheduler?window.SRankScheduler.enqueuePoll(()=>window.__srankApi("getAttendance",{month,_ts:Date.now()},2e4)):window.__srankApi("getAttendance",{month,_ts:Date.now()},2e4));
+    if(!r||r.ok!==!0)throw new Error(r?.error||"Google Sheet trả về dữ liệu không hợp lệ");
+    employees=Array.isArray(r.data?.employees)?r.data.employees:[];
+    rememberAttendanceRaw(year,monthIndex,employees);saveAttendanceCache(year,monthIndex,employees)
+  }
+  return{year,month,employees}
+};
 window.syncAttendanceEmployees=function(){if(!ATTENDANCE_EMPLOYEES.length){loadAttendanceMonth(!0);return}syncAttendanceEmployeeControls();render()};
 
 if(window.SRank&&window.SRank.Auth&&typeof window.SRank.Auth.onChange==="function"){
@@ -332,7 +452,6 @@ setInterval(function(){
   updateEmployeeCardVisibility();
 },1500);
 
-/* ✅ v1.2 + v1.3: đổi tên hiển thị + cập nhật stats khi checkin */
 window.addEventListener("displayNameUpdated",function(){
   try{updateWheelButton()}catch(_){}
   try{updateEmployeeAvatar()}catch(_){}
