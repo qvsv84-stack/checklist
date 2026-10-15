@@ -1,5 +1,12 @@
 /* ═══════════════════════════════════════════════════════════════
-   MENU 3 GẠCH — v2.0.0 (role-based admin, chỉ tienloi)
+   MENU 3 GẠCH — v2.1.0 (role-based via window.Role)
+   ---------------------------------------------------------
+   v2.1.0 CHANGES:
+   - Bỏ BOSS_WHITELIST hard-code ['tienloi']
+   - Bỏ getRole() tự tính ~40 dòng (đọc localStorage, parse metadata)
+   - getRole() delegate sang window.Role.get() — single source of truth
+   - Admin whitelist giờ ở config.js (ADMIN_USERNAMES)
+   v2.0.0 (giữ nguyên hành vi):
    - Whitelist admin: CHỈ tienloi
    - Bỏ hook Birthday/SecretMail/LiveFeed (đã xoá features)
    - Chưa login: nút hiện 🔐
@@ -124,61 +131,21 @@
       return `${base}/storage/v1/object/public/avatars/${encodeURIComponent(uid)}.jpg${b ? '?t=' + b : ''}`;
     };
 
-    /* ───── role resolver — CHỈ tienloi ───── */
-    const BOSS_WHITELIST = ['tienloi'];
-
+    /* ───── role resolver ─────
+       ✅ v2.1.0: delegate sang window.Role — single source of truth.
+       Whitelist admin ở config.js (ADMIN_USERNAMES), không hard-code nữa.
+       Fallback: nếu Role.js chưa load → trả về role-member (an toàn). */
     const getRole = () => {
-      const cand = [];
-
-      try {
-        const u = window.SRank?.Auth?.getCurrentUser?.() || {};
-        if (u.app_metadata?.role) cand.push(u.app_metadata.role);
-        if (u.user_metadata?.role) cand.push(u.user_metadata.role);
-        if (u.role) cand.push(u.role);
-      } catch(_){}
-
-      try {
-        const u = readSession();
-        if (u){
-          if (u.app_metadata?.role) cand.push(u.app_metadata.role);
-          if (u.user_metadata?.role) cand.push(u.user_metadata.role);
-          if (u.role) cand.push(u.role);
+      if (window.Role) {
+        try {
+          return window.Role.get();
+        } catch(e){
+          console.warn('[Menu] Role.get() failed:', e);
         }
-      } catch(_){}
-
-      try {
-        for (let i = 0; i < localStorage.length; i++){
-          const k = localStorage.key(i), v = localStorage.getItem(k);
-          if (!k || !v) continue;
-          if (/role/i.test(k) && v.length < 40 && !/[{}]/.test(v)){ cand.push(v); continue; }
-          if (v[0] === '{'){
-            try {
-              const j = JSON.parse(v);
-              const r = j.role || j.user?.role || j.user?.app_metadata?.role || j.user?.user_metadata?.role;
-              if (r) cand.push(r);
-            } catch(_){}
-          }
-        }
-      } catch(_){}
-
-      /* Whitelist fallback — chỉ tienloi */
-      try {
-        const u = window.SRank?.Auth?.getCurrentUser?.() || readSession() || {};
-        const un = String(u.username || (u.email || '').split('@')[0] || '').toLowerCase();
-        if (un && BOSS_WHITELIST.indexOf(un) >= 0) {
-          return { label:'ADMIN', klass:'role-admin' };
-        }
-      } catch(_){}
-
-      log('role candidates:', cand);
-      for (const c of cand){
-        const r = String(c || '').trim().toLowerCase();
-        if (!r) continue;
-        if (/admin|super|owner|quản.?trị|quan.?tri/.test(r))    return { label:'ADMIN',            klass:'role-admin' };
-        if (/manager|leader|quản.?lý|quan.?ly|mod/.test(r))       return { label:'Quản lý',          klass:'role-manager' };
-        if (/kdv|kiểm.?duyệt|kiem.?duyet|reviewer/.test(r))       return { label:'Kiểm duyệt viên',  klass:'role-kdv' };
+      } else {
+        console.warn('[Menu] window.Role chưa load — dùng fallback role-member');
       }
-      return { label:'Thành viên', klass:'role-member' };
+      return { label: 'Thành viên', klass: 'role-member' };
     };
 
     const applyRole = (el) => {
