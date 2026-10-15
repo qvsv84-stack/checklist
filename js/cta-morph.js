@@ -1,11 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════
-   CTA MORPH — v1.3 🎬
-   Bước 1: Morph nút "Chấm công" (TO) → card quần thần (NHỎ)
-   - Intercept click CTA (capture phase) — CHẠY TRƯỚC auth-ui.js
-   - Optimistic: morph ngay, reverse nếu API fail
-   - Lock button trong lúc animate
-   - Đo target size từ card thật (.courtier) nếu có
-   - Flash vàng + chấm xanh debug (xoá sau khi test)
+   CTA MORPH — v1.4 🎬
+   Fix: bind cả pointerup (auth-ui dùng pointerup → chặn trước)
+   - Intercept click + pointerup + keydown (capture)
+   - Dedup pointerup/click
+   - Skip nếu là scroll (pointer di chuyển > 10px)
    ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -21,8 +19,10 @@
   const DEFAULT_H = 38;
 
   let _animating = false;
+  let _handledAt = 0;
+  let _pd = null;
 
-  console.log('[ctaMorph] script loaded ✓ v1.3');
+  console.log('[ctaMorph] script loaded ✓ v1.4');
 
   function getUser() {
     try {
@@ -233,7 +233,6 @@
     console.log('[ctaMorph] bắt đầu morph cho', user.name);
     _animating = true;
 
-    // Lock CTA — ẩn nút gốc
     const prevPointerEvents = cta.style.pointerEvents;
     const prevOpacity = cta.style.opacity;
     cta.style.pointerEvents = 'none';
@@ -243,13 +242,11 @@
     const ghost = buildGhost(cta, user, time);
     document.body.appendChild(ghost);
 
-    // Đo target size
     const target = measureTargetSize();
     const rect = cta.getBoundingClientRect();
     const targetLeft = rect.left + (rect.width - target.w) / 2;
     const targetTop = rect.top + (rect.height - target.h) / 2;
 
-    // Morph sau 1 frame
     requestAnimationFrame(() => {
       ghost.classList.add('morphing');
       ghost.style.width = target.w + 'px';
@@ -258,7 +255,6 @@
       ghost.style.top = targetTop + 'px';
     });
 
-    // Gọi API
     let apiOK = false;
     try {
       await window.SRank.requestCheckin(user.name);
@@ -268,7 +264,6 @@
       console.log('[ctaMorph] API checkin FAIL', e?.message);
     }
 
-    // Chờ morph + hold
     await new Promise(r => setTimeout(r, D_MORPH + D_HOLD));
 
     if (!apiOK) {
@@ -287,25 +282,29 @@
       return;
     }
 
-    // Fade out
     ghost.classList.add('fading');
     await new Promise(r => setTimeout(r, D_FADE));
     ghost.remove();
     _animating = false;
   }
 
-  function onClickCapture(e) {
+  function tryIntercept(e) {
+    if (_animating) return;
+    // Dedup pointerup → click
+    const now = Date.now();
+    if (now - _handledAt < 500) return;
+
     const cta = findCTA(e.target);
     if (!cta) return;
 
-    console.log('[ctaMorph] CTA detected, text:', cta.textContent?.trim());
-
+    _handledAt = now;
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
-    if (_animating) return;
 
-    // ⭐ FLASH vàng — user THẤY ngay handler chạy
+    console.log('[ctaMorph] CTA detected:', cta.textContent?.trim());
+
+    // Flash vàng
     const prevBoxShadow = cta.style.boxShadow;
     const prevTransition = cta.style.transition;
     cta.style.transition = 'box-shadow 80ms ease';
@@ -315,19 +314,42 @@
       cta.style.transition = prevTransition;
     }, D_FLASH);
 
-    // Bắt đầu morph sau flash
     setTimeout(() => {
       startMorph(cta);
     }, 60);
   }
 
+  function onPointerDown(e) {
+    _pd = { x: e.clientX, y: e.clientY };
+  }
+
+  function onPointerUp(e) {
+    if (!_pd) return tryIntercept(e);
+    const dx = Math.abs(e.clientX - _pd.x);
+    const dy = Math.abs(e.clientY - _pd.y);
+    _pd = null;
+    if (dx > 10 || dy > 10) return; // was scroll/move
+    tryIntercept(e);
+  }
+
+  function onKeyDown(e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    tryIntercept(e);
+  }
+
   function boot() {
     injectStyles();
-    document.addEventListener('click', onClickCapture, true);
-    console.log('[ctaMorph] ready ✓ v1.3 — capture listener attached');
 
-    // ⭐ DEBUG: chấm xanh góc trên trái = file đã load
-    // Xoá chấm này sau khi test xong
+    // Capture phase — chạy TRƯỚC mọi handler khác
+    // pointerdown để đo vị trí, pointerup + click để intercept
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('pointerup', onPointerUp, true);
+    document.addEventListener('click', tryIntercept, true);
+    document.addEventListener('keydown', onKeyDown, true);
+
+    console.log('[ctaMorph] ready ✓ v1.4 — capture listeners attached');
+
+    // Chấm xanh debug
     try {
       if (!document.getElementById('__ctaMorphDot')) {
         const dot = document.createElement('div');
