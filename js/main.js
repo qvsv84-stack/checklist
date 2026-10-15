@@ -6,7 +6,7 @@
    - Landing + Checklist + Admin + Auto sync + Realtime + Avatar
    - THÊM: Admin long-press đổi tên hiển thị + tab Users
    - THÊM: Highlight tên của chính mình ở quần thần (nâu + nền vàng nhạt)
-   - THÊM: data-cta cho neon CTA "Đăng nhập"
+   - THÊM: data-cta cho neon CTA "Đăng nhập" + "Chấm công" (không áp dụng "done")
    ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -781,6 +781,14 @@
     return { html: null, version: 'default', text: '🐱 DAILY TEAM HUB' };
   }
 
+  function _resolveCtaState(ci) {
+    if (ci && ci.locked) return 'locked';
+    const txt = String(ci && ci.text || '');
+    if (/đăng nhập/i.test(txt)) return 'login';
+    if (/đã chấm công/i.test(txt)) return 'done';
+    return 'checkin';
+  }
+
   function renderLandingState(forceFullReplay = false) {
     const locked = isChecklistLocked();
     els.question.classList.toggle('checklist-locked-home', locked);
@@ -863,7 +871,7 @@
           + `<span class="landing-lock-note">Sau ${checklistLockTime} sẽ khoá Checklist nha mn 🥰</span>`;
       } else {
         const _ci = __getCtaRender();
-        const _ctaState = /đăng nhập/i.test(_ci.text || '') ? 'login' : 'checkin';
+        const _ctaState = _resolveCtaState(_ci);
         els.question.innerHTML =
           `<span class="landing-kicker" data-kicker-version="${_kv}">${_kh}</span>`
           + `<span class="landing-title">CHECKLIST ĐẢO MÈO</span>`
@@ -951,7 +959,7 @@
       }
       if (cta && cta.textContent !== _ci2.text) cta.textContent = _ci2.text;
       if (cta) {
-        const _newState = /đăng nhập/i.test(_ci2.text || '') ? 'login' : 'checkin';
+        const _newState = _resolveCtaState(_ci2);
         if (cta.dataset.cta !== _newState) cta.dataset.cta = _newState;
       }
     }
@@ -1392,14 +1400,12 @@
 
       await renderAdminUsers();
 
-      // Clear cache chấm công để force reload danh sách KDV
       try {
         Object.keys(localStorage).forEach(k => {
           if (k.startsWith('srank_attendance_check_v2_')) localStorage.removeItem(k);
         });
       } catch (_) {}
 
-      // Refresh list KDV cho landing + checklist + chấm công
       try { await loadData(false, true); } catch (_) {}
       try { window.syncAttendanceEmployees?.(true); } catch (_) {}
     } catch (e) {
