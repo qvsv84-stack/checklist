@@ -1,6 +1,16 @@
 (function(){"use strict";
 const $=id=>document.getElementById(id),page=$("attendancePage"),back=$("attendanceBack"),employee=$("attendanceEmployee"),grid=$("attendanceGrid"),monthLabel=$("attendanceMonthLabel"),yearLabel=$("attendanceYearLabel"),workCount=$("attendanceWorkCount"),offCount=$("attendanceOffCount"),leaveCount=$("attendanceLeaveCount"),prev=$("attendancePrev"),next=$("attendanceNext"),attendanceBtn=$("attendanceBtn"),attendanceSyncBtn=$("attendanceSyncBtn");
-if(!page||!employee||!grid)return;
+
+/* ✅ v1.4 FIX: log rõ ràng khi thiếu DOM — trước đây silent return gây khó debug */
+if(!page||!employee||!grid){
+  console.error('[ATT] thiếu DOM — không gắn event listener', {
+    attendancePage: !!page,
+    attendanceEmployee: !!employee,
+    attendanceGrid: !!grid
+  });
+  return;
+}
+
 function getAuthUser(){try{return(window.SRank&&window.SRank.Auth&&typeof window.SRank.Auth.getCurrentUser==="function"&&window.SRank.Auth.getCurrentUser())||null}catch(_){return null}}
 function isAdminAuthed(){try{return!!(window.AdminSession&&typeof window.AdminSession.isValid==="function"&&window.AdminSession.isValid())}catch(_){return false}}
 function isAuthUser(){return!!getAuthUser()}
@@ -233,9 +243,16 @@ if(attendanceMultiCancel)attendanceMultiCancel.addEventListener("click",cancelAt
 document.querySelectorAll("[data-multi-status]").forEach(btn=>btn.addEventListener("click",()=>saveAttendanceBatchStatus(btn.dataset.multiStatus)));
 if(attendanceStatusOverlay)attendanceStatusOverlay.addEventListener("click",e=>{if(e.target===attendanceStatusOverlay)closeAttendanceStatus()});
 document.querySelectorAll("#attendanceStatusOptions [data-status]").forEach(btn=>btn.addEventListener("click",()=>saveAttendanceStatus(btn.dataset.status)));
+
+/* ✅ v1.4 FIX: thông báo rõ khi user chưa login — trước đây silent return
+   khiến user tưởng nút "không hoạt động" (thực ra chỉ mở form login). */
 async function openPage(){
   debugState();
-  if(!isLoggedIn()){requestLogin();return}
+  if(!isLoggedIn()){
+    setStatusMsg("Vui lòng đăng nhập để xem chấm công");
+    requestLogin();
+    return;
+  }
   if(isAuthUser()){const n=getAuthDisplayName();if(n)selectedName=n}
   updateEmployeeCardVisibility();
   updateAdminControlsVisibility();
