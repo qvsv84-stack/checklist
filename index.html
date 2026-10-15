@@ -202,6 +202,45 @@ html, body { touch-action: pan-x pan-y !important; -webkit-text-size-adjust: 100
 body.menu-open { touch-action: none !important; overscroll-behavior: none !important; overflow: hidden !important; }
 body.menu-open #menuOverlay { transform: none !important; }
 </style>
+
+<style id="neonCtaForce">
+/* ═══ NEON CTA — chỉ áp dụng cho CTA "Đăng nhập" (data-cta="login") ═══ */
+html body #question .landing-cta[data-cta="login"] {
+  position: relative !important;
+  z-index: 0 !important;
+  background: linear-gradient(135deg, hsl(260 97% 55%), hsl(280 90% 55%)) !important;
+  color: #fff !important;
+  border: 0 !important;
+  padding: 14px 32px !important;
+  border-radius: 999px !important;
+  font-weight: 800 !important;
+  letter-spacing: .01em !important;
+  box-shadow:
+    0 0 0 1px hsl(260 97% 70% / .5),
+    0 0 14px hsl(260 97% 60% / .65),
+    0 0 32px hsl(260 97% 60% / .4),
+    inset 0 0 14px hsl(260 97% 85% / .3) !important;
+  transition: box-shadow .2s ease, transform .12s ease !important;
+}
+html body #question .landing-cta[data-cta="login"]::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: -5px !important;
+  z-index: -1 !important;
+  border: 2px solid hsl(260 97% 65% / .55) !important;
+  border-radius: 999px !important;
+  pointer-events: none !important;
+  box-shadow: 0 0 18px hsl(260 97% 60% / .5) !important;
+}
+html body #question .landing-cta[data-cta="login"]:active {
+  transform: scale(.96) !important;
+  box-shadow:
+    0 0 0 1px hsl(260 97% 80% / .85),
+    0 0 22px hsl(260 97% 65% / .85),
+    0 0 44px hsl(260 97% 60% / .55),
+    inset 0 0 18px hsl(260 97% 90% / .4) !important;
+}
+</style>
 </head>
 <body>
 <noscript>
