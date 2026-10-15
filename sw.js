@@ -1,16 +1,22 @@
 /* =========================================================
    SERVICE WORKER — Đảo Mèo / S Rank
-   Version: v1.5 — Fix config.js cache stale khi rotate key
+   Version: v1.6 — Thêm 4 file view modules mới vào precache
    ---------------------------------------------------------
+   v1.6 CHANGES:
+   - Thêm 4 file mới vào PRECACHE_URLS:
+       • /js/role.js            (single source of truth phân quyền)
+       • /js/landing.js         (view module: landing page)
+       • /js/admin.js           (view module: admin panel)
+       • /js/checklist-view.js  (view module: checklist + checkin)
+   - Bump SW_VERSION → v1.6 force update cache cũ
    v1.5 CHANGES:
    - KHÔNG precache /js/config.js (chứa SUPABASE_KEY)
    - Thêm NETWORK_FIRST_PATHS — luôn fetch network trước
    - Thêm strategy networkFirstNoCache() cho file critical
-   - Bump SW_VERSION → v1.5 force update cache cũ
    ========================================================= */
 "use strict";
 
-const SW_VERSION = "v1.5";
+const SW_VERSION = "v1.6";
 const CACHE_NAME = `srank-cache-${SW_VERSION}`;
 const RUNTIME_CACHE = `srank-runtime-${SW_VERSION}`;
 
@@ -18,6 +24,9 @@ const RUNTIME_CACHE = `srank-runtime-${SW_VERSION}`;
 // ⚠️ v1.5: KHÔNG precache /js/config.js — file này chứa SUPABASE_KEY,
 // cần network-first (NETWORK_FIRST_PATHS bên dưới) để tránh
 // dùng key cũ sau khi admin rotate key ở Supabase Dashboard.
+//
+// ⚠️ v1.6: Bổ sung 4 view modules mới (role/landing/admin/checklist-view)
+// được tách ra trong Task 2 refactor.
 const PRECACHE_URLS = [
   "/",
   "/index.html",
@@ -27,7 +36,8 @@ const PRECACHE_URLS = [
   "/css/main.css",
   "/css/menu.css",
 
-  // "/js/config.js",  ← ĐÃ XOÁ: xem comment ở trên
+  // "/js/config.js",           ← KHÔNG precache (network-first, xem v1.5)
+  "/js/role.js",                 // 🆕 v1.6
   "/js/toast.js",
   "/js/admin-session.js",
   "/js/store.js",
@@ -36,6 +46,10 @@ const PRECACHE_URLS = [
   "/js/display-name.js",
   "/js/auth.js",
   "/js/main.js",
+  "/js/landing.js",              // 🆕 v1.6
+  "/js/admin.js",                // 🆕 v1.6
+  "/js/checklist-view.js",       // 🆕 v1.6
+  "/js/cta-morph.js",
   "/js/auth-ui.js",
   "/js/avatar-upload.js",
   "/js/checklist-ui.js",
