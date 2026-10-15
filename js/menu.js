@@ -1,6 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════
-   MENU 3 GẠCH — v2.1.0 (role-based via window.Role)
+   MENU 3 GẠCH — v2.1.1 (role-based via window.Role)
    ---------------------------------------------------------
+   v2.1.1 FIX:
+   - Bỏ delay 340ms khi proxy menu-item → real button
+     (dùng double rAF: click ngay sau khi overlay bắt đầu đóng)
+   - Fix bug "bấm menu → chấm công không mở"
    v2.1.0 CHANGES:
    - Bỏ BOSS_WHITELIST hard-code ['tienloi']
    - Bỏ getRole() tự tính ~40 dòng (đọc localStorage, parse metadata)
@@ -408,12 +412,24 @@
     });
     overlay.addEventListener('click', (e) => { if (e.target === overlay) closeMenu(); });
 
-    /* ───── proxy menu items → original buttons ───── */
+    /* ───── proxy menu items → original buttons ─────
+       ✅ v2.1.1 FIX: bỏ delay 340ms.
+       Dùng double requestAnimationFrame → click được fire ngay sau khi
+       overlay bắt đầu đóng (1 frame tiếp theo), đủ để overlay không
+       còn chặn pointer events nữa.
+       Trước đây delay 340ms khiến:
+         - Nếu user tap thêm → focus mất, event rơi vào element khác
+         - Trên mobile Safari, setTimeout bị throttle khi tab inactive
+         - Trùng với animation duration → click bị nuốt */
     overlay.querySelectorAll('.menu-item').forEach((item) => {
       item.addEventListener('click', (ev) => {
         ev.preventDefault(); ev.stopPropagation();
         const real = item.dataset.target && document.getElementById(item.dataset.target);
-        if (!real) return;
+        if (!real){
+          console.warn('[Menu] không tìm thấy target:', item.dataset.target);
+          return;
+        }
+
         if (item.animate){
           try {
             item.animate([
@@ -423,8 +439,23 @@
             ], { duration: 280, easing: 'ease-out' });
           } catch(_){}
         }
+
         closeMenu();
-        requestAnimationFrame(() => setTimeout(() => { try { real.click(); } catch(_){} }, 340));
+
+        // ✅ FIX v2.1.1: double rAF thay cho setTimeout 340ms
+        // Frame 1: overlay.classList.remove('open') → CSS transition bắt đầu
+        // Frame 2: overlay đã bắt đầu transition, pointer-events không còn chặn
+        // → click real button ngay lập tức
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            try {
+              real.click();
+              log('proxied click →', item.dataset.target);
+            } catch(err){
+              console.error('[Menu] click proxy lỗi:', err);
+            }
+          });
+        });
       });
     });
 
@@ -454,7 +485,11 @@
         e.preventDefault(); e.stopPropagation();
         log('bấm 🚪 logout');
         closeMenu();
-        requestAnimationFrame(() => setTimeout(() => { try { realLogout.click(); } catch(_){} }, 340));
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            try { realLogout.click(); } catch(_){}
+          });
+        });
       });
     }
 
