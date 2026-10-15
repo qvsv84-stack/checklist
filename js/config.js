@@ -17,6 +17,11 @@
      .prune()               -> number (số entry hết hạn đã xoá)
      .size                  -> number
      [Symbol.iterator]()    -> Iterator (giống entries)
+
+   v1.1 CHANGES:
+     - Thêm ADMIN_USERNAMES — single source of truth cho admin
+       whitelist, thay thế hard-code 'tienloi' ở 3 file khác
+       (admin-session.js, auth-ui.js, menu.js, main.js)
    ========================================================= */
 (function(){
   "use strict";
@@ -170,6 +175,15 @@
     SUPABASE_URL: 'https://tumjcsaexddioecwjolp.supabase.co',
     SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR1bWpjc2FleGRkaW9lY3dqb2xwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5MjY0MTAsImV4cCI6MjEwNzUwMjQxMH0.hNYdnleEYK5EJFKYxBMxJMdBF1iXsv1aaLHBfb2nPyQ',
 
+    /* ✅ v1.1: Admin whitelist — SINGLE SOURCE OF TRUTH
+       Thay thế hard-code 'tienloi' ở:
+         - admin-session.js
+         - auth-ui.js (BOSS_WHITELIST)
+         - menu.js    (BOSS_WHITELIST)
+         - main.js    (filter user list)
+       Đổi admin → chỉ sửa 1 dòng ở đây. */
+    ADMIN_USERNAMES: ['tienloi'],
+
     /* Business config */
     CHECKIN_RESET_TIME: '00:00',
     CHECKIN_LOCK_TIME:  '21:00',
@@ -217,4 +231,5 @@
   });
 
   log('[CONFIG] Loaded ✓', window.__SRANK_CONFIG.SUPABASE_URL);
+  log('[CONFIG] Admin whitelist:', window.__SRANK_CONFIG.ADMIN_USERNAMES);
 })();
