@@ -6,6 +6,7 @@
    - Landing + Checklist + Admin + Auto sync + Realtime + Avatar
    - THÊM: Admin long-press đổi tên hiển thị + tab Users
    - THÊM: Highlight tên của chính mình ở quần thần (nâu + nền vàng nhạt)
+   - THÊM: data-cta cho neon CTA "Đăng nhập"
    ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -858,15 +859,16 @@
           `<span class="landing-kicker" data-kicker-version="${_kv}">${_kh}</span>`
           + `<span class="landing-title">CHECKLIST ĐẢO MÈO</span>`
           + top3HTML
-          + `<span class="landing-cta locked" role="button" aria-disabled="true" tabindex="-1">Tạm khoá Checklist</span>`
+          + `<span class="landing-cta locked" data-cta="locked" role="button" aria-disabled="true" tabindex="-1">Tạm khoá Checklist</span>`
           + `<span class="landing-lock-note">Sau ${checklistLockTime} sẽ khoá Checklist nha mn 🥰</span>`;
       } else {
         const _ci = __getCtaRender();
+        const _ctaState = /đăng nhập/i.test(_ci.text || '') ? 'login' : 'checkin';
         els.question.innerHTML =
           `<span class="landing-kicker" data-kicker-version="${_kv}">${_kh}</span>`
           + `<span class="landing-title">CHECKLIST ĐẢO MÈO</span>`
           + top3HTML
-          + `<span class="landing-cta${_ci.locked ? ' locked' : ''}" role="button" ${_ci.locked ? 'aria-disabled="true" tabindex="-1"' : 'tabindex="0"'}>${_ci.text}</span>`;
+          + `<span class="landing-cta${_ci.locked ? ' locked' : ''}" data-cta="${_ctaState}" role="button" ${_ci.locked ? 'aria-disabled="true" tabindex="-1"' : 'tabindex="0"'}>${_ci.text}</span>`;
       }
       _lastTop3Signature = newSig;
       els.question.style.removeProperty('--top3-base');
@@ -912,6 +914,7 @@
         cta.setAttribute('tabindex', '-1');
         cta.textContent = 'Tạm khoá Checklist';
       }
+      if (cta && cta.dataset.cta !== 'locked') cta.dataset.cta = 'locked';
       const noteTxt = `Sau ${checklistLockTime} sẽ khoá Checklist nha mn 🥰`;
       if (!lockNote) {
         const note = document.createElement('span');
@@ -947,6 +950,10 @@
         lockNote?.remove();
       }
       if (cta && cta.textContent !== _ci2.text) cta.textContent = _ci2.text;
+      if (cta) {
+        const _newState = /đăng nhập/i.test(_ci2.text || '') ? 'login' : 'checkin';
+        if (cta.dataset.cta !== _newState) cta.dataset.cta = _newState;
+      }
     }
 
     els.question.style.opacity = '1';
