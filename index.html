@@ -203,6 +203,13 @@ body.menu-open { touch-action: none !important; overscroll-behavior: none !impor
 body.menu-open #menuOverlay { transform: none !important; }
 </style>
 
+<style id="ctaHideDoneForce">
+/* ⭐ Ẩn nút "Đã chấm công" — không cần thiết vì đã có card ở grid */
+html body #question .landing-cta[data-cta="done"] {
+  display: none !important;
+}
+</style>
+
 <style id="neonCtaForce">
 /* ═══ NEON CTA — XANH LÁ TƯƠI (khớp theme app) ═══ */
 html body #question .landing-cta[data-cta="login"],
