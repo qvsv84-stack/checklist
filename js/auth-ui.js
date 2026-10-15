@@ -1,6 +1,10 @@
 /* =========================================================
-   SRANK AUTH UI — v10.5 (Role-based, whitelist chỉ tienloi)
+   SRANK AUTH UI — v10.6 (Role-based + CTA Morph)
    ---------------------------------------------------------
+   v10.6 CHANGES:
+   - handleCheckin(cta) → dùng window.__ctaMorph.start() nếu có
+   - intercept truyền cta vào handleCheckin
+   - Fallback: miniBurst + requestCheckin nếu morph fail
    v10.5 CHANGES:
    - BOSS_WHITELIST chỉ còn ['tienloi']
    v10.4 CHANGES:
@@ -335,7 +339,8 @@
     setTimeout(function(){ for (const h of hearts) h.remove(); }, 1600);
   }
 
-  async function handleCheckin(){
+  /* ⭐ v10.6: nhận cta element, ưu tiên morph animation */
+  async function handleCheckin(cta){
     if (!currentUser) return;
     const idx = findUserIndex(currentUser.displayName);
     if (idx < 0){
@@ -346,6 +351,18 @@
       if (window.SRank.setStatus) window.SRank.setStatus("Chức năng chưa sẵn sàng");
       return;
     }
+
+    /* ⭐ v10.6: dùng morph animation nếu có */
+    if (window.__ctaMorph && typeof window.__ctaMorph.start === "function" && cta) {
+      try {
+        await window.__ctaMorph.start(cta);
+        return;
+      } catch(err) {
+        console.error("[AUTH-UI] morph failed, fallback:", err);
+      }
+    }
+
+    /* Fallback: checkin trực tiếp */
     miniBurst();
     try {
       await window.SRank.requestCheckin(currentUser.displayName);
@@ -363,7 +380,7 @@
     const info = getCtaInfo();
     if (info.locked) return;
     if (!currentUser) openLoginForm();
-    else handleCheckin();
+    else handleCheckin(cta);
   }
 
   if (question){
@@ -536,5 +553,5 @@
 
   window.SRank.openLogin = openLoginForm;
 
-  console.log("[AUTH-UI] ready ✓ v10.5 — role-based + remember me");
+  console.log("[AUTH-UI] ready ✓ v10.6 — role-based + remember me + morph");
 })();
