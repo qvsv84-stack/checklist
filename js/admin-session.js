@@ -1,7 +1,13 @@
 /* =========================================================
-   ADMIN SESSION — v3.0 (Role-based, no password)
+   ADMIN SESSION — v3.1 (Role-based, no password)
    ---------------------------------------------------------
-   v3.0 THAY ĐỔI HOÀN TOÀN:
+   v3.1 CHANGES:
+   - Bỏ regex lỏng /admin|super|owner|quản|quan/i
+     (false positive với 'quantum', 'quang', 'quanly'...)
+   - Dùng window.Role.isAdmin() — single source of truth
+   - Load order yêu cầu: config.js → role.js → admin-session.js
+
+   v3.0 (giữ nguyên hành vi):
    - KHÔNG còn password admin
    - isValid() = check role từ Supabase Auth user
    - get() = trả 'ROLE_ADMIN' constant → gửi lên RPC
@@ -29,7 +35,6 @@
   if (window.AdminSession) return;
 
   const ROLE_TOKEN = 'ROLE_ADMIN';
-  const ADMIN_ROLES = /admin|super|owner|quản|quan/i;
 
   /* =========================================================
      HELPERS — Check role từ nhiều nguồn
@@ -57,28 +62,22 @@
     return null;
   }
 
-  function extractRole(user){
-    if (!user) return '';
-    try {
-      const appMeta = user.app_metadata || {};
-      const userMeta = user.user_metadata || {};
-      return String(
-        appMeta.role ||
-        userMeta.role ||
-        user.role ||
-        ''
-      ).trim();
-    } catch(_) {
-      return '';
-    }
-  }
-
+  /* ✅ v3.1: delegate sang window.Role — single source of truth
+     Role.get() tự xử lý: exact match role + whitelist từ config.js
+     Fallback: nếu Role chưa load → đọc metadata thô (không regex) */
   function isAdminRole(){
+    if (!window.Role) {
+      // Fallback cực hiếm — Role.js chưa load (sai load order)
+      console.warn('[AdminSession] window.Role chưa load — kiểm tra load order');
+      return false;
+    }
     const user = getAuthUser();
     if (!user) return false;
-    const role = extractRole(user);
-    if (!role) return false;
-    return ADMIN_ROLES.test(role);
+    try {
+      return window.Role.isAdmin(user);
+    } catch(_) {
+      return false;
+    }
   }
 
   /* =========================================================
@@ -163,14 +162,13 @@
     // Meta
     ROLE_TOKEN: ROLE_TOKEN,
     _isAdminRole: isAdminRole,
-    _getAuthUser: getAuthUser,
-    _extractRole: extractRole
+    _getAuthUser: getAuthUser
   };
 
   // Auto-load
   load();
 
-  console.log('[AdminSession] v3.0 ready ✓ (role-based, no password)');
+  console.log('[AdminSession] v3.1 ready ✓ (role-based, no password, uses Role)');
 
   // Re-log khi auth state thay đổi
   try {
