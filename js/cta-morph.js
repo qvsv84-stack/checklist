@@ -1,17 +1,16 @@
 /* ═══════════════════════════════════════════════════════════════
-   CTA MORPH — v1.1 🎬
-   Bước 1: Morph nút "Chấm công" (TO) → card quần thần (NHỎ)
-   - Intercept click CTA (capture phase)
-   - Optimistic: morph ngay, reverse nếu API fail
-   - Lock button trong lúc animate
-   - Đo target size từ card thật (.courtier) nếu có
-   - Không đụng file cũ
+   CTA MORPH — v1.2 🎬
+   - Selector robust (không phụ thuộc data-cta)
+   - Log rõ ràng từng bước
+   - Visual feedback ngay khi bấm (flash viền vàng 150ms)
+   - Nếu bấm mà KHÔNG thấy flash vàng → file chưa load → check index.html
    ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
   if (window.__ctaMorphLoaded) return;
   window.__ctaMorphLoaded = true;
 
+  const D_FLASH = 180;
   const D_MORPH = 320;
   const D_HOLD = 480;
   const D_FADE = 400;
@@ -20,6 +19,8 @@
   const DEFAULT_H = 38;
 
   let _animating = false;
+
+  console.log('[ctaMorph] script loaded ✓ v1.2');
 
   function getUser() {
     try {
@@ -53,7 +54,6 @@
   }
 
   function measureTargetSize() {
-    // Ưu tiên đo từ card quần thần thật
     try {
       const cards = document.querySelectorAll('#question .courtier');
       if (cards.length) {
@@ -62,7 +62,6 @@
           return { w: Math.round(r.width), h: Math.round(r.height) };
         }
       }
-      // Fallback: đo từ throne / advisor
       const big = document.querySelector('#question .court-throne, #question .advisor');
       if (big) {
         const r = big.getBoundingClientRect();
@@ -70,6 +69,21 @@
       }
     } catch (_) {}
     return { w: DEFAULT_W, h: DEFAULT_H };
+  }
+
+  function findCTA(el) {
+    // Cách 1: tìm với data-cta
+    let cta = el?.closest?.('#question .landing-cta[data-cta="checkin"]');
+    if (cta) return cta;
+    // Cách 2: tìm .landing-cta không locked, không phải login
+    cta = el?.closest?.('#question .landing-cta:not(.locked)');
+    if (cta) {
+      const txt = String(cta.textContent || '').toLowerCase();
+      if (/đăng nhập|login/i.test(txt)) return null;
+      if (/đã chấm công/i.test(txt)) return null;
+      return cta;
+    }
+    return null;
   }
 
   function injectStyles() {
@@ -89,19 +103,13 @@
           top 320ms cubic-bezier(0.34, 1.1, 0.64, 1);
       }
       .ctaMorphGhost .ctaMorphInner {
-        width: 100%;
-        height: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        padding: 0 32px;
+        width: 100%; height: 100%;
+        display: flex; align-items: center; justify-content: center;
+        gap: 10px; padding: 0 32px;
         border-radius: 999px;
         background: linear-gradient(135deg, hsl(140 60% 42%), hsl(155 60% 38%));
         color: #fff;
-        font-family: inherit;
-        font-weight: 800;
-        letter-spacing: .01em;
+        font-family: inherit; font-weight: 800; letter-spacing: .01em;
         text-shadow: 0 1px 3px rgba(0,0,0,.2);
         box-shadow:
           0 0 0 1px hsl(140 60% 60% / .55),
@@ -111,53 +119,34 @@
         transition:
           padding 320ms cubic-bezier(0.34, 1.1, 0.64, 1),
           border-radius 320ms cubic-bezier(0.34, 1.1, 0.64, 1),
-          background 320ms ease,
-          color 320ms ease,
-          box-shadow 320ms ease,
-          font-size 320ms ease;
-        overflow: hidden;
-        box-sizing: border-box;
+          background 320ms ease, color 320ms ease,
+          box-shadow 320ms ease, font-size 320ms ease;
+        overflow: hidden; box-sizing: border-box;
       }
       .ctaMorphGhost .ctaMorphLabel {
-        white-space: nowrap;
-        font-size: 1em;
+        white-space: nowrap; font-size: 1em;
         transition: opacity 180ms ease;
       }
       .ctaMorphGhost .ctaMorphCardBody {
-        display: none;
-        align-items: center;
-        gap: 6px;
-        width: 100%;
-        height: 100%;
-        padding: 5px 7px;
-        box-sizing: border-box;
+        display: none; align-items: center; gap: 6px;
+        width: 100%; height: 100%; padding: 5px 7px; box-sizing: border-box;
       }
       .ctaMorphGhost .ctaMorphAvatar {
-        width: 28px; height: 28px;
-        border-radius: 50%;
-        overflow: hidden;
-        flex-shrink: 0;
+        width: 28px; height: 28px; border-radius: 50%;
+        overflow: hidden; flex-shrink: 0;
         background: linear-gradient(135deg,#e8f5ec,#d4ead9);
         border: 1.5px solid #fff;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        display: flex; align-items: center; justify-content: center;
       }
-      .ctaMorphGhost .ctaMorphAvatar img {
-        width: 100%; height: 100%; object-fit: cover; display: block;
-      }
+      .ctaMorphGhost .ctaMorphAvatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
       .ctaMorphGhost .ctaMorphAvatarFb {
         font-size: 12px; font-weight: 950; color: #4a7a5a;
         display: flex; align-items: center; justify-content: center;
         width: 100%; height: 100%;
       }
       .ctaMorphGhost .ctaMorphInfo {
-        display: flex;
-        flex-direction: column;
-        gap: 0;
-        min-width: 0;
-        flex: 1;
-        text-align: left;
+        display: flex; flex-direction: column; gap: 0;
+        min-width: 0; flex: 1; text-align: left;
       }
       .ctaMorphGhost .ctaMorphName {
         font-size: 11px; font-weight: 900; color: #234a32;
@@ -165,30 +154,22 @@
         line-height: 1.15;
       }
       .ctaMorphGhost .ctaMorphTime {
-        font-size: 9px; font-weight: 800; color: #6b8f78;
-        line-height: 1.15;
+        font-size: 9px; font-weight: 800; color: #6b8f78; line-height: 1.15;
       }
-      /* Morph state */
       .ctaMorphGhost.morphing .ctaMorphInner {
-        padding: 5px 7px;
-        border-radius: 12px;
-        background: rgba(255,255,255,.55);
-        color: #234a32;
+        padding: 5px 7px; border-radius: 12px;
+        background: rgba(255,255,255,.55); color: #234a32;
         text-shadow: none;
         box-shadow: 0 2px 12px rgba(50,80,60,.08);
         font-size: 11px;
       }
       .ctaMorphGhost.morphing .ctaMorphLabel { display: none; }
       .ctaMorphGhost.morphing .ctaMorphCardBody { display: flex; }
-      /* Fade out */
-      .ctaMorphGhost.fading { opacity: 0; transition: opacity 400ms ease, width 320ms cubic-bezier(0.34, 1.1, 0.64, 1), height 320ms cubic-bezier(0.34, 1.1, 0.64, 1), left 320ms cubic-bezier(0.34, 1.1, 0.64, 1), top 320ms cubic-bezier(0.34, 1.1, 0.64, 1); }
-      /* Reverse */
+      .ctaMorphGhost.fading { opacity: 0; transition: opacity 400ms ease; }
       .ctaMorphGhost.reversing .ctaMorphInner {
-        padding: 0 32px;
-        border-radius: 999px;
+        padding: 0 32px; border-radius: 999px;
         background: linear-gradient(135deg, hsl(140 60% 42%), hsl(155 60% 38%));
-        color: #fff;
-        text-shadow: 0 1px 3px rgba(0,0,0,.2);
+        color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.2);
         box-shadow:
           0 0 0 1px hsl(140 60% 60% / .55),
           0 0 14px hsl(140 60% 50% / .6),
@@ -240,32 +221,35 @@
   }
 
   async function startMorph(cta) {
-    if (_animating) return;
-    const user = getUser();
-    if (!user) {
-      try { window.SRank?.setStatus?.('Chưa đăng nhập'); } catch(_){}
+    if (_animating) {
+      console.log('[ctaMorph] bỏ qua — đang animate');
       return;
     }
+    const user = getUser();
+    if (!user) {
+      console.log('[ctaMorph] không có user — skip');
+      return;
+    }
+    console.log('[ctaMorph] bắt đầu morph cho', user.name);
     _animating = true;
 
-    // Lock CTA
+    // Lock CTA — ẩn nút gốc
+    const prevPointerEvents = cta.style.pointerEvents;
+    const prevOpacity = cta.style.opacity;
     cta.style.pointerEvents = 'none';
     cta.style.opacity = '0';
-
-    // Pause realtime (nếu main.js export)
-    try { window.__pauseRealtime?.(); } catch(_){}
 
     const time = nowHHMM();
     const ghost = buildGhost(cta, user, time);
     document.body.appendChild(ghost);
 
-    // Đo target size từ card thật (nếu có) — fallback 160x38
+    // Đo target size
     const target = measureTargetSize();
     const rect = cta.getBoundingClientRect();
     const targetLeft = rect.left + (rect.width - target.w) / 2;
     const targetTop = rect.top + (rect.height - target.h) / 2;
 
-    // Trigger morph (thu nhỏ + đổi style)
+    // Morph sau 1 frame
     requestAnimationFrame(() => {
       ghost.classList.add('morphing');
       ghost.style.width = target.w + 'px';
@@ -274,20 +258,20 @@
       ghost.style.top = targetTop + 'px';
     });
 
-    // Gọi API song song
+    // Gọi API
     let apiOK = false;
     try {
       await window.SRank.requestCheckin(user.name);
       apiOK = true;
+      console.log('[ctaMorph] API checkin OK');
     } catch (e) {
-      apiOK = false;
+      console.log('[ctaMorph] API checkin FAIL', e?.message);
     }
 
-    // Chờ morph + hold xong
+    // Chờ morph + hold
     await new Promise(r => setTimeout(r, D_MORPH + D_HOLD));
 
-    if (!giapiOKật) {
-      // Reverse về hình n**út gốc trên
+    if (!apiOK) {
       ghost.classList.remove('morphing');
       ghost.classList.add('reversing');
       ghost.style.width = rect.width + 'px';
@@ -296,40 +280,51 @@
       ghost.style.top = rect.top + 'px';
       await new Promise(r => setTimeout(r, D_REVERSE));
       ghost.remove();
-      cta.style.pointerEvents = '';
-      cta.style.opacity = '';
+      cta.style.pointerEvents = prevPointerEvents;
+      cta.style.opacity = prevOpacity;
       try { window.SRank?.setStatus?.('Chấm công thất bại — thử lại'); } catch(_){}
-      try { window.__resumeRealtime?.(); } catch(_){}
       _animating = false;
       return;
     }
 
-    // Fade out ghost
+    // Fade out
     ghost.classList.add('fading');
     await new Promise(r => setTimeout(r, D_FADE));
     ghost.remove();
-
-    // Cleanup
-    try { window.__resumeRealtime?.(); } catch(_){}
     _animating = false;
   }
 
   function onClickCapture(e) {
-    const cta = e.target?.closest?.('#question .landing-cta[data-cta="checkin"]');
+    const cta = findCTA(e.target);
     if (!cta) return;
-    // Chặn handler cũ chạy
+
+    console.log('[ctaMorph] CTA detected, text:', cta.textContent?.trim());
+
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
     if (_animating) return;
-    startMorph(cta);
+
+    // ⭐ FLASH vàng — user THẤY ngay handler chạy
+    const prevBoxShadow = cta.style.boxShadow;
+    const prevTransition = cta.style.transition;
+    cta.style.transition = 'box-shadow 80ms ease';
+    cta.style.boxShadow = '0 0 0 3px #ffd700, 0 0 20px #ffd700';
+    setTimeout(() => {
+      cta.style.boxShadow = prevBoxShadow;
+      cta.style.transition = prevTransition;
+    }, D_FLASH);
+
+    // Bắt đầu morph sau flash
+    setTimeout(() => {
+      startMorph(cta);
+    }, 60);
   }
 
   function boot() {
     injectStyles();
-    // Capture phase để chạy TRƯỚC mọi handler khác
     document.addEventListener('click', onClickCapture, true);
-    console.log('[ctaMorph] ready ✓ Bước 1 (thu nhỏ)');
+    console.log('[ctaMorph] ready ✓ v1.2 — capture listener attached');
   }
 
   if (document.readyState === 'loading') {
