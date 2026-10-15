@@ -1,61 +1,75 @@
 /* =========================================================
-   WHEEL FALLBACK — v2.0
+   WHEEL FALLBACK — v2.1 (FIX LỆCH SELECTION + TOUCH)
    ---------------------------------------------------------
-   v2.0 — Viết lại wheel THẬT:
-     - Touch drag + inertia + snap (giống wheel gốc)
-     - Mouse drag cho desktop
-     - Click item để chọn
-     - CSS inject riêng → không phụ thuộc main.css
-     - Rubber-band khi kéo quá đầu/cuối
-     - GPU accelerated (translate3d)
-     - Không conflict với scroll parent (touch-action: none)
+   v2.1 FIX:
+     ✅ Selection lệch do CSS gốc có transform: translateY(-50%)
+        → ép transform: none + margin: 0 bằng !important
+     ✅ Touch không hoạt động trên iOS Safari
+        → set touch-action: none + overscroll-behavior: contain
+          lên TOÀN BỘ cây DOM từ #attendanceNameWheel xuống
+     ✅ Thêm touchcancel an toàn hơn
+   v2.0:
+     - Drag + inertia + snap, mouse wheel, click item
 
-   API khớp wheel gốc:
-     createWheel({ viewport, itemsBox, itemHeight, itemClass })
-     → { attach, setItems, setIndex, getIndex, schedule, destroy }
-
-   LOAD ORDER: TRƯỚC attendance.js
+   LOAD ORDER: TRƯỚC attendance.js và checklist-ui.js
    ========================================================= */
 (function () {
   "use strict";
-  if (typeof window.createWheel === "function") {
-    console.log("[wheel-fallback] window.createWheel đã có — bỏ qua");
+
+  if (window.__wheelFallbackV2) {
+    console.log("[wheel-fallback] đã load, bỏ qua");
     return;
   }
+  window.__wheelFallbackV2 = true;
 
-  console.warn("[wheel-fallback] cài bản v2.0 (drag + inertia + snap)");
+  console.log("[wheel-fallback] cài bản v2.1");
 
   /* ═══════════════════════════════════════════════════════
-     CSS inject — đảm bảo wheel hiển thị đúng bất kể CSS gốc
+     CSS INJECT
      ═══════════════════════════════════════════════════════ */
   function injectCSS() {
     if (document.getElementById("__wheelFallbackCSS")) return;
     const s = document.createElement("style");
     s.id = "__wheelFallbackCSS";
     s.textContent = `
+      /* ─── viewport ─── */
       .wheel-viewport.wf-ready {
         overflow: hidden !important;
         position: relative !important;
         touch-action: none !important;
+        overscroll-behavior: contain !important;
         user-select: none !important;
         -webkit-user-select: none !important;
         -webkit-tap-highlight-color: transparent !important;
         cursor: grab;
+        display: block !important;
       }
       .wheel-viewport.wf-ready.wf-dragging { cursor: grabbing; }
+
+      /* ─── itemsBox ─── */
       .wheel-viewport.wf-ready .wheel-items {
         position: absolute !important;
         left: 0 !important;
         right: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
         will-change: transform;
         backface-visibility: hidden;
         -webkit-backface-visibility: hidden;
         transform: translate3d(0, 0, 0);
+        display: block !important;
       }
+
+      /* ─── ✅ FIX LỆCH: ép selection về đúng vị trí JS set ─── */
       .wheel-viewport.wf-ready .wheel-selection {
         position: absolute !important;
         left: 8px !important;
         right: 8px !important;
+        margin: 0 !important;
+        transform: none !important;            /* ⭐ chống translateY(-50%) từ CSS gốc */
+        -webkit-transform: none !important;
+        top: auto !important;                  /* JS sẽ set top cụ thể */
+        box-sizing: border-box !important;
         pointer-events: none !important;
         z-index: 3 !important;
         border-radius: 12px !important;
@@ -69,6 +83,8 @@
           inset 0 1px 0 rgba(255,255,255,.5),
           0 2px 8px -4px rgba(79,163,112,.3) !important;
       }
+
+      /* ─── item ─── */
       .wheel-viewport.wf-ready .wf-item {
         display: flex !important;
         align-items: center !important;
@@ -76,7 +92,9 @@
         text-align: center !important;
         box-sizing: border-box !important;
         padding: 0 14px !important;
-        transition: color .18s ease, font-weight .18s ease, transform .18s ease, opacity .18s ease;
+        margin: 0 !important;
+        transition: color .18s ease, font-weight .18s ease,
+                    transform .18s ease, opacity .18s ease;
         will-change: transform;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -100,6 +118,15 @@
         color: #a8bdb0 !important;
         opacity: .18 !important;
       }
+
+      /* ─── ✅ FIX TOUCH: khoá touch-action trên TOÀN BỘ cây overlay ─── */
+      .wf-touch-lock,
+      .wf-touch-lock * {
+        touch-action: none !important;
+        overscroll-behavior: contain !important;
+        -webkit-user-select: none !important;
+        user-select: none !important;
+      }
     `;
     document.head.appendChild(s);
   }
@@ -121,7 +148,7 @@
     const itemHeight = Number(o.itemHeight) > 0 ? Number(o.itemHeight) : 58;
     const itemClass = String(o.itemClass || "wheel-item");
     const VISIBLE_COUNT = 5;
-    const CENTER_SLOT = 2;  // 0-indexed → slot thứ 3 (giữa)
+    const CENTER_SLOT = 2;  // 0-indexed → slot giữa (thứ 3)
 
     let items = [];
     let index = 0;
@@ -157,6 +184,7 @@
       viewport.style.position = "relative";
       viewport.style.overflow = "hidden";
       viewport.style.touchAction = "none";
+      viewport.style.overscrollBehavior = "contain";
 
       itemsBox.style.position = "absolute";
       itemsBox.style.left = "0";
@@ -165,10 +193,22 @@
       itemsBox.style.transform = "translate3d(0, 0, 0)";
       itemsBox.style.transition = "none";
 
+      /* ✅ FIX: set cứng top + transform cho selection bằng important
+         để chống mọi CSS gốc can thiệp */
       if (selection) {
-        selection.style.top = (itemHeight * CENTER_SLOT) + "px";
-        selection.style.height = itemHeight + "px";
+        selection.style.setProperty("top", (itemHeight * CENTER_SLOT) + "px", "important");
+        selection.style.setProperty("height", itemHeight + "px", "important");
+        selection.style.setProperty("transform", "none", "important");
+        selection.style.setProperty("margin", "0", "important");
       }
+
+      /* ✅ FIX TOUCH: khoá touch-action trên toàn bộ overlay cha */
+      try {
+        const overlay = viewport.closest("#attendanceNameWheel") ||
+                        viewport.closest("#clV6Page") ||
+                        viewport.parentElement;
+        if (overlay) overlay.classList.add("wf-touch-lock");
+      } catch (_) {}
     }
 
     /* ═══════════════════════════════════════════════════
@@ -196,7 +236,7 @@
     }
 
     /* ═══════════════════════════════════════════════════
-       HIGHLIGHT — dựa trên currentOffset
+       HIGHLIGHT
        ═══════════════════════════════════════════════════ */
     function updateHighlight() {
       if (!itemsBox || !items.length) return;
@@ -289,7 +329,7 @@
     }
 
     /* ═══════════════════════════════════════════════════
-       DRAG HANDLERS
+       DRAG
        ═══════════════════════════════════════════════════ */
     function onDragStart(clientY) {
       if (!items.length) return;
@@ -303,7 +343,7 @@
       viewport.classList.add("wf-dragging");
     }
 
-    function onDragMove(clientY, preventDefault) {
+    function onDragMove(clientY) {
       if (!dragging) return;
       const delta = clientY - startY;
       currentOffset = clampOffset(startOffset + delta, true);
@@ -312,7 +352,6 @@
       const now = performance.now();
       const dt = now - lastTime;
       if (dt > 0) {
-        // velocity px/ms, làm mượt với EMA
         const instant = (clientY - lastY) / dt;
         velocity = velocity * 0.6 + instant * 0.4;
       }
@@ -325,12 +364,10 @@
       dragging = false;
       viewport.classList.remove("wf-dragging");
 
-      // Project với inertia: 180ms
       const projected = currentOffset + velocity * 180;
       let targetIdx = Math.round(-projected / itemHeight);
       targetIdx = Math.max(0, Math.min(items.length - 1, targetIdx));
 
-      // Nếu velocity quá nhỏ → snap về gần nhất
       if (Math.abs(velocity) < 0.15) {
         targetIdx = Math.round(-currentOffset / itemHeight);
         targetIdx = Math.max(0, Math.min(items.length - 1, targetIdx));
@@ -341,13 +378,13 @@
     }
 
     /* ═══════════════════════════════════════════════════
-       EVENT LISTENERS
+       EVENTS
        ═══════════════════════════════════════════════════ */
     function attachEvents() {
       if (attached) return;
       attached = true;
 
-      /* ─── TOUCH (iOS Safari) ─── */
+      /* ─── TOUCH ─── */
       viewport.addEventListener("touchstart", function (e) {
         if (e.touches.length !== 1) return;
         onDragStart(e.touches[0].clientY);
@@ -355,8 +392,8 @@
 
       viewport.addEventListener("touchmove", function (e) {
         if (!dragging) return;
-        e.preventDefault(); // chặn scroll parent
-        onDragMove(e.touches[0].clientY, true);
+        if (e.cancelable) e.preventDefault();
+        onDragMove(e.touches[0].clientY);
       }, { passive: false });
 
       viewport.addEventListener("touchend", function () {
@@ -373,7 +410,7 @@
         e.preventDefault();
         onDragStart(e.clientY);
 
-        const onMove = function (ev) { onDragMove(ev.clientY, false); };
+        const onMove = function (ev) { onDragMove(ev.clientY); };
         const onUp = function () {
           document.removeEventListener("mousemove", onMove);
           document.removeEventListener("mouseup", onUp);
@@ -383,17 +420,16 @@
         document.addEventListener("mouseup", onUp);
       });
 
-      /* ─── CLICK item để chọn ─── */
+      /* ─── CLICK ITEM ─── */
       itemsBox.addEventListener("click", function (e) {
-        // bỏ qua nếu vừa drag (tránh click sau drag)
-        if (Date.now() - lastTime < 100) return;
+        if (Date.now() - lastTime < 100) return;  // bỏ qua click sau drag
         const el = e.target.closest(".wf-item");
         if (!el) return;
         const i = Number(el.dataset.index);
         if (Number.isFinite(i)) setIndexInternal(i, true);
       });
 
-      /* ─── WHEEL (desktop chuột có wheel) ─── */
+      /* ─── WHEEL CHUỘT ─── */
       viewport.addEventListener("wheel", function (e) {
         e.preventDefault();
         const dir = e.deltaY > 0 ? 1 : -1;
@@ -412,31 +448,23 @@
         attachEvents();
         applyTransform();
       },
-
       setItems(arr) {
         items = Array.isArray(arr) ? arr.slice() : [];
         if (index >= items.length) index = 0;
         renderItems();
         applyTransform();
       },
-
       setIndex(i) {
         dragging = false;
         viewport.classList.remove("wf-dragging");
         setIndexInternal(i, true);
       },
-
       getIndex() {
         return index;
       },
-
       schedule() {
-        // Re-apply transform sau khi layout ổn định (cho iOS Safari)
-        requestAnimationFrame(function () {
-          applyTransform();
-        });
+        requestAnimationFrame(function () { applyTransform(); });
       },
-
       destroy() {
         cancelAnim();
         if (itemsBox) itemsBox.innerHTML = "";
@@ -445,5 +473,5 @@
     };
   };
 
-  console.log("[wheel-fallback] ✓ v2.0 ready (drag + inertia + snap)");
+  console.log("[wheel-fallback] ✓ v2.1 ready (fix lệch + touch iOS)");
 })();
