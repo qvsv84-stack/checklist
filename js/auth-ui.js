@@ -1,6 +1,11 @@
 /* =========================================================
-   SRANK AUTH UI — v10.6 (Role-based + CTA Morph)
+   SRANK AUTH UI — v10.7 (Role-based + CTA Morph + Verify User)
    ---------------------------------------------------------
+   v10.7 CHANGES:
+   - Verify user còn tồn tại trong employees sau login
+   - Force logout nếu user đã bị admin xoá
+   - Chỉ logout khi RPC trả lời rõ ràng "không tồn tại"
+   - Network fail / RPC error → KHÔNG logout (an toàn)
    v10.6 CHANGES:
    - handleCheckin(cta) → gọi window.__ctaMorph.start() nếu có
    - intercept truyền cta vào handleCheckin
@@ -535,10 +540,67 @@
 
   if (logoutBtn) logoutBtn.addEventListener("click", handleLogout);
 
+  /* ⭐ v10.7: verify user còn tồn tại trong employees — force logout nếu bị xoá */
+  let _userCheckInFlight = false;
+  let _userCheckPassed = false;
+  let _userCheckRetries = 0;
+  const MAX_USER_CHECK_RETRIES = 3;
+
+  async function verifyUserExists(user){
+    if (!user || !user.displayName) return true;
+    if (_userCheckPassed) return true;
+    if (_userCheckInFlight) return true;
+
+    const sb = window.__sb;
+    if (!sb || !sb.rpc) {
+      // Supabase chưa sẵn sàng → retry
+      if (_userCheckRetries < MAX_USER_CHECK_RETRIES) {
+        _userCheckRetries++;
+        setTimeout(() => { verifyUserExists(user); }, 800);
+      }
+      return true;
+    }
+
+    _userCheckInFlight = true;
+    try {
+      const res = await sb.rpc('rpc_check_user_exists', { p_display_name: user.displayName });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok === true) {
+        if (d.exists === false) {
+          console.warn('[AUTH-UI] user không tồn tại trong employees → force logout');
+          try { window.Toast?.show('Tài khoản đã bị xoá — tự động đăng xuất', { type: 'warning', duration: 4000 }); } catch(_) {}
+          try { await Auth.logout(); } catch(_) {}
+          _userCheckPassed = false;
+          return false;
+        }
+        _userCheckPassed = true;
+        _userCheckRetries = 0;
+      }
+    } catch(e) {
+      console.warn('[AUTH-UI] verify user failed:', e?.message);
+    } finally {
+      _userCheckInFlight = false;
+    }
+    return true;
+  }
+
   /* v10.3: Auth.onChange không clear gì cả */
   Auth.onChange(function(user){
     currentUser = user;
     updateLogoutBtn();
+
+    // Reset verify flag khi user logout → login lại sẽ check lại
+    if (!user) {
+      _userCheckPassed = false;
+      _userCheckRetries = 0;
+    }
+
+    // ⭐ v10.7: verify user còn tồn tại (delay nhỏ để Supabase sẵn sàng)
+    if (user && user.displayName && !_userCheckPassed) {
+      setTimeout(() => { verifyUserExists(user); }, 500);
+    }
+
     if (window.SRank && typeof window.SRank.rerenderLanding === "function"){
       try { window.SRank.rerenderLanding(); } catch(_) {}
     }
@@ -547,11 +609,16 @@
   currentUser = Auth.getCurrentUser();
   updateLogoutBtn();
 
+  // ⭐ v10.7: verify user khi boot (nếu đã login từ session cũ)
+  if (currentUser && currentUser.displayName && !_userCheckPassed) {
+    setTimeout(() => { verifyUserExists(currentUser); }, 1500);
+  }
+
   if (window.SRank && typeof window.SRank.rerenderLanding === "function"){
     try { window.SRank.rerenderLanding(); } catch(_) {}
   }
 
   window.SRank.openLogin = openLoginForm;
 
-  console.log("[AUTH-UI] ready ✓ v10.6 — role-based + remember me + morph");
+  console.log("[AUTH-UI] ready ✓ v10.7 — role-based + remember me + morph + verify user");
 })();
