@@ -1,9 +1,12 @@
 /* ═══════════════════════════════════════════════════════════════
-   MAIN.JS — CORE v3.0.5 🐱
+   MAIN.JS — CORE v3.0.6 🐱
    - Landing + Checklist + Admin + Auto sync + Realtime + Avatar
    - Admin long-press đổi tên hiển thị + tab Users
    - Highlight tên của chính mình ở quần thần
    - data-cta cho neon CTA + tab Users xoá user
+   v3.0.6 CHANGES:
+   - Bỏ hard-code 'tienloi' — dùng Role.getAdminUsernames()
+   - Admin whitelist giờ ở config.js (ADMIN_USERNAMES)
    ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -1282,8 +1285,12 @@
     if (!els.adminUsersRows) return;
     const q = _adminUsersSearchTerm;
 
-    // ⭐ Ẩn admin chính (tienloi) khỏi danh sách — tránh bấm nhầm
-    const base = _adminUsersList.filter(u => String(u.username || '').toLowerCase() !== 'tienloi');
+    /* ✅ v3.0.6: Ẩn admin khỏi danh sách — dùng Role.getAdminUsernames()
+       thay vì hard-code 'tienloi'. Admin whitelist ở config.js. */
+    const adminNames = (window.Role?.getAdminUsernames?.() || []);
+    const base = _adminUsersList.filter(u =>
+      !adminNames.includes(String(u.username || '').toLowerCase())
+    );
     const filtered = !q ? base : base.filter(u =>
       String(u.username || '').toLowerCase().includes(q) ||
       String(u.displayName || '').toLowerCase().includes(q)
@@ -1307,7 +1314,7 @@
       userEl.className = 'admin-row-time';
       userEl.textContent = '@' + u.username + (u.active ? '' : ' · tắt');
 
-      // ⭐ Wrapper chứa 2 nút: Tắt/Bật + Xoá
+      // Wrapper chứa 2 nút: Tắt/Bật + Xoá
       const actions = document.createElement('span');
       actions.style.cssText = 'display:inline-flex;gap:6px;flex-shrink:0;align-items:center;';
 
@@ -1947,5 +1954,5 @@
     }).catch(() => {});
   });
 
-  console.log('[main] ready ✓ v3.0.5');
+  console.log('[main] ready ✓ v3.0.6');
 })();
