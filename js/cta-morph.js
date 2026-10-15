@@ -1,9 +1,11 @@
 /* ═══════════════════════════════════════════════════════════════
-   CTA MORPH — v1.2 🎬
-   - Selector robust (không phụ thuộc data-cta)
-   - Log rõ ràng từng bước
-   - Visual feedback ngay khi bấm (flash viền vàng 150ms)
-   - Nếu bấm mà KHÔNG thấy flash vàng → file chưa load → check index.html
+   CTA MORPH — v1.3 🎬
+   Bước 1: Morph nút "Chấm công" (TO) → card quần thần (NHỎ)
+   - Intercept click CTA (capture phase) — CHẠY TRƯỚC auth-ui.js
+   - Optimistic: morph ngay, reverse nếu API fail
+   - Lock button trong lúc animate
+   - Đo target size từ card thật (.courtier) nếu có
+   - Flash vàng + chấm xanh debug (xoá sau khi test)
    ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -20,7 +22,7 @@
 
   let _animating = false;
 
-  console.log('[ctaMorph] script loaded ✓ v1.2');
+  console.log('[ctaMorph] script loaded ✓ v1.3');
 
   function getUser() {
     try {
@@ -72,10 +74,8 @@
   }
 
   function findCTA(el) {
-    // Cách 1: tìm với data-cta
     let cta = el?.closest?.('#question .landing-cta[data-cta="checkin"]');
     if (cta) return cta;
-    // Cách 2: tìm .landing-cta không locked, không phải login
     cta = el?.closest?.('#question .landing-cta:not(.locked)');
     if (cta) {
       const txt = String(cta.textContent || '').toLowerCase();
@@ -324,7 +324,19 @@
   function boot() {
     injectStyles();
     document.addEventListener('click', onClickCapture, true);
-    console.log('[ctaMorph] ready ✓ v1.2 — capture listener attached');
+    console.log('[ctaMorph] ready ✓ v1.3 — capture listener attached');
+
+    // ⭐ DEBUG: chấm xanh góc trên trái = file đã load
+    // Xoá chấm này sau khi test xong
+    try {
+      if (!document.getElementById('__ctaMorphDot')) {
+        const dot = document.createElement('div');
+        dot.id = '__ctaMorphDot';
+        dot.style.cssText = 'position:fixed;top:4px;left:4px;width:10px;height:10px;background:#00ff00;border-radius:50%;z-index:99999;pointer-events:none;box-shadow:0 0 6px #00ff00';
+        if (document.body) document.body.appendChild(dot);
+        else document.addEventListener('DOMContentLoaded', () => document.body.appendChild(dot));
+      }
+    } catch (_) {}
   }
 
   if (document.readyState === 'loading') {
