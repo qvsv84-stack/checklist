@@ -1,14 +1,23 @@
 /* =========================================================
    SERVICE WORKER — Đảo Mèo / S Rank
-   Version: v1.4 — Fix precache list (bỏ file đã xoá)
+   Version: v1.5 — Fix config.js cache stale khi rotate key
+   ---------------------------------------------------------
+   v1.5 CHANGES:
+   - KHÔNG precache /js/config.js (chứa SUPABASE_KEY)
+   - Thêm NETWORK_FIRST_PATHS — luôn fetch network trước
+   - Thêm strategy networkFirstNoCache() cho file critical
+   - Bump SW_VERSION → v1.5 force update cache cũ
    ========================================================= */
 "use strict";
 
-const SW_VERSION = "v1.4";
+const SW_VERSION = "v1.5";
 const CACHE_NAME = `srank-cache-${SW_VERSION}`;
 const RUNTIME_CACHE = `srank-runtime-${SW_VERSION}`;
 
 // Danh sách asset cần precache khi cài SW lần đầu
+// ⚠️ v1.5: KHÔNG precache /js/config.js — file này chứa SUPABASE_KEY,
+// cần network-first (NETWORK_FIRST_PATHS bên dưới) để tránh
+// dùng key cũ sau khi admin rotate key ở Supabase Dashboard.
 const PRECACHE_URLS = [
   "/",
   "/index.html",
@@ -18,7 +27,7 @@ const PRECACHE_URLS = [
   "/css/main.css",
   "/css/menu.css",
 
-  "/js/config.js",
+  // "/js/config.js",  ← ĐÃ XOÁ: xem comment ở trên
   "/js/toast.js",
   "/js/admin-session.js",
   "/js/store.js",
@@ -40,6 +49,13 @@ const PRECACHE_URLS = [
 // CDN ngoài — có thể cache runtime (không bắt buộc precache)
 const CDN_HOSTS = [
   "cdn.jsdelivr.net"
+];
+
+// ✅ v1.5: Path KHÔNG bao giờ dùng precache/SWR — luôn network-first
+// với fallback cache khi offline. Áp dụng cho file chứa secrets
+// có thể rotate (config.js → SUPABASE_KEY).
+const NETWORK_FIRST_PATHS = [
+  "/js/config.js"
 ];
 
 // =========================================================
@@ -113,6 +129,12 @@ function isStaticAsset(request) {
          d === "font" || d === "manifest" || d === "worker";
 }
 
+// ✅ v1.5: Check xem request có thuộc danh sách network-first
+// (chứa secrets, không được dùng stale cache)
+function isNetworkFirstPath(url) {
+  return isSameOrigin(url) && NETWORK_FIRST_PATHS.indexOf(url.pathname) >= 0;
+}
+
 async function trimRuntimeCache(maxEntries = 60) {
   try {
     const cache = await caches.open(RUNTIME_CACHE);
@@ -142,6 +164,13 @@ self.addEventListener("fetch", (event) => {
 
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
 
+  // ✅ v1.5: Ưu tiên cao nhất — network-first cho file critical
+  // (config.js chứa SUPABASE_KEY, cần fresh để hỗ trợ key rotation)
+  if (isNetworkFirstPath(url)) {
+    event.respondWith(networkFirstNoCache(request));
+    return;
+  }
+
   // 1) HTML navigation → network-first
   if (isHtmlRequest(request, url)) {
     event.respondWith(networkFirstHtml(request));
@@ -167,6 +196,42 @@ self.addEventListener("fetch", (event) => {
 // =========================================================
 // STRATEGIES
 // =========================================================
+
+// ✅ v1.5: Network-first KHÔNG stale — dùng cho file chứa secrets.
+// - Luôn fetch network trước (bỏ qua HTTP cache bằng cache: "no-store"
+//   ở phía caller — SW chỉ intercept, không bypass).
+// - Khi thành công → cập nhật cache để làm fallback offline.
+// - Khi fail (offline) → trả cache cũ (tốt hơn crash app).
+// - Khi không có cache → trả 503 để app xử lý gracefully.
+async function networkFirstNoCache(request) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const fresh = await fetch(request);
+    if (fresh && fresh.ok) {
+      try { cache.put(request, fresh.clone()); } catch (_) {}
+    }
+    return fresh;
+  } catch (_) {
+    // Offline fallback — tìm trong tất cả caches (SW scope)
+    try {
+      const cached = await caches.match(request);
+      if (cached) return cached;
+    } catch (_) {}
+
+    // Không có cache → trả JS rỗng + log để app không crash cứng
+    console.warn("[SW] config.js offline và chưa cache — app có thể lỗi");
+    return new Response(
+      'console.error("[SW] config.js unavailable offline");' +
+      'window.__SRANK_CONFIG = window.__SRANK_CONFIG || null;',
+      {
+        status: 503,
+        statusText: "Offline — config.js not cached",
+        headers: { "Content-Type": "application/javascript; charset=utf-8" }
+      }
+    );
+  }
+}
+
 async function networkFirstHtml(request) {
   const cache = await caches.open(CACHE_NAME);
   try {
