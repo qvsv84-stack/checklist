@@ -339,6 +339,7 @@ html body #question .landing-cta[data-cta="shop"]:active {
         <button class="admin-tab" data-admin-tab="stats" type="button"><span class="admin-tab-icon">📊</span><span class="admin-tab-label">Thống kê</span></button>
         <button class="admin-tab" data-admin-tab="users" type="button"><span class="admin-tab-icon">👥</span><span class="admin-tab-label">Users</span></button>
         <button class="admin-tab" data-admin-tab="shop" type="button"><span class="admin-tab-icon">🏪</span><span class="admin-tab-label">Shop</span></button>
+        <button class="admin-tab" data-admin-tab="requests" type="button"><span class="admin-tab-icon">🎁</span><span class="admin-tab-label">Đổi thưởng</span></button>
       </nav>
       <div id="adminPageContent">
         <div class="admin-panel-view active" data-admin-view="schedule">
@@ -445,6 +446,27 @@ html body #question .landing-cta[data-cta="shop"]:active {
               <input id="adminShopCategory" type="text" maxlength="50" list="adminShopCategoryList" placeholder="Đồ uống" autocomplete="off">
               <datalist id="adminShopCategoryList"></datalist>
             </div>
+            <div class="admin-card-row">
+              <div class="admin-card-icon">⚡</div>
+              <div class="admin-card-info">
+                <label for="adminShopActionType">Loại hành động</label>
+                <p>User sẽ thấy form gì khi bấm nút</p>
+              </div>
+              <select id="adminShopActionType" class="admin-shop-action-select">
+                <option value="">— Không (item thường) —</option>
+                <option value="phone">📱 Nhập SĐT</option>
+                <option value="shipping">📦 Giao hàng</option>
+                <option value="none">✅ Xác nhận đơn giản</option>
+              </select>
+            </div>
+            <div class="admin-card-row">
+              <div class="admin-card-icon">🔘</div>
+              <div class="admin-card-info">
+                <label for="adminShopButtonLabel">Tên nút</label>
+                <p>VD: Sử dụng, Đặt hàng, Đổi thưởng (tối đa 30 ký tự)</p>
+              </div>
+              <input id="adminShopButtonLabel" type="text" maxlength="30" placeholder="Sử dụng" autocomplete="off">
+            </div>
           </div>
           <input type="file" id="adminShopImageInput" accept="image/jpeg,image/png,image/webp" hidden>
           <div id="adminShopStatus" class="admin-status"></div>
@@ -464,6 +486,20 @@ html body #question .landing-cta[data-cta="shop"]:active {
             <button id="adminShopConfigSaveBtn" type="button">💾 Lưu cấu hình</button>
             <button id="adminShopConfigResetBtn" type="button" style="background:#6b7280;border-color:#6b7280;margin-left:8px">↺ Mặc định</button>
           </div>
+        </div>
+        <div class="admin-panel-view" data-admin-view="requests">
+          <h2 class="admin-section-title">Yêu cầu đổi thưởng</h2>
+          <div class="admin-toolbar" style="flex-wrap:wrap;gap:8px">
+            <div class="admin-filters" style="flex:1;min-width:0">
+              <button class="admin-filter-btn admin-requests-filter-btn active" data-filter="pending" type="button">⏳ Chờ duyệt</button>
+              <button class="admin-filter-btn admin-requests-filter-btn" data-filter="approved" type="button">✅ Đã duyệt</button>
+              <button class="admin-filter-btn admin-requests-filter-btn" data-filter="rejected" type="button">❌ Từ chối</button>
+              <button class="admin-filter-btn admin-requests-filter-btn" data-filter="all" type="button">Tất cả</button>
+            </div>
+            <button id="adminRequestsRefreshBtn" type="button" class="admin-row-btn" style="flex-shrink:0">↻ Làm mới</button>
+          </div>
+          <div id="adminRequestsStats" class="admin-stats-bar"></div>
+          <div id="adminRequestsRows" class="admin-list"></div>
         </div>
       </div>
     </div>
@@ -617,6 +653,7 @@ html body #question .landing-cta[data-cta="shop"]:active {
 <script src="js/avatar-effect.js" defer></script>
 <script src="js/shop.js" defer></script>
 <script src="js/shop-admin.js" defer></script>
+<script src="js/shop-requests.js" defer></script>
 
 <script>
 (function(){
