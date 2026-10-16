@@ -1,11 +1,12 @@
 /* =========================================================
-   SHOP VIEW — v1.7
+   SHOP VIEW — v1.8
    ---------------------------------------------------------
-   v1.7 (hiệu ứng avatar):
-   ✅ Item có effect_type → hiệu ứng quanh avatar khi equipped
-   ✅ Hỗ trợ effect fire_particles (lửa + hạt bay)
-   ✅ Item hệ thống (is_system) hiển thị đầu danh sách
-   ✅ Auto-jump sang Collection sau khi mua item effect
+   v1.8:
+   ✅ Bỏ badge tròn vàng — chỉ dùng effect (qua AvatarEffect)
+   ✅ Bỏ EFFECT_MAP + applyAvatarEffect nội bộ (đã có file riêng)
+   ✅ Dispatch event "shopEquippedChanged" khi equip để refresh
+   v1.7:
+   - Effect avatar trong shop
    v1.6:
    - Fix tab display
    v1.5:
@@ -89,18 +90,7 @@
     } catch(_) { return ""; }
   }
 
-  /* ───── Effect CSS mapping ───── */
-  const EFFECT_MAP = {
-    fire_particles: {
-      wrapClass: "avatar-effect-fire",
-      html: '<div class="shop-fire-particles">'
-        + '<span></span><span></span><span></span><span></span>'
-        + '<span></span><span></span><span></span>'
-        + '</div>'
-    }
-  };
-
-  /* ───── Ensure page ───── */
+  /* ───── Ensure page (bỏ badge tròn vàng) ───── */
   function ensurePage() {
     let page = $(PAGE_ID);
     if (page) return page;
@@ -122,7 +112,6 @@
           <div class="shop-user-top">
             <div class="shop-user-avatar-wrap" id="shopUserAvatarWrap">
               <div class="shop-user-avatar" id="shopUserAvatar">?</div>
-              <div class="shop-user-badge" id="shopUserBadge" hidden></div>
             </div>
             <div class="shop-user-info">
               <div class="shop-user-name" id="shopUserName">Đang tải…</div>
@@ -210,7 +199,6 @@
     return page;
   }
 
-  /* ───── Tab ───── */
   function setTab(tab) {
     S.activeTab = tab;
     const page = $(PAGE_ID);
@@ -313,30 +301,13 @@
     } catch(_) { return null; }
   }
 
-  /* ───── Apply effect vào avatar ───── */
-  function applyAvatarEffect(wrapEl, effectType) {
-    if (!wrapEl) return;
-    /* Xoá effect cũ */
-    wrapEl.classList.remove("avatar-effect-fire");
-    wrapEl.querySelectorAll(".shop-fire-particles").forEach(function(el) { el.remove(); });
-
-    if (!effectType) return;
-
-    const eff = EFFECT_MAP[effectType];
-    if (!eff) return;
-
-    wrapEl.classList.add(eff.wrapClass);
-    wrapEl.insertAdjacentHTML("beforeend", eff.html);
-  }
-
-  /* ───── Render ───── */
+  /* ───── Render user card — bỏ badge ───── */
   function renderUserCard() {
     const u = S.currentUser;
     const nameEl = $("shopUserName");
     const monthEl = $("shopUserMonth");
     const avEl = $("shopUserAvatar");
     const wrapEl = $("shopUserAvatarWrap");
-    const badgeEl = $("shopUserBadge");
     const earnEl = $("shopPointsEarn");
     const spentEl = $("shopPointsSpent");
     const availEl = $("shopPointsAvail");
@@ -348,8 +319,6 @@
       nameEl.textContent = "Chưa đăng nhập";
       avEl.style.backgroundImage = "";
       avEl.textContent = "?";
-      if (badgeEl) badgeEl.hidden = true;
-      applyAvatarEffect(wrapEl, null);
       if (earnEl) earnEl.textContent = "0đ";
       if (spentEl) spentEl.textContent = "0đ";
       if (availEl) availEl.textContent = "0đ";
@@ -370,25 +339,10 @@
       avEl.textContent = initialOf(dn);
     }
 
-    /* Effect + badge */
-    if (S.equipped && S.equipped.effect_type) {
-      applyAvatarEffect(wrapEl, S.equipped.effect_type);
-      if (badgeEl) badgeEl.hidden = true;  /* effect thay thế badge */
-    } else {
-      applyAvatarEffect(wrapEl, null);
-      if (badgeEl) {
-        if (S.equipped && S.equipped.image_url) {
-          badgeEl.style.backgroundImage = 'url("' + S.equipped.image_url.replace(/"/g, '\\"') + '")';
-          badgeEl.textContent = "";
-          badgeEl.hidden = false;
-        } else if (S.equipped && !S.equipped.image_url) {
-          badgeEl.style.backgroundImage = "";
-          badgeEl.textContent = "🎖";
-          badgeEl.hidden = false;
-        } else {
-          badgeEl.hidden = true;
-        }
-      }
+    /* ⭐ v1.8: effect chỉ apply qua AvatarEffect (không còn badge) */
+    if (window.AvatarEffect && typeof window.AvatarEffect.apply === "function") {
+      const effType = (S.equipped && S.equipped.effect_type) || null;
+      try { window.AvatarEffect.apply(wrapEl, effType); } catch(_) {}
     }
 
     if (earnEl) earnEl.textContent = formatPoints(S.balance.points);
@@ -476,7 +430,6 @@
       const cost = Number(it.cost || 0);
       const canBuy = !it.is_purchased && balance >= cost;
 
-      /* Icon cho item effect không có ảnh */
       let imgHtml;
       if (it.image_url) {
         imgHtml = '<img src="' + escapeHtml(it.image_url)
@@ -515,7 +468,6 @@
     });
   }
 
-  /* ───── Collection ───── */
   function renderCollection() {
     const grid = $("shopCollectionGrid");
     const countEl = $("shopCollectionCount");
@@ -584,6 +536,14 @@
       if (d.ok !== true) throw new Error(d.error || "Không trang bị được");
       setStatus(itemId ? "Đã trang bị ⭐" : "Đã bỏ trang bị");
       try { Toast && Toast.show && Toast.show(itemId ? "Đã trang bị!" : "Đã bỏ trang bị", { type: "success", duration: 2000 }); } catch(_) {}
+
+      /* ⭐ v1.8: thông báo cho AvatarEffect refresh ở mọi nơi */
+      try {
+        window.dispatchEvent(new CustomEvent("shopEquippedChanged", {
+          detail: { itemId: itemId }
+        }));
+      } catch(_) {}
+
       await sync();
     } catch(e) {
       setStatus("Lỗi: " + (e.message || e));
@@ -797,7 +757,7 @@
     window.addEventListener("checkinDone", function() {
       if (S.pageOpen) sync();
     });
-    log("v1.7 ready ✓ (effect avatar)");
+    log("v1.8 ready ✓ (no badge, effect via AvatarEffect)");
   }
 
   if (document.readyState === "loading") {
