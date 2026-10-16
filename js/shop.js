@@ -1,12 +1,12 @@
 /* =========================================================
-   SHOP VIEW — v2.3
+   SHOP VIEW — v2.4
    ---------------------------------------------------------
-   v2.3 (spin speed ổn định):
-   ✅ Cố định tốc độ ~3 vòng/s, random nhẹ ±3%
-   ✅ Số vòng random 9-11, duration tính từ vòng/tốc độ
-   ✅ Tốc độ không còn chênh lệch 2x giữa các lần
+   v2.4:
+   ✅ Dispatch event "spinCompleted" cho spin-feed
+   v2.3:
+   - Spin speed ổn định ~3 vòng/s
    v2.2:
-   - Optimistic update
+   - Optimistic spin update
    ========================================================= */
 (function(){
   "use strict";
@@ -852,6 +852,13 @@
 
       showSpinResult(prizeAmount, d.data);
 
+      /* ⭐ v2.4: dispatch event cho spin-feed cập nhật ngay */
+      try {
+        window.dispatchEvent(new CustomEvent("spinCompleted", {
+          detail: { prize_amount: prizeAmount }
+        }));
+      } catch(_) {}
+
       S.spin.used = d.data.spins_used;
       S.spin.remaining = d.data.spins_remaining;
 
@@ -872,7 +879,6 @@
     }
   }
 
-  /* ⭐ v2.3: Tốc độ ổn định ~3 vòng/s, không còn chênh lệch 2x */
   function animateWheelTo(prizeIndex) {
     return new Promise(function(resolve) {
       const wheel = $("shopSpinWheel");
@@ -881,21 +887,16 @@
       const sliceAngle = 360 / SPIN_TOTAL;
       const targetAngle = prizeIndex * sliceAngle + sliceAngle / 2;
 
-      /* Tốc độ cố định ~3 vòng/s, random nhẹ ±3% để tự nhiên */
-      const speed = 2.9 + Math.random() * 0.2;   // 2.9 - 3.1 vòng/s
-
-      /* Số vòng random 9-11 → duration = vòng / tốc độ */
-      const totalTurns = 9 + Math.floor(Math.random() * 3);  // 9, 10, 11
+      const speed = 2.9 + Math.random() * 0.2;
+      const totalTurns = 9 + Math.floor(Math.random() * 3);
       const durationMs = Math.round((totalTurns / speed) * 1000);
 
       const finalAngle = 360 * totalTurns - targetAngle;
 
-      /* Reset về 0 không animate */
       wheel.style.transition = 'none';
       wheel.style.transform = 'rotate(0deg)';
       void wheel.offsetWidth;
 
-      /* Ease-out mạnh */
       wheel.style.transition = 'transform ' + durationMs + 'ms cubic-bezier(0.15, 0.9, 0.25, 1)';
       wheel.style.transform = 'rotate(' + finalAngle + 'deg)';
 
@@ -1337,7 +1338,7 @@
     window.addEventListener("shopRequestReviewed", function() {
       if (S.pageOpen) sync();
     });
-    log("v2.3 ready ✓");
+    log("v2.4 ready ✓");
   }
 
   if (document.readyState === "loading") {
