@@ -1,12 +1,15 @@
 /* =========================================================
-   SHOP VIEW — v1.3
+   SHOP VIEW — v1.5
    ---------------------------------------------------------
-   v1.3 (điểm từ chấm công):
-   ✅ Balance = điểm chấm công tháng - đã tiêu (server-side)
-   ✅ Hiển thị breakdown: làm/OT/phép/off/quên/X
-   ✅ Không dùng scoreLeaderboard nữa
-   ✅ Mua item theo TYPE Y (mỗi tháng mua lại được)
-   LOAD ORDER: SAU main.js
+   v1.5 (bộ sưu tập + equip badge):
+   ✅ Modal đẹp sau khi mua + nút "Trang bị ngay"
+   ✅ Tab "Bộ sưu tập" — list item đã mua + trạng thái
+   ✅ Trang bị / Bỏ trang bị badge
+   ✅ Card user hiển thị badge đang dùng
+   v1.4:
+   - Điểm từ chấm công (server-side)
+   v1.3:
+   - TYPE Y (mỗi tháng mua lại được)
    ========================================================= */
 (function(){
   "use strict";
@@ -21,9 +24,12 @@
   const S = {
     items: [],
     categories: [],
+    collection: [],
+    equipped: null,
     balance: { points: 0, spent: 0, available: 0, detail: {} },
     currentUser: null,
     activeCategory: "",
+    activeTab: "shop",     // "shop" | "collection"
     loading: false,
     pageOpen: false,
     booted: false,
@@ -34,11 +40,7 @@
 
   function log(...a) { console.log("[Shop]", ...a); }
   function setStatus(m) {
-    try {
-      if (window.SRank && typeof window.SRank.setStatus === "function") {
-        window.SRank.setStatus(m);
-      }
-    } catch(_) {}
+    try { if (window.SRank && window.SRank.setStatus) window.SRank.setStatus(m); } catch(_) {}
   }
   function escapeHtml(s) {
     return String(s == null ? "" : s)
@@ -77,6 +79,15 @@
     const d = new Date();
     return "Tháng " + (d.getMonth() + 1) + "/" + d.getFullYear();
   }
+  function fmtDate(iso) {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      return d.getDate().toString().padStart(2,"0") + "/"
+        + (d.getMonth()+1).toString().padStart(2,"0") + "/"
+        + d.getFullYear();
+    } catch(_) { return ""; }
+  }
 
   /* ───── Ensure page ───── */
   function ensurePage() {
@@ -98,7 +109,10 @@
       <div class="shop-body" id="shopBody">
         <div class="shop-user-card" id="shopUserCard">
           <div class="shop-user-top">
-            <div class="shop-user-avatar" id="shopUserAvatar">?</div>
+            <div class="shop-user-avatar-wrap">
+              <div class="shop-user-avatar" id="shopUserAvatar">?</div>
+              <div class="shop-user-badge" id="shopUserBadge" hidden></div>
+            </div>
             <div class="shop-user-info">
               <div class="shop-user-name" id="shopUserName">Đang tải…</div>
               <div class="shop-user-month" id="shopUserMonth"></div>
@@ -120,8 +134,48 @@
           </div>
           <div class="shop-points-detail" id="shopPointsDetail"></div>
         </div>
+
+        <div class="shop-tabs" id="shopTabs">
+          <button class="shop-tab active" data-tab="shop" type="button">
+            <span class="shop-tab-icon">🏪</span>
+            <span class="shop-tab-label">Cửa hàng</span>
+          </button>
+          <button class="shop-tab" data-tab="collection" type="button">
+            <span class="shop-tab-icon">🎖</span>
+            <span class="shop-tab-label">Bộ sưu tập</span>
+            <span class="shop-tab-count" id="shopCollectionCount"></span>
+          </button>
+        </div>
+
         <div class="shop-filters" id="shopFilters"></div>
         <div class="shop-grid" id="shopGrid"></div>
+
+        <div class="shop-collection" id="shopCollection" hidden>
+          <div class="shop-collection-grid" id="shopCollectionGrid"></div>
+        </div>
+      </div>
+
+      <!-- Modal mua thành công -->
+      <div class="shop-modal" id="shopModal" aria-hidden="true">
+        <div class="shop-modal-backdrop"></div>
+        <div class="shop-modal-panel" role="dialog" aria-modal="true">
+          <div class="shop-modal-confetti" id="shopModalConfetti"></div>
+          <div class="shop-modal-emoji">🎉</div>
+          <div class="shop-modal-title">Đổi thành công!</div>
+          <div class="shop-modal-item">
+            <div class="shop-modal-item-img" id="shopModalItemImg">🎁</div>
+            <div class="shop-modal-item-name" id="shopModalItemName"></div>
+            <div class="shop-modal-item-cost" id="shopModalItemCost"></div>
+          </div>
+          <div class="shop-modal-actions">
+            <button class="shop-modal-btn shop-modal-btn-primary" id="shopModalEquip" type="button">
+              ⭐ Trang bị ngay
+            </button>
+            <button class="shop-modal-btn shop-modal-btn-ghost" id="shopModalClose" type="button">
+              Đóng
+            </button>
+          </div>
+        </div>
       </div>
     `;
     document.body.appendChild(page);
@@ -135,8 +189,43 @@
       });
     });
 
+    /* Tab switching */
+    page.querySelectorAll(".shop-tab").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        setTab(btn.dataset.tab || "shop");
+      });
+    });
+
+    /* Modal close */
+    page.querySelector("#shopModalClose").addEventListener("click", closeModal);
+    page.querySelector(".shop-modal-backdrop").addEventListener("click", closeModal);
+
     log("Page created ✓");
     return page;
+  }
+
+  /* ───── Tab ───── */
+  function setTab(tab) {
+    S.activeTab = tab;
+    const page = $(PAGE_ID);
+    if (!page) return;
+    page.querySelectorAll(".shop-tab").forEach(function(btn) {
+      btn.classList.toggle("active", btn.dataset.tab === tab);
+    });
+    const shopContent = page.querySelector(".shop-grid");
+    const filters = page.querySelector("#shopFilters");
+    const col = page.querySelector("#shopCollection");
+    if (tab === "shop") {
+      if (shopContent) shopContent.hidden = false;
+      if (filters) filters.hidden = false;
+      if (col) col.hidden = true;
+      renderItems();
+    } else {
+      if (shopContent) shopContent.hidden = true;
+      if (filters) filters.hidden = true;
+      if (col) col.hidden = false;
+      renderCollection();
+    }
   }
 
   /* ───── Data ───── */
@@ -170,28 +259,19 @@
 
   async function fetchMyBalance() {
     const sb = window.__sb;
-    if (!sb || !sb.rpc) {
-      log("fetchMyBalance: không có Supabase");
-      return { points: 0, spent: 0, available: 0, detail: {} };
-    }
+    if (!sb || !sb.rpc) return { points: 0, spent: 0, available: 0, detail: {} };
     try {
-      const monthKey = getMonthKey();
-      log("fetchMyBalance: gọi rpc với month_key =", monthKey);
-      const res = await sb.rpc("rpc_shop_my_balance", { p_month_key: monthKey });
-      if (res.error) {
-        log("fetchMyBalance RPC error:", res.error);
-        throw res.error;
-      }
+      const res = await sb.rpc("rpc_shop_my_balance", { p_month_key: getMonthKey() });
+      if (res.error) throw res.error;
       const d = res.data || {};
-      if (d.ok !== true) throw new Error(d.error || "Không tải được balance");
+      if (d.ok !== true) throw new Error(d.error || "Lỗi balance");
       const b = d.data || {};
-      log("fetchMyBalance OK:", b);
       return {
         points: Number(b.points) || 0,
         spent: Number(b.spent) || 0,
         available: Number(b.available) || 0,
         display_name: b.display_name || "",
-        month_key: b.month_key || monthKey,
+        month_key: b.month_key || getMonthKey(),
         detail: (b.detail && typeof b.detail === "object") ? b.detail : {}
       };
     } catch(e) {
@@ -200,11 +280,31 @@
     }
   }
 
-  async function refreshBalance() {
-    const b = await fetchMyBalance();
-    S.balance = b;
-    log("balance:", S.balance);
-    return S.balance;
+  async function fetchCollection() {
+    const sb = window.__sb;
+    if (!sb || !sb.rpc) return [];
+    try {
+      const res = await sb.rpc("rpc_shop_my_collection");
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok !== true) return [];
+      return Array.isArray(d.data) ? d.data : [];
+    } catch(e) {
+      log("fetchCollection error:", e && e.message);
+      return [];
+    }
+  }
+
+  async function fetchEquipped() {
+    const sb = window.__sb;
+    if (!sb || !sb.rpc) return null;
+    try {
+      const res = await sb.rpc("rpc_shop_my_equipped");
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok !== true) return null;
+      return d.data || null;
+    } catch(_) { return null; }
   }
 
   /* ───── Render ───── */
@@ -213,6 +313,7 @@
     const nameEl = $("shopUserName");
     const monthEl = $("shopUserMonth");
     const avEl = $("shopUserAvatar");
+    const badgeEl = $("shopUserBadge");
     const earnEl = $("shopPointsEarn");
     const spentEl = $("shopPointsSpent");
     const availEl = $("shopPointsAvail");
@@ -221,8 +322,10 @@
     if (!nameEl || !avEl) return;
 
     if (!u || !u.displayName) {
-      if (nameEl) nameEl.textContent = "Chưa đăng nhập";
-      if (avEl) { avEl.style.backgroundImage = ""; avEl.textContent = "?"; }
+      nameEl.textContent = "Chưa đăng nhập";
+      avEl.style.backgroundImage = "";
+      avEl.textContent = "?";
+      if (badgeEl) badgeEl.hidden = true;
       if (earnEl) earnEl.textContent = "0đ";
       if (spentEl) spentEl.textContent = "0đ";
       if (availEl) availEl.textContent = "0đ";
@@ -231,7 +334,7 @@
     }
 
     const dn = displayName(u.displayName);
-    if (nameEl) nameEl.textContent = dn;
+    nameEl.textContent = dn;
     if (monthEl) monthEl.textContent = getMonthLabel();
 
     const url = avatarUrl(u.displayName);
@@ -243,11 +346,25 @@
       avEl.textContent = initialOf(dn);
     }
 
+    /* Badge đang dùng */
+    if (badgeEl) {
+      if (S.equipped && S.equipped.image_url) {
+        badgeEl.style.backgroundImage = 'url("' + S.equipped.image_url.replace(/"/g, '\\"') + '")';
+        badgeEl.textContent = "";
+        badgeEl.hidden = false;
+      } else if (S.equipped && !S.equipped.image_url) {
+        badgeEl.style.backgroundImage = "";
+        badgeEl.textContent = "🎖";
+        badgeEl.hidden = false;
+      } else {
+        badgeEl.hidden = true;
+      }
+    }
+
     if (earnEl) earnEl.textContent = formatPoints(S.balance.points);
     if (spentEl) spentEl.textContent = formatPoints(S.balance.spent);
     if (availEl) availEl.textContent = formatPoints(S.balance.available);
 
-    /* Breakdown detail */
     if (detailEl) {
       const d = S.balance.detail || {};
       const order = [
@@ -266,6 +383,15 @@
           const cls = k === "X" ? "shop-detail-x" : "shop-detail-ok";
           parts.push('<span class="shop-detail-chip ' + cls + '">'
             + icon + ' ' + cnt + ' ' + lbl + '</span>');
+        }
+      });
+      /* Custom statuses (Z, ...) */
+      Object.keys(d).forEach(function(k) {
+        if (["V","T","P","O","Q","X"].indexOf(k) >= 0) return;
+        const cnt = Number(d[k]) || 0;
+        if (cnt > 0) {
+          parts.push('<span class="shop-detail-chip shop-detail-ok">✨ '
+            + k + ' ' + cnt + '</span>');
         }
       });
       detailEl.innerHTML = parts.length ? parts.join("") : "";
@@ -348,6 +474,79 @@
     });
   }
 
+  /* ───── Collection ───── */
+  function renderCollection() {
+    const grid = $("shopCollectionGrid");
+    const countEl = $("shopCollectionCount");
+    if (!grid) return;
+
+    if (countEl) countEl.textContent = S.collection.length ? String(S.collection.length) : "";
+
+    if (!S.collection.length) {
+      grid.innerHTML =
+        '<div class="shop-empty">'
+        + '<div class="shop-empty-emoji">🎖</div>'
+        + '<div class="shop-empty-title">Chưa có gì trong bộ sưu tập</div>'
+        + '<div class="shop-empty-sub">Đổi vật phẩm đầu tiên đi!</div>'
+        + '</div>';
+      return;
+    }
+    grid.innerHTML = "";
+    S.collection.forEach(function(it) {
+      const el = document.createElement("div");
+      el.className = "shop-collection-item" + (it.is_equipped ? " equipped" : "");
+      const imgHtml = it.item_image_url
+        ? '<img src="' + escapeHtml(it.item_image_url)
+          + '" alt="" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.classList.add(\'show\');">'
+          + '<span class="shop-collection-img-fallback">🎁</span>'
+        : '<span class="shop-collection-img-fallback show">🎁</span>';
+      const eqBtnText = it.is_equipped ? "✓ Đang dùng" : "Trang bị";
+      const eqBtnClass = it.is_equipped ? "equipped" : "";
+      el.innerHTML =
+        '<div class="shop-collection-img">' + imgHtml
+        + (it.is_equipped ? '<div class="shop-collection-equipped-mark">⭐</div>' : '')
+        + '</div>'
+        + '<div class="shop-collection-body">'
+        +   '<div class="shop-collection-name">' + escapeHtml(it.item_name || "") + '</div>'
+        +   '<div class="shop-collection-date">Đổi ngày ' + fmtDate(it.purchased_at) + '</div>'
+        + '</div>'
+        + '<button class="shop-collection-btn ' + eqBtnClass + '" data-item-id="' + escapeHtml(it.item_id) + '" type="button">'
+        +   eqBtnText
+        + '</button>';
+      grid.appendChild(el);
+    });
+    grid.querySelectorAll(".shop-collection-btn").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        const id = btn.dataset.itemId;
+        const isEquipped = btn.classList.contains("equipped");
+        if (isEquipped) {
+          equipBadge(null, btn);
+        } else {
+          equipBadge(id, btn);
+        }
+      });
+    });
+  }
+
+  /* ───── Equip ───── */
+  async function equipBadge(itemId, btn) {
+    const sb = window.__sb;
+    if (!sb || !sb.rpc) return;
+    if (btn) { btn.disabled = true; btn.textContent = "…"; }
+    try {
+      const res = await sb.rpc("rpc_shop_equip_badge", { p_item_id: itemId });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok !== true) throw new Error(d.error || "Không trang bị được");
+      setStatus(itemId ? "Đã trang bị ⭐" : "Đã bỏ trang bị");
+      try { Toast && Toast.show && Toast.show(itemId ? "Đã trang bị!" : "Đã bỏ trang bị", { type: "success", duration: 2000 }); } catch(_) {}
+      await sync();
+    } catch(e) {
+      setStatus("Lỗi: " + (e.message || e));
+      if (btn) { btn.disabled = false; }
+    }
+  }
+
   /* ───── Purchase ───── */
   async function purchase(itemId, btn) {
     const item = S.items.find(function(i) { return String(i.id) === String(itemId); });
@@ -356,17 +555,13 @@
     const cost = Number(item.cost) || 0;
     if (S.balance.available < cost) {
       setStatus("Không đủ điểm");
-      try { Toast && Toast.show && Toast.show("Không đủ điểm để đổi vật phẩm này", { type: "warning", duration: 3000 }); } catch(_) {}
+      try { Toast && Toast.show && Toast.show("Không đủ điểm", { type: "warning", duration: 3000 }); } catch(_) {}
       return;
     }
-    const ok = confirm(
-      'Đổi "' + (item.name || "") + '" với ' + formatPoints(cost) + '?\n\n'
-      + 'Số dư sau khi đổi: ' + formatPoints(S.balance.available - cost)
-    );
-    if (!ok) return;
 
     btn.disabled = true;
     btn.textContent = "⏳";
+
     const sb = window.__sb;
     if (!sb || !sb.rpc) {
       setStatus("Chưa kết nối máy chủ");
@@ -384,8 +579,9 @@
       const d = res.data || {};
       if (d.ok !== true) throw new Error(d.error || "Không đổi được");
 
-      setStatus("Đã đổi thành công ✓");
-      try { Toast && Toast.show && Toast.show("Đổi thành công: " + (item.name || ""), { type: "success", duration: 3000 }); } catch(_) {}
+      /* ⭐ Hiện modal thành công */
+      showSuccessModal(item);
+      try { Toast && Toast.show && Toast.show("Đổi thành công: " + (item.name || ""), { type: "success", duration: 2000 }); } catch(_) {}
       await sync();
     } catch(e) {
       const msg = String((e && e.message) || e || "Lỗi");
@@ -396,6 +592,73 @@
     }
   }
 
+  /* ───── Success Modal ───── */
+  let _modalItemId = null;
+  function showSuccessModal(item) {
+    const modal = $("shopModal");
+    if (!modal) return;
+    _modalItemId = item.id;
+
+    const imgEl = $("shopModalItemImg");
+    const nameEl = $("shopModalItemName");
+    const costEl = $("shopModalItemCost");
+
+    if (imgEl) {
+      if (item.image_url) {
+        imgEl.style.backgroundImage = 'url("' + item.image_url.replace(/"/g, '\\"') + '")';
+        imgEl.textContent = "";
+      } else {
+        imgEl.style.backgroundImage = "";
+        imgEl.textContent = "🎁";
+      }
+    }
+    if (nameEl) nameEl.textContent = item.name || "";
+    if (costEl) costEl.textContent = "−" + formatPoints(item.cost);
+
+    modal.classList.add("show");
+    modal.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+
+    /* Confetti */
+    const confetti = $("shopModalConfetti");
+    if (confetti) {
+      confetti.innerHTML = "";
+      const emojis = ["🎉", "✨", "⭐", "🎁", "💫", "🌟"];
+      for (let i = 0; i < 20; i++) {
+        const s = document.createElement("span");
+        s.className = "shop-confetti-piece";
+        s.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+        s.style.left = (Math.random() * 100) + "%";
+        s.style.animationDelay = (Math.random() * 0.6) + "s";
+        s.style.animationDuration = (1.5 + Math.random() * 1) + "s";
+        s.style.fontSize = (14 + Math.random() * 14) + "px";
+        confetti.appendChild(s);
+      }
+    }
+
+    /* Wire equip button */
+    const eqBtn = $("shopModalEquip");
+    if (eqBtn) {
+      const newBtn = eqBtn.cloneNode(true);
+      eqBtn.parentNode.replaceChild(newBtn, eqBtn);
+      newBtn.addEventListener("click", async function() {
+        newBtn.disabled = true;
+        newBtn.textContent = "Đang trang bị…";
+        await equipBadge(_modalItemId, null);
+        closeModal();
+      });
+    }
+  }
+
+  function closeModal() {
+    const modal = $("shopModal");
+    if (!modal) return;
+    modal.classList.remove("show");
+    modal.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+    _modalItemId = null;
+  }
+
   /* ───── Sync ───── */
   async function sync() {
     if (S.loading) return;
@@ -404,15 +667,24 @@
       S.currentUser = (window.SRank && window.SRank.Auth && window.SRank.Auth.getCurrentUser)
         ? window.SRank.Auth.getCurrentUser()
         : null;
-      log("sync: user =", S.currentUser && S.currentUser.displayName);
 
-      const [items, cats] = await Promise.all([fetchItems(), fetchCategories()]);
+      const [items, cats, collection, equipped, balance] = await Promise.all([
+        fetchItems(),
+        fetchCategories(),
+        fetchCollection(),
+        fetchEquipped(),
+        fetchMyBalance()
+      ]);
       S.items = items;
       S.categories = cats;
-      await refreshBalance();
+      S.collection = collection;
+      S.equipped = equipped;
+      S.balance = balance;
+
       renderUserCard();
       renderFilters();
-      renderItems();
+      if (S.activeTab === "shop") renderItems();
+      else renderCollection();
     } finally {
       S.loading = false;
     }
@@ -445,6 +717,8 @@
   function closePage() {
     const page = $(PAGE_ID);
     if (!page) return;
+    /* Đóng modal nếu đang mở */
+    closeModal();
     page.classList.remove("show");
     page.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
@@ -473,7 +747,7 @@
       close: closePage,
       sync: sync,
       state: S,
-      _fetchMyBalance: fetchMyBalance
+      equip: equipBadge
     };
 
     window.addEventListener("displayNameUpdated", function() {
@@ -488,7 +762,7 @@
       if (S.pageOpen) sync();
     });
 
-    log("v1.3 ready ✓ (điểm từ chấm công)");
+    log("v1.5 ready ✓ (collection + badge)");
   }
 
   if (document.readyState === "loading") {
