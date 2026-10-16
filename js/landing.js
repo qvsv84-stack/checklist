@@ -1,19 +1,13 @@
 /* =========================================================
-   LANDING VIEW — v1.1
+   LANDING VIEW — v1.2
    ---------------------------------------------------------
-   v1.1 CHANGES (SHOP):
-   - _resolveCtaState() nhận diện action === 'shop' → 'shop'
-   - CTA "shop" không bị locked/aria-disabled (vì shop luôn mở)
-   - CTA "shop" có thể click để mở Shop
-   v1.0:
-   - Tách từ main.js (Task 2a)
-   - Podium 3 cột (top 1/2/3)
-   - Quần thần (courtiers) 2 cột
-   - Kicker (boss/mino/default)
-   - CTA state (login/checkin/locked/done)
-   - Lock note (khi khoá checklist)
-
-   Load order: SAU main.js
+   v1.2 FIX:
+   - Case 1 (build toàn bộ): dùng __getCtaInfo() thay vì
+     hard-code "locked" → user đã check thấy Shop dù locked
+   - Case 2 (update in-place): pointerEvents dựa vào CTA
+     locked (không phải checklist locked)
+   v1.1:
+   - action === 'shop'
    ========================================================= */
 (function(){
   "use strict";
@@ -21,17 +15,15 @@
 
   const S = window.SrankCore;
   if (!S) {
-    console.error('[LandingView] window.SrankCore chưa load — cần main.js load trước');
+    console.error('[LandingView] window.SrankCore chưa load');
     return;
   }
 
-  /* ───── Signature để skip re-render khi không đổi ───── */
   let _lastTop3Signature = '';
 
   const top3Signature = list =>
     list.map(p => `${p.name}|${p.time}|${S.getAvatarUrl(p.name)}`).join('::');
 
-  /* ───── CTA + Kicker — delegate global từ auth-ui.js ───── */
   function __getCtaRender() {
     try {
       if (typeof window.__getCtaInfo === 'function') {
@@ -52,7 +44,6 @@
     return { html: null, version: 'default', text: '🐱 DAILY TEAM HUB' };
   }
 
-  /* ⭐ v1.1: nhận diện CTA "shop" từ info.action */
   function _resolveCtaState(ci) {
     if (ci && ci.action === 'shop') return 'shop';
     if (ci && ci.locked) return 'locked';
@@ -62,15 +53,11 @@
     return 'checkin';
   }
 
-  /* ⭐ v1.1: CTA "shop" luôn clickable, không bị aria-disabled */
   function _isCtaLocked(ci, stateName) {
     if (stateName === 'shop') return false;
     return !!(ci && ci.locked);
   }
 
-  /* =========================================================
-     RENDER LANDING STATE — hàm chính
-     ========================================================= */
   function renderLandingState(forceFullReplay = false) {
     const els = S.els;
     if (!els.question) return;
@@ -82,7 +69,6 @@
     const locked = S.isChecklistLocked();
     els.question.classList.toggle('checklist-locked-home', locked);
 
-    /* ───── Build danh sách đã check (top 3 + quần thần) ───── */
     const checkedList = names.map((name, i) => ({
       name: String(name || '').trim(),
       time: String(times[i] || '').trim(),
@@ -121,7 +107,6 @@
         + `<div class="podium-slot podium-slot-3">${_t3 ? `<div class="advisor rank-3" data-name="${S.escapeHtml(_t3.name)}"><div class="advisor-crown">🌙</div><div class="advisor-avatar">${_av(_t3, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t3)}">${_nm(_t3)}</div><div class="advisor-time">${_t3.time}</div></div>` : ''}</div>`
         + `</div>`;
 
-      /* Highlight tên của chính mình (chỉ quần thần) */
       const _myRawName = (() => {
         try {
           const u = window.SRank?.Auth?.getCurrentUser?.();
@@ -155,30 +140,26 @@
       const _kv = _kr.version;
       els.question.classList.remove('play');
 
-      if (locked) {
-        els.question.innerHTML =
-          `<span class="landing-kicker" data-kicker-version="${_kv}">${_kh}</span>`
-          + `<span class="landing-title">CHECKLIST ĐẢO MÈO</span>`
-          + top3HTML
-          + `<span class="landing-cta locked" data-cta="locked" role="button" aria-disabled="true" tabindex="-1">Tạm khoá Checklist</span>`
-          + `<span class="landing-lock-note">Sau ${S.checklistLockTime} sẽ khoá Checklist nha mn 🥰</span>`;
-      } else {
-        const _ci = __getCtaRender();
-        const _ctaState = _resolveCtaState(_ci);
-        const _ctaLocked = _isCtaLocked(_ci, _ctaState);
-        els.question.innerHTML =
-          `<span class="landing-kicker" data-kicker-version="${_kv}">${_kh}</span>`
-          + `<span class="landing-title">CHECKLIST ĐẢO MÈO</span>`
-          + top3HTML
-          + `<span class="landing-cta${_ctaLocked ? ' locked' : ''}" data-cta="${_ctaState}" role="button" ${_ctaLocked ? 'aria-disabled="true" tabindex="-1"' : 'tabindex="0"'}>${_ci.text}</span>`;
-      }
+      /* ⭐ v1.2: Luôn dùng __getCtaInfo() — không hard-code locked */
+      const _ci = __getCtaRender();
+      const _ctaState = _resolveCtaState(_ci);
+      const _ctaLocked = _isCtaLocked(_ci, _ctaState);
+      const _ctaIsLockedState = (_ctaState === 'locked');
+
+      els.question.innerHTML =
+        `<span class="landing-kicker" data-kicker-version="${_kv}">${_kh}</span>`
+        + `<span class="landing-title">CHECKLIST ĐẢO MÈO</span>`
+        + top3HTML
+        + `<span class="landing-cta${_ctaLocked ? ' locked' : ''}" data-cta="${_ctaState}" role="button" ${_ctaLocked ? 'aria-disabled="true" tabindex="-1"' : 'tabindex="0"'}>${_ci.text}</span>`
+        + (_ctaIsLockedState ? `<span class="landing-lock-note">Sau ${S.checklistLockTime} sẽ khoá Checklist nha mn 🥰</span>` : '');
+
       _lastTop3Signature = newSig;
       els.question.style.removeProperty('--top3-base');
       void els.question.offsetWidth;
       els.question.classList.add('play');
       els.question.style.opacity = '1';
       els.question.style.transform = 'scale(1)';
-      els.question.style.pointerEvents = locked ? 'none' : 'auto';
+      els.question.style.pointerEvents = _ctaLocked ? 'none' : 'auto';
       return;
     }
 
@@ -210,78 +191,61 @@
       }
     }
 
-    if (locked) {
+    /* ⭐ v1.2: Luôn dùng CTA từ __getCtaInfo() — không dựa vào `locked` */
+    const _ci2 = __getCtaRender();
+    const _state2 = _resolveCtaState(_ci2);
+    const _locked2 = _isCtaLocked(_ci2, _state2);
+    const _isLockedState = (_state2 === 'locked');
+
+    if (_locked2) {
       if (cta && !cta.classList.contains('locked')) {
         cta.classList.add('locked');
         cta.setAttribute('aria-disabled', 'true');
         cta.setAttribute('tabindex', '-1');
-        cta.textContent = 'Tạm khoá Checklist';
       }
-      if (cta && cta.dataset.cta !== 'locked') cta.dataset.cta = 'locked';
+    } else {
+      if (cta && cta.classList.contains('locked')) {
+        cta.classList.remove('locked');
+        cta.removeAttribute('aria-disabled');
+        cta.setAttribute('tabindex', '0');
+      }
+    }
+
+    /* Lock note: chỉ hiện khi CTA đang ở trạng thái locked */
+    if (_isLockedState) {
       const noteTxt = `Sau ${S.checklistLockTime} sẽ khoá Checklist nha mn 🥰`;
       if (!lockNote) {
-        const note = document.createElement('span');
-        note.className = 'landing-lock-note';
-        note.textContent = noteTxt;
-        els.question.appendChild(note);
+        const n = document.createElement('span');
+        n.className = 'landing-lock-note';
+        n.textContent = noteTxt;
+        els.question.appendChild(n);
       } else if (lockNote.textContent !== noteTxt) {
         lockNote.textContent = noteTxt;
       }
     } else {
-      const _ci2 = __getCtaRender();
-      const _state2 = _resolveCtaState(_ci2);
-      const _locked2 = _isCtaLocked(_ci2, _state2);
+      lockNote?.remove();
+    }
 
-      if (_locked2) {
-        if (cta && !cta.classList.contains('locked')) {
-          cta.classList.add('locked');
-          cta.setAttribute('aria-disabled', 'true');
-          cta.setAttribute('tabindex', '-1');
-        }
-        const nTxt2 = `Sau ${S.checklistLockTime} sẽ khoá Checklist nha mn 🥰`;
-        if (!lockNote) {
-          const n = document.createElement('span');
-          n.className = 'landing-lock-note';
-          n.textContent = nTxt2;
-          els.question.appendChild(n);
-        } else if (lockNote.textContent !== nTxt2) {
-          lockNote.textContent = nTxt2;
-        }
-      } else {
-        if (cta && cta.classList.contains('locked')) {
-          cta.classList.remove('locked');
-          cta.removeAttribute('aria-disabled');
-          cta.setAttribute('tabindex', '0');
-        }
-        lockNote?.remove();
-      }
-      if (cta && cta.textContent !== _ci2.text) cta.textContent = _ci2.text;
-      if (cta) {
-        if (cta.dataset.cta !== _state2) cta.dataset.cta = _state2;
-      }
+    if (cta) {
+      if (cta.textContent !== _ci2.text) cta.textContent = _ci2.text;
+      if (cta.dataset.cta !== _state2) cta.dataset.cta = _state2;
     }
 
     els.question.style.opacity = '1';
     els.question.style.transform = 'scale(1)';
-    els.question.style.pointerEvents = locked ? 'none' : 'auto';
+    els.question.style.pointerEvents = _locked2 ? 'none' : 'auto';
   }
 
-  /* =========================================================
-     MAYBE RENDER — chỉ render khi checklist panel đóng
-     ========================================================= */
   function maybeRenderLanding() {
     if (S.els.checklistPanel?.classList.contains('show')) return;
     renderLandingState();
     S.onAfterRenderLanding?.();
   }
 
-  /* =========================================================
-     RESET HOME — clear panel, re-render landing
-     ========================================================= */
   function resetHome() {
     document.getElementById('q2answers')?.remove();
     window.__clV6?.close?.();
-    S.onResetHome?.();       // main.js hook: restart auto-sync + syncQuickTools
+    S.onResetHome?.();
     _lastTop3Signature = '';
     renderLandingState(true);
     if (S.els.hint) {
@@ -289,9 +253,6 @@
     }
   }
 
-  /* =========================================================
-     EXPORT + ĐĂNG KÝ CALLBACK
-     ========================================================= */
   window.LandingView = {
     render: renderLandingState,
     maybe: maybeRenderLanding,
@@ -300,12 +261,11 @@
     _resetSignature: () => { _lastTop3Signature = ''; }
   };
 
-  /* Đăng ký với SrankCore để main.js gọi qua callback */
   if (S.callbacks) {
     S.callbacks.renderLanding = renderLandingState;
     S.callbacks.maybeRenderLanding = maybeRenderLanding;
     S.callbacks.resetHome = resetHome;
   }
 
-  console.log('[LandingView] v1.1 ready ✓ (shop-aware)');
+  console.log('[LandingView] v1.2 ready ✓ (shop ưu tiên)');
 })();
