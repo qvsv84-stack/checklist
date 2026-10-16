@@ -1,18 +1,18 @@
 /* =========================================================
-   SHOP ADMIN — v1.2
+   SHOP ADMIN — v1.3
    ---------------------------------------------------------
-   v1.2 (điểm từ chấm công):
-   ✅ Thêm section "⚙ Cấu hình điểm" — chỉnh V/T/P/O/Q/X
-   ✅ Reset config về mặc định
-   ✅ Load config khi mở tab Shop
+   v1.3 FIX (không nhập được dấu âm):
+   ✅ Đổi inputmode="numeric" → "text" (bàn phím iOS đầy đủ,
+      có nút dấu trừ)
+   ✅ Thêm nút −/+ mỗi bên ô input (step ±5) — chỉnh nhanh
+   ✅ Layout grid: icon | label | − | input | + | unit
+   ✅ Sanitize giữ dấu âm đúng cách
+   v1.2:
+   - Section "⚙ Cấu hình điểm" trong tab Shop
    v1.1:
-   ✅ Wire events NGAY khi DOMContentLoaded
-   ✅ checkSetup() ping RPC + storage bucket
+   - Wire events sớm, check setup
    v1.0:
-   - Tab "Shop" — upload ảnh, tên, giá, phân loại
-   - List item + toggle / sửa / xoá
-
-   LOAD ORDER: SAU main.js + admin.js
+   - Tab Shop — upload ảnh, CRUD item
    ========================================================= */
 (function(){
   "use strict";
@@ -58,7 +58,6 @@
     el.textContent = m || "";
     el.classList.remove("error", "warn");
     if (isError) el.classList.add("error");
-    log("status:", isError ? "❌" : "ℹ", m);
   }
   function setConfigStatus(m, isError) {
     const el = $("adminShopConfigStatus");
@@ -68,7 +67,7 @@
     if (isError) el.classList.add("error");
   }
 
-  /* ───── Banner cảnh báo setup ───── */
+  /* ───── Banner setup ───── */
   function showSetupBanner(msg) {
     let banner = $("adminShopSetupBanner");
     if (!banner) {
@@ -92,7 +91,6 @@
     if (banner) banner.style.display = "none";
   }
 
-  /* ───── Setup check ───── */
   async function checkSetup() {
     if (_setupChecked) return _setupOk;
     _setupChecked = true;
@@ -111,43 +109,36 @@
           _setupOk = false;
           showSetupBanner(
             "❌ Chưa chạy SQL migration.\n\n" +
-            "Vào Supabase → SQL Editor → paste sql/shop_migration.sql → Run.\n\n" +
-            "Chi tiết: " + (res.error.message || "RPC không tồn tại")
+            "Vào Supabase → SQL Editor → paste sql/shop_migration.sql → Run."
           );
           return false;
         }
       }
     } catch (e) {
-      log("checkSetup RPC error:", e);
       _setupOk = false;
       showSetupBanner("❌ Không gọi được RPC. Kiểm tra SQL migration.");
       return false;
     }
 
-    // Test config RPC
     try {
       const cfgRes = await sb.rpc("rpc_admin_shop_get_config", { p_token: token });
       if (cfgRes.error) {
         const em = String(cfgRes.error.message || cfgRes.error).toLowerCase();
         if (em.includes("does not exist") || em.includes("not found") || em.includes("schema cache")) {
           _setupOk = false;
-          showSetupBanner(
-            "⚠️ RPC shop OK nhưng chưa có rpc_admin_shop_get_config.\n\n" +
-            "Chạy thêm file sql/shop_points_v2.sql."
-          );
+          showSetupBanner("⚠️ Chưa có rpc_admin_shop_get_config. Chạy sql/shop_points_v2.sql.");
           return false;
         }
       }
     } catch (e) { log("checkSetup config warn:", e); }
 
-    // Test bucket
     try {
       const listRes = await sb.storage.from(BUCKET).list("", { limit: 1 });
       if (listRes.error) {
         const em = String(listRes.error.message || listRes.error).toLowerCase();
         if (em.includes("not found") || em.includes("bucket")) {
           _setupOk = false;
-          showSetupBanner("⚠️ Storage bucket '" + BUCKET + "' chưa có. Chạy lại SQL migration.");
+          showSetupBanner("⚠️ Storage bucket '" + BUCKET + "' chưa có. Chạy lại SQL.");
           return false;
         }
       }
@@ -158,7 +149,7 @@
     return true;
   }
 
-  /* ───── Image upload ───── */
+  /* ───── Image ───── */
   function resizeImage(file, size) {
     return new Promise(function(resolve, reject) {
       const img = new Image();
@@ -203,15 +194,11 @@
       : (Date.now() + "-" + Math.random().toString(36).slice(2, 10));
     const path = uid + ".jpg";
 
-    log("uploading →", path);
     const upRes = await sb.storage.from(BUCKET).upload(path, blob, {
       upsert: false, contentType: "image/jpeg", cacheControl: "3600"
     });
-    if (upRes.error) {
-      const em = String(upRes.error.message || upRes.error);
-      log("upload error:", em);
-      throw new Error(em);
-    }
+    if (upRes.error) throw new Error(upRes.error.message || String(upRes.error));
+
     const urlRes = sb.storage.from(BUCKET).getPublicUrl(path);
     const publicUrl = urlRes && urlRes.data && urlRes.data.publicUrl;
     if (!publicUrl) throw new Error("Không lấy được URL ảnh");
@@ -230,7 +217,6 @@
     }
   }
 
-  /* ───── Category datalist ───── */
   function renderCategoryList() {
     const dl = $("adminShopCategoryList");
     if (!dl) return;
@@ -283,7 +269,6 @@
     });
   }
 
-  /* ───── Load items ───── */
   async function loadItems() {
     const token = adminToken();
     if (!token) return [];
@@ -309,7 +294,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     CONFIG ĐIỂM
+     CONFIG ĐIỂM — v1.3 (fix dấu âm)
      ═══════════════════════════════════════════════════════ */
   async function loadConfig() {
     const token = adminToken();
@@ -336,32 +321,74 @@
       box.innerHTML = '<div class="admin-list-empty">Chưa có config — chạy SQL shop_points_v2.sql</div>';
       return;
     }
-    // Sắp xếp thứ tự ưu tiên V, T, P, O, Q, X, U
     const order = ["V", "T", "P", "O", "Q", "X", "U"];
     const sorted = _config.slice().sort(function(a, b) {
       const ia = order.indexOf(a.status_key);
       const ib = order.indexOf(b.status_key);
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
     });
+
     box.innerHTML = sorted.map(function(c) {
       const k = c.status_key;
       const lbl = c.label || k;
       const iconMap = { V: "✓", T: "⚡", P: "🌴", O: "—", Q: "❓", X: "⚠️", U: "🥥" };
       const icon = iconMap[k] || "•";
-      const cls = (Number(c.points) < 0) ? "neg" : (Number(c.points) > 0 ? "pos" : "zero");
+      const pts = Number(c.points || 0);
+      const cls = pts < 0 ? "neg" : (pts > 0 ? "pos" : "zero");
+      /* ⭐ v1.3: inputmode="text" để bàn phím iOS có dấu trừ
+         + 2 nút −/+ để chỉnh nhanh không cần gõ dấu */
       return ''
         + '<div class="admin-shop-config-row">'
         +   '<span class="admin-shop-config-icon">' + icon + '</span>'
         +   '<span class="admin-shop-config-label">'
         +     '<b>' + escapeHtml(k) + '</b> · ' + escapeHtml(lbl)
         +   '</span>'
-        +   '<input class="admin-shop-config-input" type="text" inputmode="numeric"'
+        +   '<button class="admin-shop-config-step" data-status="' + escapeHtml(k)
+        +     '" data-step="-5" type="button" aria-label="Giảm 5">−</button>'
+        +   '<input class="admin-shop-config-input" type="text" inputmode="text"'
         +     ' data-status="' + escapeHtml(k) + '"'
-        +     ' value="' + Number(c.points || 0) + '"'
-        +     ' maxlength="5" placeholder="0">'
-        +   '<span class="admin-shop-config-unit ' + cls + '">điểm/ngày</span>'
+        +     ' value="' + pts + '"'
+        +     ' maxlength="5" placeholder="0"'
+        +     ' autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">'
+        +   '<button class="admin-shop-config-step" data-status="' + escapeHtml(k)
+        +     '" data-step="5" type="button" aria-label="Tăng 5">+</button>'
+        +   '<span class="admin-shop-config-unit ' + cls + '">/ngày</span>'
         + '</div>';
     }).join("");
+
+    /* Wire nút −/+ */
+    box.querySelectorAll(".admin-shop-config-step").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        const key = btn.dataset.status;
+        const step = parseInt(btn.dataset.step, 10) || 0;
+        const input = box.querySelector('.admin-shop-config-input[data-status="' + key + '"]');
+        if (!input) return;
+        let cur = parseInt(String(input.value || "0").replace(/[^\d\-]/g, ""), 10);
+        if (!Number.isFinite(cur)) cur = 0;
+        let next = cur + step;
+        if (next < -1000) next = -1000;
+        if (next > 1000) next = 1000;
+        input.value = String(next);
+        updateUnitColor(input);
+      });
+    });
+
+    /* Wire input thay đổi */
+    box.querySelectorAll(".admin-shop-config-input").forEach(function(input) {
+      input.addEventListener("input", function() { updateUnitColor(input); });
+    });
+  }
+
+  function updateUnitColor(input) {
+    const row = input.closest(".admin-shop-config-row");
+    if (!row) return;
+    const unit = row.querySelector(".admin-shop-config-unit");
+    if (!unit) return;
+    const v = parseInt(String(input.value || "0").replace(/[^\d\-]/g, ""), 10);
+    unit.classList.remove("pos", "neg", "zero");
+    if (!Number.isFinite(v) || v === 0) unit.classList.add("zero");
+    else if (v < 0) unit.classList.add("neg");
+    else unit.classList.add("pos");
   }
 
   async function saveConfig() {
@@ -383,8 +410,10 @@
     try {
       for (const input of inputs) {
         const key = String(input.dataset.status || "").trim();
-        const raw = String(input.value || "0").replace(/[^\d\-]/g, "");
-        const pts = parseInt(raw, 10);
+        /* ⭐ Sanitize: chỉ giữ số và dấu − ở đầu */
+        const raw = String(input.value || "0").trim();
+        const cleaned = raw.replace(/[^\d\-]/g, "").replace(/(?!^)-/g, "");
+        const pts = parseInt(cleaned || "0", 10);
         if (!key) continue;
         if (!Number.isFinite(pts)) { fail++; continue; }
         if (pts < -1000 || pts > 1000) {
@@ -447,7 +476,7 @@
     }
   }
 
-  /* ───── Create ───── */
+  /* ───── CRUD item ───── */
   async function createItem() {
     const token = adminToken();
     if (!token) return setStatus("Không có quyền admin", true);
@@ -502,7 +531,6 @@
     }
   }
 
-  /* ───── Edit / Toggle / Delete ───── */
   async function editItem(id) {
     const it = _items.find(function(x) { return String(x.id) === String(id); });
     if (!it) return;
@@ -600,17 +628,13 @@
     const cfgSaveBtn = $("adminShopConfigSaveBtn");
     const cfgResetBtn = $("adminShopConfigResetBtn");
 
-    if (!imgBtn || !imgInput) {
-      log("wireEvents: DOM chưa sẵn sàng");
-      return;
-    }
+    if (!imgBtn || !imgInput) return;
     _wired = true;
 
     imgBtn.addEventListener("click", function(e) {
       e.preventDefault(); e.stopPropagation();
       if (_uploading) return;
-      try { imgInput.click(); }
-      catch(err) { log("imgInput.click error:", err); }
+      try { imgInput.click(); } catch(err) { log("imgInput.click error:", err); }
     });
 
     imgInput.addEventListener("change", async function(e) {
@@ -643,7 +667,6 @@
     log("wireEvents ✓");
   }
 
-  /* ───── Render entry ───── */
   async function render() {
     if (!_wired) wireEvents();
 
@@ -657,17 +680,13 @@
     const box = $("adminShopRows");
     if (box) box.innerHTML = '<div class="admin-list-empty">Đang tải…</div>';
 
-    await Promise.all([
-      loadItems(),
-      loadConfig()
-    ]);
+    await Promise.all([loadItems(), loadConfig()]);
     renderCategoryList();
     renderItems();
     renderConfigForm();
     updatePreview();
   }
 
-  /* ───── Register ───── */
   if (S.callbacks) S.callbacks.renderAdminShop = render;
 
   window.ShopAdmin = {
@@ -684,5 +703,5 @@
   setTimeout(tryWire, 500);
   setTimeout(tryWire, 1500);
 
-  log("v1.2 ready ✓ (điểm từ chấm công)");
+  log("v1.3 ready ✓ (fix dấu âm + nút step)");
 })();
