@@ -204,10 +204,8 @@ body.menu-open { touch-action: none !important; overscroll-behavior: none !impor
 body.menu-open #menuOverlay { transform: none !important; }
 </style>
 
-<!-- ⭐ SHOP: block ctaHideDoneForce đã được XOÁ để hiện nút Shop thưởng -->
-
 <style id="neonCtaForce">
-/* ═══ NEON CTA — XANH LÁ TƯƠI (khớp theme app) ═══ */
+/* ═══ NEON CTA — XANH LÁ TƯƠI ═══ */
 html body #question .landing-cta[data-cta="login"],
 html body #question .landing-cta[data-cta="checkin"] {
   position: relative !important;
@@ -454,6 +452,18 @@ html body #question .landing-cta[data-cta="shop"]:active {
 
           <h2 class="admin-section-title" style="margin-top:24px">Danh sách vật phẩm</h2>
           <div id="adminShopRows" class="admin-list"></div>
+
+          <h2 class="admin-section-title" style="margin-top:24px">⚙ Cấu hình điểm</h2>
+          <div class="admin-note" style="margin-bottom:12px">
+            <span class="admin-note-icon">💡</span>
+            <span>Điểm quy đổi cho mỗi trạng thái chấm công. Áp dụng ngay cho tất cả user.</span>
+          </div>
+          <div id="adminShopConfigRows" class="admin-list"></div>
+          <div id="adminShopConfigStatus" class="admin-status"></div>
+          <div class="admin-actions">
+            <button id="adminShopConfigSaveBtn" type="button">💾 Lưu cấu hình</button>
+            <button id="adminShopConfigResetBtn" type="button" style="background:#6b7280;border-color:#6b7280;margin-left:8px">↺ Mặc định</button>
+          </div>
         </div>
       </div>
     </div>
@@ -575,7 +585,7 @@ html body #question .landing-cta[data-cta="shop"]:active {
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SCRIPT LOAD ORDER — KHÔNG THAY ĐỔI
+     SCRIPT LOAD ORDER
      ══════════════════════════════════════════════════════════════ -->
 <script src="js/config.js"></script>
 <script src="js/debug-menu.js"></script>
@@ -589,7 +599,7 @@ html body #question .landing-cta[data-cta="shop"]:active {
 <script src="js/display-name.js" defer></script>
 <script src="js/auth.js" defer></script>
 <script src="js/main.js" defer></script>
-<!-- ⬇️ View modules — load NGAY SAU main.js -->
+<!-- ⬇️ View modules -->
 <script src="js/landing.js" defer></script>
 <script src="js/admin.js" defer></script>
 <script src="js/checklist-view.js" defer></script>
