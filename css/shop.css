@@ -755,3 +755,113 @@
 .admin-shop-config-unit.pos { color: #4fa370; }
 .admin-shop-config-unit.neg { color: #dc2626; }
 .admin-shop-config-unit.zero { color: #b09070; }
+/* ═══════════════════════════════════════════════════════
+   EFFECT: FIRE PARTICLES — Khung lửa + hạt bay
+   ═══════════════════════════════════════════════════════ */
+
+/* Container wrapper khi equipped có effect */
+.avatar-effect-fire {
+  position: relative;
+}
+.avatar-effect-fire::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 69, 0, 0) 30%,
+    rgba(255, 69, 0, .85) 48%,
+    rgba(255, 140, 0, .7) 58%,
+    rgba(255, 215, 0, .5) 68%,
+    transparent 82%
+  );
+  filter: blur(5px);
+  animation: shopFireFlicker .7s ease-in-out infinite;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Hạt lửa bay lên */
+.shop-fire-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  overflow: visible;
+}
+.shop-fire-particles span {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff5c0, #ffd700 40%, #ff4500 100%);
+  box-shadow:
+    0 0 6px #ff8c00,
+    0 0 12px #ff4500,
+    0 0 18px rgba(255, 69, 0, .5);
+  opacity: 0;
+  animation: shopFireParticle 2s linear infinite;
+}
+.shop-fire-particles span:nth-child(1) { left: 15%; bottom: 10%; animation-delay: 0s; }
+.shop-fire-particles span:nth-child(2) { left: 30%; bottom: 5%; animation-delay: .3s; }
+.shop-fire-particles span:nth-child(3) { left: 50%; bottom: 0%; animation-delay: .6s; }
+.shop-fire-particles span:nth-child(4) { left: 70%; bottom: 5%; animation-delay: .9s; }
+.shop-fire-particles span:nth-child(5) { left: 85%; bottom: 10%; animation-delay: 1.2s; }
+.shop-fire-particles span:nth-child(6) { left: 25%; bottom: 20%; animation-delay: 1.5s; }
+.shop-fire-particles span:nth-child(7) { left: 75%; bottom: 20%; animation-delay: 1.8s; }
+
+@keyframes shopFireParticle {
+  0% {
+    transform: translateY(0) scale(0);
+    opacity: 0;
+  }
+  20% { opacity: 1; }
+  100% {
+    transform: translateY(-70px) scale(1.6);
+    opacity: 0;
+  }
+}
+@keyframes shopFireFlicker {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    opacity: .9;
+    filter: blur(5px) hue-rotate(0deg);
+  }
+  33% {
+    transform: scale(1.05) rotate(2deg);
+    opacity: 1;
+    filter: blur(6px) hue-rotate(10deg);
+  }
+  66% {
+    transform: scale(1.02) rotate(-2deg);
+    opacity: .85;
+    filter: blur(5px) hue-rotate(-5deg);
+  }
+}
+
+/* Admin: badge "Hệ thống" */
+.admin-shop-system-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #7c3aed, #4c1d95);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  margin-left: 6px;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+/* Nút xoá bị vô hiệu */
+.admin-row-btn.disabled-system {
+  background: #9ca3af !important;
+  color: #fff !important;
+  border-color: #9ca3af !important;
+  cursor: not-allowed !important;
+  opacity: .7 !important;
+}
