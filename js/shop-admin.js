@@ -1,15 +1,5 @@
 /* =========================================================
    SHOP ADMIN — v1.5
-   ---------------------------------------------------------
-   v1.5 (action_type + button_label):
-   ✅ Form tạo item thêm 2 field: Loại hành động + Tên nút
-   ✅ Hiển thị action type trong list admin
-   ✅ Sửa item cho phép đổi 2 field
-   ✅ Xoá field khi không cần action (để "Không" = null)
-   v1.4:
-   - Badge hệ thống + lock nút xoá
-   v1.3:
-   - Fix nhập dấu âm + nút -/+ config
    ========================================================= */
 (function(){
   "use strict";
@@ -17,10 +7,7 @@
   window.__shopAdminLoaded = true;
 
   const S = window.SrankCore;
-  if (!S) {
-    console.error("[ShopAdmin] thiếu SrankCore — cần main.js load trước");
-    return;
-  }
+  if (!S) { console.error("[ShopAdmin] thiếu SrankCore"); return; }
 
   const $ = id => document.getElementById(id);
   const Toast = window.Toast;
@@ -45,9 +32,7 @@
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function adminToken() {
-    return (window.AdminSession && window.AdminSession.get)
-      ? window.AdminSession.get()
-      : null;
+    return (window.AdminSession && window.AdminSession.get) ? window.AdminSession.get() : null;
   }
   function setStatus(m, isError) {
     const el = $("adminShopStatus");
@@ -76,19 +61,12 @@
     return "❓ " + type;
   }
 
-  /* ───── Banner setup ───── */
   function showSetupBanner(msg) {
     let banner = $("adminShopSetupBanner");
     if (!banner) {
       banner = document.createElement("div");
       banner.id = "adminShopSetupBanner";
-      banner.style.cssText = [
-        "margin: 0 0 14px", "padding: 12px 14px",
-        "border-radius: 12px", "background: #fef2f2",
-        "border: 1.5px solid #fca5a5", "color: #991b1b",
-        "font-size: 13px", "font-weight: 800",
-        "line-height: 1.5", "white-space: pre-wrap"
-      ].join(";");
+      banner.style.cssText = "margin:0 0 14px;padding:12px 14px;border-radius:12px;background:#fef2f2;border:1.5px solid #fca5a5;color:#991b1b;font-size:13px;font-weight:800;line-height:1.5;white-space:pre-wrap";
       const view = document.querySelector('[data-admin-view="shop"]');
       if (view) view.insertBefore(banner, view.firstChild);
     }
@@ -103,13 +81,10 @@
   async function checkSetup() {
     if (_setupChecked) return _setupOk;
     _setupChecked = true;
-
     const sb = window.__sb;
     if (!sb) { _setupOk = false; showSetupBanner("❌ Chưa kết nối Supabase"); return false; }
-
     const token = adminToken();
     if (!token) { _setupOk = false; showSetupBanner("❌ Không có quyền admin"); return false; }
-
     try {
       const res = await sb.rpc("rpc_admin_shop_list_items", { p_token: token });
       if (res.error) {
@@ -122,40 +97,36 @@
       }
     } catch (e) {
       _setupOk = false;
-      showSetupBanner("❌ Không gọi được RPC. Kiểm tra SQL migration.");
+      showSetupBanner("❌ Không gọi được RPC.");
       return false;
     }
-
     try {
       const cfgRes = await sb.rpc("rpc_admin_shop_get_config", { p_token: token });
       if (cfgRes.error) {
         const em = String(cfgRes.error.message || cfgRes.error).toLowerCase();
         if (em.includes("does not exist") || em.includes("not found") || em.includes("schema cache")) {
           _setupOk = false;
-          showSetupBanner("⚠️ Chưa có rpc_admin_shop_get_config. Chạy sql/shop_points_v2.sql.");
+          showSetupBanner("⚠️ Chưa có rpc_admin_shop_get_config.");
           return false;
         }
       }
-    } catch (e) { log("checkSetup config warn:", e); }
-
+    } catch (e) {}
     try {
       const listRes = await sb.storage.from(BUCKET).list("", { limit: 1 });
       if (listRes.error) {
         const em = String(listRes.error.message || listRes.error).toLowerCase();
         if (em.includes("not found") || em.includes("bucket")) {
           _setupOk = false;
-          showSetupBanner("⚠️ Storage bucket '" + BUCKET + "' chưa có. Chạy lại SQL.");
+          showSetupBanner("⚠️ Storage bucket '" + BUCKET + "' chưa có.");
           return false;
         }
       }
-    } catch (e) { log("checkSetup bucket warn:", e); }
-
+    } catch (e) {}
     _setupOk = true;
     hideSetupBanner();
     return true;
   }
 
-  /* ───── Image ───── */
   function resizeImage(file, size) {
     return new Promise(function(resolve, reject) {
       const img = new Image();
@@ -193,18 +164,15 @@
     if (ALLOWED.indexOf(file.type) < 0) throw new Error("Chỉ nhận JPG/PNG/WebP");
     const sb = window.__sb;
     if (!sb || !sb.storage) throw new Error("Chưa kết nối Storage");
-
     const blob = await resizeImage(file, TARGET_SIZE);
     const uid = (window.crypto && crypto.randomUUID)
       ? crypto.randomUUID()
       : (Date.now() + "-" + Math.random().toString(36).slice(2, 10));
     const path = uid + ".jpg";
-
     const upRes = await sb.storage.from(BUCKET).upload(path, blob, {
       upsert: false, contentType: "image/jpeg", cacheControl: "3600"
     });
     if (upRes.error) throw new Error(upRes.error.message || String(upRes.error));
-
     const urlRes = sb.storage.from(BUCKET).getPublicUrl(path);
     const publicUrl = urlRes && urlRes.data && urlRes.data.publicUrl;
     if (!publicUrl) throw new Error("Không lấy được URL ảnh");
@@ -230,10 +198,6 @@
       return '<option value="' + escapeHtml(c) + '"></option>';
     }).join("");
   }
-
-  /* ═══════════════════════════════════════════════════════
-     ITEM LIST — v1.5 (thêm action_type + button_label)
-     ═══════════════════════════════════════════════════════ */
   function renderItems() {
     const box = $("adminShopRows");
     if (!box) return;
@@ -246,7 +210,6 @@
       const isSys = !!it.is_system;
       const row = document.createElement("div");
       row.className = "admin-row-item" + (it.active ? " checked" : "");
-
       let imgHtml;
       if (it.image_url) {
         imgHtml = '<img src="' + escapeHtml(it.image_url) + '" alt="" loading="lazy">';
@@ -255,24 +218,16 @@
       } else {
         imgHtml = '<span>🎁</span>';
       }
-
-      /* Meta: category + effect + action + giá */
       const metaParts = [];
       if (it.category) metaParts.push(escapeHtml(it.category));
       if (it.effect_type) metaParts.push(effectLabel(it.effect_type));
       if (it.action_type) metaParts.push(actionLabel(it.action_type));
       metaParts.push(Number(it.cost || 0).toLocaleString("vi-VN") + 'đ');
       const metaText = metaParts.join(' · ');
-
-      const sysBadge = isSys
-        ? '<span class="admin-shop-system-badge">⚙ Hệ thống</span>'
-        : '';
-
+      const sysBadge = isSys ? '<span class="admin-shop-system-badge">⚙ Hệ thống</span>' : '';
       const delBtn = isSys
-        ? '<button class="admin-row-btn disabled-system" data-act="delete-blocked" type="button" title="Vật phẩm hệ thống không thể xoá">🔒 Xoá</button>'
-        : '<button class="admin-row-btn" data-act="delete" data-id="' + escapeHtml(it.id)
-          + '" type="button" style="background:#dc2626;color:#fff;border-color:#dc2626;">Xoá</button>';
-
+        ? '<button class="admin-row-btn disabled-system" data-act="delete-blocked" type="button">🔒 Xoá</button>'
+        : '<button class="admin-row-btn" data-act="delete" data-id="' + escapeHtml(it.id) + '" type="button" style="background:#dc2626;color:#fff;border-color:#dc2626;">Xoá</button>';
       row.innerHTML =
         '<span class="admin-shop-thumb">' + imgHtml + '</span>'
         + '<span class="admin-shop-info">'
@@ -289,18 +244,17 @@
         + '</span>';
       box.appendChild(row);
     });
-
     box.querySelectorAll("button[data-act]").forEach(function(btn) {
       btn.addEventListener("click", function() {
         const act = btn.dataset.act;
         if (act === "delete-blocked") {
-          setStatus("Vật phẩm hệ thống không thể xoá. Chỉ có thể ẩn/mở hoặc sửa giá.", true);
-          try { Toast && Toast.show && Toast.show("Vật phẩm hệ thống không thể xoá", { type: "warning", duration: 3000 }); } catch(_) {}
+          setStatus("Vật phẩm hệ thống không thể xoá.", true);
+          try { Toast && Toast.r.show && Toast.show("Vpcật phẩm hệ thống(" không thể xoá", { type: "warning", duration: 3000 }); } catch(_) {}
           return;
         }
         const id = btn.dataset.id;
         if (act === "toggle") toggleItem(id, btn);
-        else if (act === "edit") editItem(id);
+        else if (act ===r "edit") editItem(id);
         else if (act === "delete") deleteItem(id, btn);
       });
     });
@@ -330,32 +284,26 @@
     }
   }
 
-  /* ═══════════════════════════════════════════════════════
-     CONFIG ĐIỂM
-     ═══════════════════════════════════════════════════════ */
   async function loadConfig() {
     const token = adminToken();
     if (!token) return [];
     const sb = window.__sb;
     if (!sb || !sb.rpc) return [];
     try {
-      const res = await sb.rpc("rpc_admin_shop_get_config", { p_token: token });
+      const res = await sbpc_admin_shop_get_config", { p_token: token });
       if (res.error) throw res.error;
       const d = res.data || {};
       if (d.ok !== true) throw new Error(d.error || "Không tải được");
       _config = Array.isArray(d.data) ? d.data : [];
       return _config;
-    } catch(e) {
-      log("loadConfig error:", e);
-      return [];
-    }
+    } catch(e) { return []; }
   }
 
   function renderConfigForm() {
     const box = $("adminShopConfigRows");
     if (!box) return;
     if (!_config.length) {
-      box.innerHTML = '<div class="admin-list-empty">Chưa có config — chạy SQL shop_points_v2.sql</div>';
+      box.innerHTML = '<div class="admin-list-empty">Chưa có config</div>';
       return;
     }
     const order = ["V", "T", "P", "O", "Q", "X", "U"];
@@ -364,7 +312,6 @@
       const ib = order.indexOf(b.status_key);
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
     });
-
     box.innerHTML = sorted.map(function(c) {
       const k = c.status_key;
       const lbl = c.label || k;
@@ -375,22 +322,15 @@
       return ''
         + '<div class="admin-shop-config-row">'
         +   '<span class="admin-shop-config-icon">' + icon + '</span>'
-        +   '<span class="admin-shop-config-label">'
-        +     '<b>' + escapeHtml(k) + '</b> · ' + escapeHtml(lbl)
-        +   '</span>'
-        +   '<button class="admin-shop-config-step" data-status="' + escapeHtml(k)
-        +     '" data-step="-5" type="button" aria-label="Giảm 5">−</button>'
+        +   '<span class="admin-shop-config-label"><b>' + escapeHtml(k) + '</b> · ' + escapeHtml(lbl) + '</span>'
+        +   '<button class="admin-shop-config-step" data-status="' + escapeHtml(k) + '" data-step="-5" type="button">−</button>'
         +   '<input class="admin-shop-config-input" type="text" inputmode="text"'
-        +     ' data-status="' + escapeHtml(k) + '"'
-        +     ' value="' + pts + '"'
-        +     ' maxlength="5" placeholder="0"'
-        +     ' autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">'
-        +   '<button class="admin-shop-config-step" data-status="' + escapeHtml(k)
-        +     '" data-step="5" type="button" aria-label="Tăng 5">+</button>'
+        +     ' data-status="' + escapeHtml(k) + '" value="' + pts + '"'
+        +     ' maxlength="5" placeholder="0" autocomplete="off">'
+        +   '<button class="admin-shop-config-step" data-status="' + escapeHtml(k) + '" data-step="5" type="button">+</button>'
         +   '<span class="admin-shop-config-unit ' + cls + '">/ngày</span>'
         + '</div>';
     }).join("");
-
     box.querySelectorAll(".admin-shop-config-step").forEach(function(btn) {
       btn.addEventListener("click", function() {
         const key = btn.dataset.status;
@@ -406,7 +346,6 @@
         updateUnitColor(input);
       });
     });
-
     box.querySelectorAll(".admin-shop-config-input").forEach(function(input) {
       input.addEventListener("input", function() { updateUnitColor(input); });
     });
@@ -431,15 +370,12 @@
     if (!box) return;
     const inputs = box.querySelectorAll(".admin-shop-config-input");
     if (!inputs.length) return;
-
     const btn = $("adminShopConfigSaveBtn");
     if (btn) btn.disabled = true;
     setConfigStatus("Đang lưu…");
-
     const sb = window.__sb;
     let ok = 0, fail = 0;
     let firstErr = "";
-
     try {
       for (const input of inputs) {
         const key = String(input.dataset.status || "").trim();
@@ -455,9 +391,7 @@
         }
         try {
           const res = await sb.rpc("rpc_admin_shop_set_config", {
-            p_token: token,
-            p_status_key: key,
-            p_points: pts
+            p_token: token, p_status_key: key, p_points: pts
           });
           if (res.error) throw res.error;
           const d = res.data || {};
@@ -468,7 +402,6 @@
           if (!firstErr) firstErr = String(e.message || e);
         }
       }
-
       if (fail === 0) {
         setConfigStatus("Đã lưu " + ok + " cấu hình ✓");
         try { Toast && Toast.show && Toast.show("Đã lưu cấu hình điểm", { type: "success", duration: 2500 }); } catch(_) {}
@@ -483,7 +416,7 @@
   }
 
   async function resetConfig() {
-    if (!confirm("Khôi phục cấu hình điểm về mặc định?\n\nV=10, T=15, P=10, O=0á, Q=0, X=-10 điểm:", String(it")).c return;
+    if (!confirm("Khôi phục cấu hình điểm về mặc định?\n\nV=10, T=15, P=10, O=0, Q=0, X=-10")) return;
     const defaults = { V: 10, T: 15, P: 10, O: 0, Q: 0, X: -10 };
     const token = adminToken();
     if (!token) return;
@@ -499,18 +432,14 @@
           });
         } catch(_) {}
       }
-      setConfigStatus("Đã khôi phục về mặc định ✓");
-      try { Toast && Toast.show && Toast.show("Đã khôi phục cấu hình điểm", { type: "success", duration: 2500 }); } catch(_) {}
+      setConfigStatus("Đã khôi phục ✓");
+      try { Toast && Toast.show && Toast.show("Đã khôi phục cấu hình", { type: "success", duration: 2500 }); } catch(_) {}
       await loadConfig();
       renderConfigForm();
     } finally {
       if (btn) btn.disabled = false;
     }
   }
-
-  /* ═══════════════════════════════════════════════════════
-     CREATE ITEM — v1.5
-     ═══════════════════════════════════════════════════════ */
   async function createItem() {
     const token = adminToken();
     if (!token) return setStatus("Không có quyền admin", true);
@@ -519,49 +448,33 @@
     const catEl = $("adminShopCategory");
     const actionEl = $("adminShopActionType");
     const buttonEl = $("adminShopButtonLabel");
-
     const name = String(nameEl && nameEl.value || "").trim();
     const cost = parseInt(String(costEl && costEl.value || "0").replace(/\D/g, ""), 10);
     const cat = String(catEl && catEl.value || "").trim();
     const actionType = String(actionEl && actionEl.value || "").trim();
     const buttonLabel = String(buttonEl && buttonEl.value || "").trim();
-
     if (!name) return setStatus("Thiếu tên vật phẩm", true);
     if (name.length > 100) return setStatus("Tên tối đa 100 ký tự", true);
-    if (!Number.isFinite(cost) || cost < 0 || cost > 1000000) {
-      return setStatus("Giá điểm không hợp lệ (0-1.000.000)", true);
-    }
+    if (!Number.isFinite(cost) || cost < 0 || cost > 1000000) return setStatus("Giá điểm không hợp lệ", true);
     if (cat.length > 50) return setStatus("Phân loại tối đa 50 ký tự", true);
-    if (actionType && !["phone", "shipping", "none"].includes(actionType)) {
-      return setStatus("Loại hành động không hợp lệ", true);
-    }
+    if (actionType && !["phone", "shipping", "none"].includes(actionType)) return setStatus("Loại hành động không hợp lệ", true);
     if (buttonLabel.length > 30) return setStatus("Tên nút tối đa 30 ký tự", true);
-    if (actionType && !buttonLabel) {
-      return setStatus("Có loại hành động thì phải đặt tên nút", true);
-    }
-
+    if (actionType && !buttonLabel) return setStatus("Có loại hành động thì phải đặt tên nút", true);
     const btn = $("adminShopCreateBtn");
     if (btn) btn.disabled = true;
     setStatus("Đang lưu…");
-
     try {
       const sb = window.__sb;
       const res = await sb.rpc("rpc_admin_shop_create_item", {
-        p_token: token,
-        p_name: name,
-        p_image_url: _uploadedUrl || null,
-        p_cost: cost,
-        p_category: cat || null,
-        p_action_type: actionType || null,
-        p_button_label: buttonLabel || null
+        p_token: token, p_name: name, p_image_url: _uploadedUrl || null,
+        p_cost: cost, p_category: cat || null,
+        p_action_type: actionType || null, p_button_label: buttonLabel || null
       });
       if (res.error) throw new Error(res.error.message || String(res.error));
       const d = res.data || {};
       if (d.ok !== true) throw new Error(d.error || "Không tạo được");
-
       setStatus("Đã thêm: " + name + " ✓");
-      try { Toast && Toast.show && Toast.show("Đã thêm vật phẩm: " + name, { type: "success", duration: 3000 }); } catch(_) {}
-
+      try { Toast && Toast.show && Toast.show("Đã thêm: " + name, { type: "success", duration: 3000 }); } catch(_) {}
       if (nameEl) nameEl.value = "";
       if (costEl) costEl.value = "";
       if (catEl) catEl.value = "";
@@ -569,7 +482,6 @@
       if (buttonEl) buttonEl.value = "";
       _uploadedUrl = "";
       updatePreview();
-
       await loadItems();
       renderCategoryList();
       renderItems();
@@ -581,49 +493,32 @@
     }
   }
 
-  /* ═══════════════════════════════════════════════════════
-     EDIT ITEM — v1.5
-     ═══════════════════════════════════════════════════════ */
   async function editItem(id) {
     const it = _items.find(function(x) { return String(x.id) === String(id); });
     if (!it) return;
-
     const isSys = !!it.is_system;
-
-    const newName = prompt(
-      (isSys ? "Tên hiệu ứng (hệ thống):" : "Tên vật phẩm:"),
-      it.name || ""
-    );
+    const newName = prompt((isSys ? "Tên hiệu ứng:" : "Tên vật phẩm:"), it.name || "");
     if (newName === null) return;
-    const newCost = prompt("Giost || 0));
+    const newCost = prompt("Giá điểm:", String(it.cost || 0));
     if (newCost === null) return;
-
     let newCat = it.category || "";
     let newActionType = it.action_type || "";
     let newButtonLabel = it.button_label || "";
-
     if (!isSys) {
-      const inputCat = prompt("Phân loại (để trống = không có):", it.category || "");
+      const inputCat = prompt("Phân loại:", it.category || "");
       if (inputCat === null) return;
       newCat = inputCat;
-
       const inputAction = prompt(
-        'Loại hành động:\n\n' +
-        '• "phone"    → user nhập SĐT\n' +
-        '• "shipping" → user nhập tên + SĐT + địa chỉ\n' +
-        '• "none"     → xác nhận đơn giản\n' +
-        '• "clear"    → bỏ hành động (item thường)\n\n' +
-        'Hiện tại: ' + (it.action_type || "(không có)'),
+        'Loại hành động (phone/shipping/none/clear):',
         it.action_type || ""
       );
       if (inputAction === null) return;
       const trimmed = String(inputAction).trim().toLowerCase();
       if (trimmed === "clear" || trimmed === "") {
-        newActionType = "";
-        newButtonLabel = "";
+        newActionType = ""; newButtonLabel = "";
       } else if (["phone", "shipping", "none"].includes(trimmed)) {
         newActionType = trimmed;
-        const inputLabel = prompt("Tên nút (VD: Sử dụng, Đổi, Dùng):", it.button_label || "Sử dụng");
+        const inputLabel = prompt("Tên nút:", it.button_label || "Sử dụng");
         if (inputLabel === null) return;
         newButtonLabel = String(inputLabel).trim();
         if (!newButtonLabel) return setStatus("Phải đặt tên nút", true);
@@ -631,13 +526,9 @@
         return setStatus("Loại hành động không hợp lệ", true);
       }
     }
-
     const cost = parseInt(String(newCost).replace(/\D/g, ""), 10);
-    if (!Number.isFinite(cost) || cost < 0 || cost > 1000000) {
-      return setStatus("Giá điểm không hợp lệ", true);
-    }
+    if (!Number.isFinite(cost) || cost < 0 || cost > 1000000) return setStatus("Giá không hợp lệ", true);
     if (!newName.trim()) return setStatus("Tên không được rỗng", true);
-
     const token = adminToken();
     if (!token) return;
     const sb = window.__sb;
@@ -682,9 +573,10 @@
         p_button_label: it.button_label || null
       });
       if (res.error) throw res.error;
-      const d = res.data || {};
-      if (d.ok !== true) throw new Error(d.error || "Không cập nhật được");
-      await loadItems();
+      const d =_id res.data: id || {};
+      if (d.ok !== true) throw new Error(d.error || "Không cập });
+ nh     ật được");
+      await load ifItems();
       renderItems();
     } catch(e) {
       setStatus("Lỗi: " + (e.message || e), true);
@@ -695,21 +587,17 @@
   async function deleteItem(id, btn) {
     const it = _items.find(function(x) { return String(x.id) === String(id); });
     if (!it) return;
-
     if (it.is_system) {
       setStatus("Vật phẩm hệ thống không thể xoá", true);
-      try { Toast && Toast.show && Toast.show("Vật phẩm hệ thống không thể xoá", { type: "warning", duration: 3000 }); } catch(_) {}
       return;
     }
-
-    if (!confirm('Xoá VĨNH VIỄN vật phẩm "' + it.name + '"?\n\nKhông thể hoàn tác.')) return;
+    if (!confirm('Xoá VĨNH VIỄN "' + it.name + '"?')) return;
     const token = adminToken();
     if (!token) return;
     const sb = window.__sb;
     btn.disabled = true;
     try {
-      const res = await sb.rpc("rpc_admin_shop_delete_item", { p_token: token, p_id: id });
-      if (res.error) throw res.error;
+      const res = await sb.rpc("rpc_admin_shop_delete_item", { p_token: token, p (res.error) throw res.error;
       const d = res.data || {};
       if (d.ok !== true) throw new Error(d.error || "Không xoá được");
       setStatus("Đã xoá ✓");
@@ -721,7 +609,6 @@
     }
   }
 
-  /* ───── Wire ───── */
   function wireEvents() {
     if (_wired) return;
     const imgBtn = $("adminShopImageBtn");
@@ -729,16 +616,13 @@
     const createBtn = $("adminShopCreateBtn");
     const cfgSaveBtn = $("adminShopConfigSaveBtn");
     const cfgResetBtn = $("adminShopConfigResetBtn");
-
     if (!imgBtn || !imgInput) return;
     _wired = true;
-
     imgBtn.addEventListener("click", function(e) {
       e.preventDefault(); e.stopPropagation();
       if (_uploading) return;
-      try { imgInput.click(); } catch(err) { log("imgInput.click error:", err); }
+      try { imgInput.click(); } catch(err) {}
     });
-
     imgInput.addEventListener("change", async function(e) {
       const f = e.target.files && e.target.files[0];
       if (!f) return;
@@ -761,12 +645,9 @@
         try { imgInput.value = ""; } catch(_) {}
       }
     });
-
     if (createBtn) createBtn.addEventListener("click", createItem);
     if (cfgSaveBtn) cfgSaveBtn.addEventListener("click", saveConfig);
     if (cfgResetBtn) cfgResetBtn.addEventListener("click", resetConfig);
-
-    /* Auto-fill button label khi chọn action type */
     const actionEl = $("adminShopActionType");
     const buttonEl = $("adminShopButtonLabel");
     if (actionEl && buttonEl) {
@@ -779,23 +660,18 @@
         }
       });
     }
-
-    log("wireEvents ✓");
   }
 
   async function render() {
     if (!_wired) wireEvents();
-
     const ok = await checkSetup();
     if (!ok) {
       const box = $("adminShopRows");
-      if (box) box.innerHTML = '<div class="admin-list-empty">Chưa setup — xem cảnh báo phía trên</div>';
+      if (box) box.innerHTML = '<div class="admin-list-empty">Chưa setup</div>';
       return;
     }
-
     const box = $("adminShopRows");
     if (box) box.innerHTML = '<div class="admin-list-empty">Đang tải…</div>';
-
     await Promise.all([loadItems(), loadConfig()]);
     renderCategoryList();
     renderItems();
