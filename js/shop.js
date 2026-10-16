@@ -1,16 +1,11 @@
 /* =========================================================
-   SHOP VIEW — v1.2
+   SHOP VIEW — v1.3
    ---------------------------------------------------------
-   v1.2 FIX (điểm luôn = 0):
-   ✅ Balance đọc từ RPC rpc_shop_my_balance (server-side)
-      Server tự match display_name → score_audit.name
-   ✅ Không còn dùng scoreLeaderboard API (không tin name match)
-   ✅ Purchase cũng để server tự đọc balance (không tin client)
-   v1.1:
-   - resolveRawChecklistName + fallback chain
-   v1.0:
-   - List item, mua item, TYPE B
-
+   v1.3 (điểm từ chấm công):
+   ✅ Balance = điểm chấm công tháng - đã tiêu (server-side)
+   ✅ Hiển thị breakdown: làm/OT/phép/off/quên/X
+   ✅ Không dùng scoreLeaderboard nữa
+   ✅ Mua item theo TYPE Y (mỗi tháng mua lại được)
    LOAD ORDER: SAU main.js
    ========================================================= */
 (function(){
@@ -26,7 +21,7 @@
   const S = {
     items: [],
     categories: [],
-    balance: { points: 0, spent: 0, available: 0 },
+    balance: { points: 0, spent: 0, available: 0, detail: {} },
     currentUser: null,
     activeCategory: "",
     loading: false,
@@ -37,7 +32,6 @@
 
   const _avatarCache = new Map();
 
-  /* ───── Helpers ───── */
   function log(...a) { console.log("[Shop]", ...a); }
   function setStatus(m) {
     try {
@@ -79,6 +73,10 @@
     const d = new Date();
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
   }
+  function getMonthLabel() {
+    const d = new Date();
+    return "Tháng " + (d.getMonth() + 1) + "/" + d.getFullYear();
+  }
 
   /* ───── Ensure page ───── */
   function ensurePage() {
@@ -99,14 +97,28 @@
       </header>
       <div class="shop-body" id="shopBody">
         <div class="shop-user-card" id="shopUserCard">
-          <div class="shop-user-avatar" id="shopUserAvatar">?</div>
-          <div class="shop-user-info">
-            <div class="shop-user-name" id="shopUserName">Đang tải…</div>
-            <div class="shop-user-points-row">
-              <span class="shop-user-points" id="shopUserPoints">0đ</span>
-              <span class="shop-user-points-label">khả dụng</span>
+          <div class="shop-user-top">
+            <div class="shop-user-avatar" id="shopUserAvatar">?</div>
+            <div class="shop-user-info">
+              <div class="shop-user-name" id="shopUserName">Đang tải…</div>
+              <div class="shop-user-month" id="shopUserMonth"></div>
             </div>
           </div>
+          <div class="shop-user-points-row">
+            <div class="shop-points-cell">
+              <div class="shop-points-num shop-points-num-earn" id="shopPointsEarn">0đ</div>
+              <div class="shop-points-label">Kiếm được</div>
+            </div>
+            <div class="shop-points-cell">
+              <div class="shop-points-num shop-points-num-spent" id="shopPointsSpent">0đ</div>
+              <div class="shop-points-label">Đã tiêu</div>
+            </div>
+            <div class="shop-points-cell shop-points-cell-main">
+              <div class="shop-points-num shop-points-num-avail" id="shopPointsAvail">0đ</div>
+              <div class="shop-points-label">Khả dụng</div>
+            </div>
+          </div>
+          <div class="shop-points-detail" id="shopPointsDetail"></div>
         </div>
         <div class="shop-filters" id="shopFilters"></div>
         <div class="shop-grid" id="shopGrid"></div>
@@ -156,12 +168,11 @@
     } catch(_) { return []; }
   }
 
-  /* ⭐ v1.2: balance đọc từ server RPC — không tin client */
   async function fetchMyBalance() {
     const sb = window.__sb;
     if (!sb || !sb.rpc) {
       log("fetchMyBalance: không có Supabase");
-      return { points: 0, spent: 0, available: 0 };
+      return { points: 0, spent: 0, available: 0, detail: {} };
     }
     try {
       const monthKey = getMonthKey();
@@ -180,11 +191,12 @@
         spent: Number(b.spent) || 0,
         available: Number(b.available) || 0,
         display_name: b.display_name || "",
-        month_key: b.month_key || monthKey
+        month_key: b.month_key || monthKey,
+        detail: (b.detail && typeof b.detail === "object") ? b.detail : {}
       };
     } catch(e) {
       log("fetchMyBalance error:", e && e.message);
-      return { points: 0, spent: 0, available: 0 };
+      return { points: 0, spent: 0, available: 0, detail: {} };
     }
   }
 
@@ -199,20 +211,28 @@
   function renderUserCard() {
     const u = S.currentUser;
     const nameEl = $("shopUserName");
-    const ptsEl = $("shopUserPoints");
+    const monthEl = $("shopUserMonth");
     const avEl = $("shopUserAvatar");
-    if (!nameEl || !ptsEl || !avEl) return;
+    const earnEl = $("shopPointsEarn");
+    const spentEl = $("shopPointsSpent");
+    const availEl = $("shopPointsAvail");
+    const detailEl = $("shopPointsDetail");
+
+    if (!nameEl || !avEl) return;
 
     if (!u || !u.displayName) {
-      nameEl.textContent = "Chưa đăng nhập";
-      ptsEl.textContent = "0đ";
-      avEl.style.backgroundImage = "";
-      avEl.textContent = "?";
+      if (nameEl) nameEl.textContent = "Chưa đăng nhập";
+      if (avEl) { avEl.style.backgroundImage = ""; avEl.textContent = "?"; }
+      if (earnEl) earnEl.textContent = "0đ";
+      if (spentEl) spentEl.textContent = "0đ";
+      if (availEl) availEl.textContent = "0đ";
+      if (detailEl) detailEl.innerHTML = "";
       return;
     }
+
     const dn = displayName(u.displayName);
-    nameEl.textContent = dn;
-    ptsEl.textContent = formatPoints(S.balance.available);
+    if (nameEl) nameEl.textContent = dn;
+    if (monthEl) monthEl.textContent = getMonthLabel();
 
     const url = avatarUrl(u.displayName);
     if (url) {
@@ -221,6 +241,34 @@
     } else {
       avEl.style.backgroundImage = "";
       avEl.textContent = initialOf(dn);
+    }
+
+    if (earnEl) earnEl.textContent = formatPoints(S.balance.points);
+    if (spentEl) spentEl.textContent = formatPoints(S.balance.spent);
+    if (availEl) availEl.textContent = formatPoints(S.balance.available);
+
+    /* Breakdown detail */
+    if (detailEl) {
+      const d = S.balance.detail || {};
+      const order = [
+        ["V", "Đi làm", "✓"],
+        ["T", "OT", "⚡"],
+        ["P", "Phép", "🌴"],
+        ["O", "OFF", "—"],
+        ["Q", "Quên", "❓"],
+        ["X", "Không phép", "⚠️"]
+      ];
+      const parts = [];
+      order.forEach(function(item) {
+        const k = item[0], lbl = item[1], icon = item[2];
+        const cnt = Number(d[k]) || 0;
+        if (cnt > 0) {
+          const cls = k === "X" ? "shop-detail-x" : "shop-detail-ok";
+          parts.push('<span class="shop-detail-chip ' + cls + '">'
+            + icon + ' ' + cnt + ' ' + lbl + '</span>');
+        }
+      });
+      detailEl.innerHTML = parts.length ? parts.join("") : "";
     }
   }
 
@@ -329,7 +377,7 @@
     try {
       const res = await sb.rpc("rpc_shop_purchase", {
         p_item_id: item.id,
-        p_month_points: 0,   // server tự đọc, không tin client
+        p_month_points: 0,
         p_month_key: getMonthKey()
       });
       if (res.error) throw res.error;
@@ -404,7 +452,6 @@
     try { if (typeof window.syncQuickTools === "function") window.syncQuickTools(); } catch(_) {}
   }
 
-  /* ───── Auto refresh ───── */
   function startTimer() {
     if (S.timer) clearInterval(S.timer);
     S.timer = setInterval(function() {
@@ -413,7 +460,6 @@
     }, REFRESH_MS);
   }
 
-  /* ───── Boot ───── */
   function boot() {
     if (S.booted) return;
     S.booted = true;
@@ -442,7 +488,7 @@
       if (S.pageOpen) sync();
     });
 
-    log("v1.2 ready ✓ (balance server-side)");
+    log("v1.3 ready ✓ (điểm từ chấm công)");
   }
 
   if (document.readyState === "loading") {
