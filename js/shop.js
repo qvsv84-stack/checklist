@@ -3,8 +3,7 @@
    ---------------------------------------------------------
    v1.8:
    ✅ Bỏ badge tròn vàng — chỉ dùng effect (qua AvatarEffect)
-   ✅ Bỏ EFFECT_MAP + applyAvatarEffect nội bộ (đã có file riêng)
-   ✅ Dispatch event "shopEquippedChanged" khi equip để refresh
+   ✅ Dispatch event "shopEquippedChanged" khi equip
    v1.7:
    - Effect avatar trong shop
    v1.6:
@@ -90,7 +89,7 @@
     } catch(_) { return ""; }
   }
 
-  /* ───── Ensure page (bỏ badge tròn vàng) ───── */
+  /* ───── Ensure page ───── */
   function ensurePage() {
     let page = $(PAGE_ID);
     if (page) return page;
@@ -301,7 +300,6 @@
     } catch(_) { return null; }
   }
 
-  /* ───── Render user card — bỏ badge ───── */
   function renderUserCard() {
     const u = S.currentUser;
     const nameEl = $("shopUserName");
@@ -339,7 +337,6 @@
       avEl.textContent = initialOf(dn);
     }
 
-    /* ⭐ v1.8: effect chỉ apply qua AvatarEffect (không còn badge) */
     if (window.AvatarEffect && typeof window.AvatarEffect.apply === "function") {
       const effType = (S.equipped && S.equipped.effect_type) || null;
       try { window.AvatarEffect.apply(wrapEl, effType); } catch(_) {}
@@ -524,7 +521,6 @@
     });
   }
 
-  /* ───── Equip ───── */
   async function equipBadge(itemId, btn) {
     const sb = window.__sb;
     if (!sb || !sb.rpc) return;
@@ -537,7 +533,6 @@
       setStatus(itemId ? "Đã trang bị ⭐" : "Đã bỏ trang bị");
       try { Toast && Toast.show && Toast.show(itemId ? "Đã trang bị!" : "Đã bỏ trang bị", { type: "success", duration: 2000 }); } catch(_) {}
 
-      /* ⭐ v1.8: thông báo cho AvatarEffect refresh ở mọi nơi */
       try {
         window.dispatchEvent(new CustomEvent("shopEquippedChanged", {
           detail: { itemId: itemId }
@@ -551,7 +546,6 @@
     }
   }
 
-  /* ───── Purchase ───── */
   async function purchase(itemId, btn) {
     const item = S.items.find(function(i) { return String(i.id) === String(itemId); });
     if (!item) return;
@@ -593,7 +587,6 @@
     }
   }
 
-  /* ───── Success Modal ───── */
   let _modalItemId = null;
   function showSuccessModal(item) {
     const modal = $("shopModal");
@@ -662,7 +655,6 @@
     _modalItemId = null;
   }
 
-  /* ───── Sync ───── */
   async function sync() {
     if (S.loading) return;
     S.loading = true;
@@ -692,7 +684,6 @@
     }
   }
 
-  /* ───── Open / Close ───── */
   function openPage() {
     const page = ensurePage();
     if (!page) return;
@@ -757,7 +748,7 @@
     window.addEventListener("checkinDone", function() {
       if (S.pageOpen) sync();
     });
-    log("v1.8 ready ✓ (no badge, effect via AvatarEffect)");
+    log("v1.8 ready ✓");
   }
 
   if (document.readyState === "loading") {
