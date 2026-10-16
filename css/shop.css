@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════
-   SHOP THƯỞNG — Styles v1.3
+   SHOP THƯỞNG — Styles v1.4
    ═══════════════════════════════════════════════════════ */
 
 #shopPage {
@@ -104,6 +104,9 @@
   box-shadow: 0 3px 10px -4px rgba(160,110,30,.3);
   background-size: cover;
   background-position: center;
+  /* ⭐ Fix: tạo stacking context riêng cho avatar — đè lên glow */
+  position: relative;
+  z-index: 2;
 }
 .shop-user-info {
   flex: 1; min-width: 0;
@@ -768,15 +771,19 @@
 
 /* ═══════════════════════════════════════════════════════════════
    AVATAR EFFECT — FIRE + PARTICLES
-   Copy 100% từ demo gốc (Style 4)
+   Copy 100% từ demo gốc (Style 4) + fix z-index
    ═══════════════════════════════════════════════════════════════ */
 
-/* Container wrap avatar — JS add class này */
+/* Container wrap avatar — JS add class này.
+   z-index: 1 tạo stacking context riêng để:
+   - ::before (glow, z-index -1) nằm DƯỚI mọi con
+   - .avatar-fx-particles (z-index 2) nằm TRÊN mọi con */
 .avatar-effect-fire {
   position: relative;
+  z-index: 1;
 }
 
-/* ⭐ Glow — tương đương .fire-particles-base::before trong demo */
+/* ⭐ Glow — z-index -1 để KHÔNG đè lên ảnh avatar */
 .avatar-effect-fire::before {
   content: '';
   position: absolute;
@@ -791,18 +798,20 @@
   );
   filter: blur(5px);
   animation: fireFlicker1 .7s ease-in-out infinite;
-  z-index: 1;
+  z-index: -1;
+  pointer-events: none;
 }
 
-/* ⭐ Particles container — tương đương .fire-particles trong demo */
+/* Particles container */
 .avatar-fx-particles {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 3;
+  z-index: 2;
+  overflow: visible;
 }
 
-/* ⭐ Particles — tương đương .fire-particles span trong demo */
+/* Particles — giống demo */
 .avatar-fx-particles span {
   position: absolute;
   width: 4px;
@@ -821,7 +830,7 @@
 .avatar-fx-particles span:nth-child(6) { left: 25%; bottom: 20%; animation-delay: 1.5s; }
 .avatar-fx-particles span:nth-child(7) { left: 75%; bottom: 20%; animation-delay: 1.8s; }
 
-/* ⭐ Keyframes — copy 100% từ demo */
+/* Keyframes — copy 100% từ demo */
 @keyframes fireParticle {
   0% {
     transform: translateY(0) scale(0);
@@ -853,8 +862,7 @@
   }
 }
 
-/* ═══ Biến thể nhỏ — wrap < 50px (courtier, clv6-av, menu) ═══
-   Tỉ lệ thu nhỏ ~40% so với gốc, giữ đúng tỉ lệ */
+/* ═══ Biến thể nhỏ — wrap < 50px (courtier, clv6-av, menu) ═══ */
 .avatar-effect-fire.fx-sm::before {
   inset: -3px;
   filter: blur(2px);
