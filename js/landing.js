@@ -1,16 +1,17 @@
 /* =========================================================
-   LANDING VIEW — v1.0
+   LANDING VIEW — v1.1
    ---------------------------------------------------------
-   Tách từ main.js (Task 2a).
-   Chịu trách nhiệm render trang chủ:
-     - Podium 3 cột (top 1/2/3)
-     - Quần thần (courtiers) 2 cột
-     - Kicker (boss/mino/default)
-     - CTA state (login/checkin/locked/done)
-     - Lock note (khi khoá checklist)
-
-   Không sở hữu state gốc — đọc từ window.SrankCore.
-   Đăng ký callback vào SrankCore.callbacks.renderLanding.
+   v1.1 CHANGES (SHOP):
+   - _resolveCtaState() nhận diện action === 'shop' → 'shop'
+   - CTA "shop" không bị locked/aria-disabled (vì shop luôn mở)
+   - CTA "shop" có thể click để mở Shop
+   v1.0:
+   - Tách từ main.js (Task 2a)
+   - Podium 3 cột (top 1/2/3)
+   - Quần thần (courtiers) 2 cột
+   - Kicker (boss/mino/default)
+   - CTA state (login/checkin/locked/done)
+   - Lock note (khi khoá checklist)
 
    Load order: SAU main.js
    ========================================================= */
@@ -51,12 +52,20 @@
     return { html: null, version: 'default', text: '🐱 DAILY TEAM HUB' };
   }
 
+  /* ⭐ v1.1: nhận diện CTA "shop" từ info.action */
   function _resolveCtaState(ci) {
+    if (ci && ci.action === 'shop') return 'shop';
     if (ci && ci.locked) return 'locked';
     const txt = String(ci && ci.text || '');
     if (/đăng nhập/i.test(txt)) return 'login';
     if (/đã chấm công/i.test(txt)) return 'done';
     return 'checkin';
+  }
+
+  /* ⭐ v1.1: CTA "shop" luôn clickable, không bị aria-disabled */
+  function _isCtaLocked(ci, stateName) {
+    if (stateName === 'shop') return false;
+    return !!(ci && ci.locked);
   }
 
   /* =========================================================
@@ -156,11 +165,12 @@
       } else {
         const _ci = __getCtaRender();
         const _ctaState = _resolveCtaState(_ci);
+        const _ctaLocked = _isCtaLocked(_ci, _ctaState);
         els.question.innerHTML =
           `<span class="landing-kicker" data-kicker-version="${_kv}">${_kh}</span>`
           + `<span class="landing-title">CHECKLIST ĐẢO MÈO</span>`
           + top3HTML
-          + `<span class="landing-cta${_ci.locked ? ' locked' : ''}" data-cta="${_ctaState}" role="button" ${_ci.locked ? 'aria-disabled="true" tabindex="-1"' : 'tabindex="0"'}>${_ci.text}</span>`;
+          + `<span class="landing-cta${_ctaLocked ? ' locked' : ''}" data-cta="${_ctaState}" role="button" ${_ctaLocked ? 'aria-disabled="true" tabindex="-1"' : 'tabindex="0"'}>${_ci.text}</span>`;
       }
       _lastTop3Signature = newSig;
       els.question.style.removeProperty('--top3-base');
@@ -219,7 +229,10 @@
       }
     } else {
       const _ci2 = __getCtaRender();
-      if (_ci2.locked) {
+      const _state2 = _resolveCtaState(_ci2);
+      const _locked2 = _isCtaLocked(_ci2, _state2);
+
+      if (_locked2) {
         if (cta && !cta.classList.contains('locked')) {
           cta.classList.add('locked');
           cta.setAttribute('aria-disabled', 'true');
@@ -244,8 +257,7 @@
       }
       if (cta && cta.textContent !== _ci2.text) cta.textContent = _ci2.text;
       if (cta) {
-        const _newState = _resolveCtaState(_ci2);
-        if (cta.dataset.cta !== _newState) cta.dataset.cta = _newState;
+        if (cta.dataset.cta !== _state2) cta.dataset.cta = _state2;
       }
     }
 
@@ -295,5 +307,5 @@
     S.callbacks.resetHome = resetHome;
   }
 
-  console.log('[LandingView] v1.0 ready ✓');
+  console.log('[LandingView] v1.1 ready ✓ (shop-aware)');
 })();
