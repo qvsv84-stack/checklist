@@ -1,15 +1,19 @@
 /* =========================================================
-   SHOP VIEW — v1.8
+   SHOP VIEW — v1.9
    ---------------------------------------------------------
+   v1.9 (yêu cầu đổi thưởng):
+   ✅ Nút trong Bộ sưu tập theo button_label admin đặt
+   ✅ Bấm nút → form động theo action_type:
+        • phone    → nhập SĐT
+        • shipping → Tên + SĐT + Địa chỉ + Ghi chú
+        • none     → confirm đơn giản
+   ✅ Submit → RPC rpc_shop_submit_request
+   ✅ Status: pending → "⏳ Chờ duyệt"
+             approved → "✅ Thành công" + note admin
+             rejected → "❌ Từ chối" + note admin + nút "Thử lại"
+   ✅ Purchase bị refund → badge "💰 Đã hoàn điểm"
    v1.8:
-   ✅ Bỏ badge tròn vàng — chỉ dùng effect (qua AvatarEffect)
-   ✅ Dispatch event "shopEquippedChanged" khi equip
-   v1.7:
-   - Effect avatar trong shop
-   v1.6:
-   - Fix tab display
-   v1.5:
-   - Modal + Bộ sưu tập
+   - Bỏ badge tròn vàng — dùng effect qua AvatarEffect
    ========================================================= */
 (function(){
   "use strict";
@@ -89,7 +93,9 @@
     } catch(_) { return ""; }
   }
 
-  /* ───── Ensure page ───── */
+  /* ═══════════════════════════════════════════════════════
+     ENSURE PAGE
+     ═══════════════════════════════════════════════════════ */
   function ensurePage() {
     let page = $(PAGE_ID);
     if (page) return page;
@@ -154,6 +160,7 @@
         </div>
       </div>
 
+      <!-- Modal mua thành công -->
       <div class="shop-modal" id="shopModal" aria-hidden="true">
         <div class="shop-modal-backdrop"></div>
         <div class="shop-modal-panel" role="dialog" aria-modal="true">
@@ -175,6 +182,27 @@
           </div>
         </div>
       </div>
+
+      <!-- Modal gửi yêu cầu đổi thưởng -->
+      <div class="shop-modal" id="shopRequestModal" aria-hidden="true">
+        <div class="shop-modal-backdrop"></div>
+        <div class="shop-request-panel" role="dialog" aria-modal="true">
+          <div class="shop-request-head">
+            <div class="shop-request-title" id="shopRequestTitle">Gửi yêu cầu</div>
+            <button class="shop-request-close" id="shopRequestClose" type="button" aria-label="Đóng">×</button>
+          </div>
+          <div class="shop-request-item" id="shopRequestItemInfo"></div>
+          <div class="shop-request-form" id="shopRequestForm"></div>
+          <div class="shop-request-actions">
+            <button class="shop-modal-btn shop-modal-btn-primary" id="shopRequestSubmit" type="button">
+              Gửi yêu cầu
+            </button>
+            <button class="shop-modal-btn shop-modal-btn-ghost" id="shopRequestCancel" type="button">
+              Hủy
+            </button>
+          </div>
+        </div>
+      </div>
     `;
     document.body.appendChild(page);
 
@@ -192,7 +220,13 @@
       });
     });
     page.querySelector("#shopModalClose").addEventListener("click", closeModal);
-    page.querySelector(".shop-modal-backdrop").addEventListener("click", closeModal);
+    page.querySelector("#shopModal .shop-modal-backdrop").addEventListener("click", closeModal);
+
+    /* Request modal */
+    page.querySelector("#shopRequestClose").addEventListener("click", closeRequestModal);
+    page.querySelector("#shopRequestCancel").addEventListener("click", closeRequestModal);
+    page.querySelector("#shopRequestModal .shop-modal-backdrop").addEventListener("click", closeRequestModal);
+    page.querySelector("#shopRequestSubmit").addEventListener("click", submitRequest);
 
     log("Page created ✓");
     return page;
@@ -221,7 +255,9 @@
     }
   }
 
-  /* ───── Data ───── */
+  /* ═══════════════════════════════════════════════════════
+     DATA
+     ═══════════════════════════════════════════════════════ */
   async function fetchItems() {
     const sb = window.__sb;
     if (!sb || !sb.rpc) return [];
@@ -300,6 +336,9 @@
     } catch(_) { return null; }
   }
 
+  /* ═══════════════════════════════════════════════════════
+     RENDER USER CARD
+     ═══════════════════════════════════════════════════════ */
   function renderUserCard() {
     const u = S.currentUser;
     const nameEl = $("shopUserName");
@@ -378,6 +417,9 @@
     }
   }
 
+  /* ═══════════════════════════════════════════════════════
+     RENDER FILTERS / ITEMS
+     ═══════════════════════════════════════════════════════ */
   function renderFilters() {
     const box = $("shopFilters");
     if (!box) return;
@@ -465,6 +507,9 @@
     });
   }
 
+  /* ═══════════════════════════════════════════════════════
+     RENDER COLLECTION — v1.9 (thêm request status)
+     ═══════════════════════════════════════════════════════ */
   function renderCollection() {
     const grid = $("shopCollectionGrid");
     const countEl = $("shopCollectionCount");
@@ -483,7 +528,8 @@
     grid.innerHTML = "";
     S.collection.forEach(function(it) {
       const el = document.createElement("div");
-      el.className = "shop-collection-item" + (it.is_equipped ? " equipped" : "");
+      el.className = "shop-collection-item";
+      if (it.is_equipped) el.classList.add("equipped");
 
       let imgHtml;
       if (it.item_image_url) {
@@ -496,8 +542,9 @@
         imgHtml = '<span class="shop-collection-img-fallback show">🎁</span>';
       }
 
-      const eqBtnText = it.is_equipped ? "✓ Đang dùng" : "Trang bị";
-      const eqBtnClass = it.is_equipped ? "equipped" : "";
+      /* ⭐ Build action area */
+      const actionHtml = buildCollectionAction(it);
+
       el.innerHTML =
         '<div class="shop-collection-img">' + imgHtml
         + (it.is_equipped ? '<div class="shop-collection-equipped-mark">⭐</div>' : '')
@@ -506,12 +553,12 @@
         +   '<div class="shop-collection-name">' + escapeHtml(it.item_name || "") + '</div>'
         +   '<div class="shop-collection-date">Đổi ngày ' + fmtDate(it.purchased_at) + '</div>'
         + '</div>'
-        + '<button class="shop-collection-btn ' + eqBtnClass + '" data-item-id="' + escapeHtml(it.item_id) + '" type="button">'
-        +   eqBtnText
-        + '</button>';
+        + actionHtml;
       grid.appendChild(el);
     });
-    grid.querySelectorAll(".shop-collection-btn").forEach(function(btn) {
+
+    /* Wire buttons */
+    grid.querySelectorAll('[data-action="equip"]').forEach(function(btn) {
       btn.addEventListener("click", function() {
         const id = btn.dataset.itemId;
         const isEquipped = btn.classList.contains("equipped");
@@ -519,8 +566,100 @@
         else equipBadge(id, btn);
       });
     });
+    grid.querySelectorAll('[data-action="request"]').forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        const purchaseId = btn.dataset.purchaseId;
+        const actionType = btn.dataset.actionType;
+        const itemName = btn.dataset.itemName || "";
+        openRequestModal(purchaseId, actionType, itemName);
+      });
+    });
   }
 
+  function buildCollectionAction(it) {
+    const isRefunded = !!it.is_refunded;
+    const hasEffect = !!it.effect_type;
+    const hasAction = !!it.action_type;
+
+    /* 1. Đã hoàn điểm */
+    if (isRefunded) {
+      return '<div class="shop-collection-action">'
+        + '<div class="shop-collection-badge refunded">💰 Đã hoàn điểm</div>'
+        + '</div>';
+    }
+
+    /* 2. Effect item → trang bị */
+    if (hasEffect) {
+      const eqBtnText = it.is_equipped ? "✓ Đang dùng" : "Trang bị";
+      const eqBtnClass = it.is_equipped ? "equipped" : "";
+      return '<div class="shop-collection-action">'
+        + '<button class="shop-collection-btn ' + eqBtnClass
+        + '" data-action="equip" data-item-id="' + escapeHtml(it.item_id) + '" type="button">'
+        + eqBtnText
+        + '</button>'
+        + '</div>';
+    }
+
+    /* 3. Item có action_type → theo request status */
+    if (hasAction) {
+      const req = it.request_id ? {
+        id: it.request_id,
+        status: it.request_status,
+        note: it.request_admin_note,
+        created_at: it.request_created_at,
+        reviewed_at: it.request_reviewed_at
+      } : null;
+
+      if (req) {
+        if (req.status === "pending") {
+          return '<div class="shop-collection-action">'
+            + '<div class="shop-collection-badge pending">⏳ Chờ duyệt</div>'
+            + '<div class="shop-collection-note-sub">Gửi lúc ' + fmtDate(req.created_at) + '</div>'
+            + '</div>';
+        }
+        if (req.status === "approved") {
+          let h = '<div class="shop-collection-action">'
+            + '<div class="shop-collection-badge approved">✅ Thành công</div>';
+          if (req.note) h += '<div class="shop-collection-note">' + escapeHtml(req.note) + '</div>';
+          h += '</div>';
+          return h;
+        }
+        if (req.status === "rejected") {
+          let h = '<div class="shop-collection-action">'
+            + '<div class="shop-collection-badge rejected">❌ Bị từ chối</div>';
+          if (req.note) h += '<div class="shop-collection-note">' + escapeHtml(req.note) + '</div>';
+          h += '<button class="shop-collection-btn retry"'
+            + ' data-action="request"'
+            + ' data-purchase-id="' + escapeHtml(it.purchase_id) + '"'
+            + ' data-action-type="' + escapeHtml(it.action_type) + '"'
+            + ' data-item-name="' + escapeHtml(it.item_name || "") + '"'
+            + ' type="button">Thử lại</button>'
+            + '</div>';
+          return h;
+        }
+      }
+
+      /* Chưa gửi request → nút theo button_label */
+      const label = it.button_label || "Sử dụng";
+      return '<div class="shop-collection-action">'
+        + '<button class="shop-collection-btn"'
+        + ' data-action="request"'
+        + ' data-purchase-id="' + escapeHtml(it.purchase_id) + '"'
+        + ' data-action-type="' + escapeHtml(it.action_type) + '"'
+        + ' data-item-name="' + escapeHtml(it.item_name || "") + '"'
+        + ' type="button">' + escapeHtml(label) + '</button>'
+        + '</div>';
+    }
+
+    /* 4. Item thường, không effect, không action */
+    return '<div class="shop-collection-action">'
+      + '<div class="shop-collection-badge">✓ Đã đổi</div>'
+      + '</div>';
+  }
+
+  /* ═══════════════════════════════════════════════════════
+     EQUIP
+     ═══════════════════════════════════════════════════════ */
   async function equipBadge(itemId, btn) {
     const sb = window.__sb;
     if (!sb || !sb.rpc) return;
@@ -546,6 +685,9 @@
     }
   }
 
+  /* ═══════════════════════════════════════════════════════
+     PURCHASE
+     ═══════════════════════════════════════════════════════ */
   async function purchase(itemId, btn) {
     const item = S.items.find(function(i) { return String(i.id) === String(itemId); });
     if (!item) return;
@@ -587,6 +729,9 @@
     }
   }
 
+  /* ═══════════════════════════════════════════════════════
+     SUCCESS MODAL
+     ═══════════════════════════════════════════════════════ */
   let _modalItemId = null;
   function showSuccessModal(item) {
     const modal = $("shopModal");
@@ -596,6 +741,7 @@
     const imgEl = $("shopModalItemImg");
     const nameEl = $("shopModalItemName");
     const costEl = $("shopModalItemCost");
+    const eqBtn = $("shopModalEquip");
 
     if (imgEl) {
       if (item.image_url) {
@@ -611,6 +757,38 @@
     }
     if (nameEl) nameEl.textContent = item.name || "";
     if (costEl) costEl.textContent = "−" + formatPoints(item.cost);
+
+    /* Nút primary: nếu effect → "Trang bị ngay", nếu action → "Dùng ngay", else → ẩn */
+    if (eqBtn) {
+      const isEffect = !!item.effect_type;
+      const hasAction = !!item.action_type;
+      if (isEffect) {
+        eqBtn.style.display = "";
+        eqBtn.textContent = "⭐ Trang bị ngay";
+        const newBtn = eqBtn.cloneNode(true);
+        eqBtn.parentNode.replaceChild(newBtn, eqBtn);
+        newBtn.addEventListener("click", async function() {
+          newBtn.disabled = true;
+          newBtn.textContent = "Đang trang bị…";
+          await equipBadge(_modalItemId, null);
+          closeModal();
+          setTab("collection");
+        });
+      } else if (hasAction) {
+        eqBtn.style.display = "";
+        const label = item.button_label || "Sử dụng";
+        eqBtn.textContent = "🎁 " + label + " ngay";
+        const newBtn = eqBtn.cloneNode(true);
+        eqBtn.parentNode.replaceChild(newBtn, eqBtn);
+        newBtn.addEventListener("click", function() {
+          closeModal();
+          setTab("collection");
+          setTimeout(function() { sync(); }, 200);
+        });
+      } else {
+        eqBtn.style.display = "none";
+      }
+    }
 
     modal.classList.add("show");
     modal.setAttribute("aria-hidden", "false");
@@ -631,19 +809,6 @@
         confetti.appendChild(s);
       }
     }
-
-    const eqBtn = $("shopModalEquip");
-    if (eqBtn) {
-      const newBtn = eqBtn.cloneNode(true);
-      eqBtn.parentNode.replaceChild(newBtn, eqBtn);
-      newBtn.addEventListener("click", async function() {
-        newBtn.disabled = true;
-        newBtn.textContent = "Đang trang bị…";
-        await equipBadge(_modalItemId, null);
-        closeModal();
-        setTab("collection");
-      });
-    }
   }
 
   function closeModal() {
@@ -655,6 +820,164 @@
     _modalItemId = null;
   }
 
+  /* ═══════════════════════════════════════════════════════
+     REQUEST MODAL — v1.9
+     ═══════════════════════════════════════════════════════ */
+  let _reqPurchaseId = null;
+  let _reqActionType = null;
+
+  function openRequestModal(purchaseId, actionType, itemName) {
+    const modal = $("shopRequestModal");
+    if (!modal) return;
+
+    _reqPurchaseId = purchaseId;
+    _reqActionType = actionType;
+
+    /* Title + item info */
+    const titleEl = $("shopRequestTitle");
+    const infoEl = $("shopRequestItemInfo");
+    const formEl = $("shopRequestForm");
+    const submitBtn = $("shopRequestSubmit");
+
+    if (titleEl) {
+      titleEl.textContent = actionType === "shipping" ? "Thông tin giao hàng" : "Xác nhận đổi thưởng";
+    }
+    if (infoEl) {
+      infoEl.innerHTML = '<div class="shop-request-item-name">' + escapeHtml(itemName) + '</div>';
+    }
+    if (formEl) {
+      formEl.innerHTML = buildRequestFormHtml(actionType);
+    }
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Gửi yêu cầu";
+    }
+
+    modal.classList.add("show");
+    modal.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+  }
+
+  function buildRequestFormHtml(actionType) {
+    if (actionType === "phone") {
+      return ''
+        + '<label class="shop-req-field">'
+        +   '<span class="shop-req-label">Số điện thoại</span>'
+        +   '<input class="shop-req-input" id="shopReqPhone" type="tel" inputmode="tel"'
+        +     ' placeholder="VD: 0912345678" maxlength="30" autocomplete="tel">'
+        + '</label>'
+        + '<label class="shop-req-field">'
+        +   '<span class="shop-req-label">Ghi chú (không bắt buộc)</span>'
+        +   '<textarea class="shop-req-input shop-req-textarea" id="shopReqNote"'
+        +     ' placeholder="VD: nạp sau 18h" maxlength="500" rows="2"></textarea>'
+        + '</label>';
+    }
+    if (actionType === "shipping") {
+      return ''
+        + '<label class="shop-req-field">'
+        +   '<span class="shop-req-label">Tên người nhận</span>'
+        +   '<input class="shop-req-input" id="shopReqName" type="text"'
+        +     ' placeholder="VD: Nguyễn Văn A" maxlength="100" autocomplete="name">'
+        + '</label>'
+        + '<label class="shop-req-field">'
+        +   '<span class="shop-req-label">Số điện thoại</span>'
+        +   '<input class="shop-req-input" id="shopReqPhone" type="tel" inputmode="tel"'
+        +     ' placeholder="VD: 0912345678" maxlength="30" autocomplete="tel">'
+        + '</label>'
+        + '<label class="shop-req-field">'
+        +   '<span class="shop-req-label">Địa chỉ nhận hàng</span>'
+        +   '<textarea class="shop-req-input shop-req-textarea" id="shopReqAddress"'
+        +     ' placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành" maxlength="300" rows="3"></textarea>'
+        + '</label>'
+        + '<label class="shop-req-field">'
+        +   '<span class="shop-req-label">Ghi chú (không bắt buộc)</span>'
+        +   '<textarea class="shop-req-input shop-req-textarea" id="shopReqNote"'
+        +     ' placeholder="VD: giao buổi chiều" maxlength="500" rows="2"></textarea>'
+        + '</label>';
+    }
+    /* none */
+    return ''
+      + '<div class="shop-req-info">'
+      +   'Bạn có chắc muốn gửi yêu cầu đổi thưởng này?'
+      + '</div>'
+      + '<label class="shop-req-field">'
+      +   '<span class="shop-req-label">Ghi chú (không bắt buộc)</span>'
+      +   '<textarea class="shop-req-input shop-req-textarea" id="shopReqNote"'
+      +     ' placeholder="" maxlength="500" rows="2"></textarea>'
+      + '</label>';
+  }
+
+  function closeRequestModal() {
+    const modal = $("shopRequestModal");
+    if (!modal) return;
+    modal.classList.remove("show");
+    modal.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+    _reqPurchaseId = null;
+    _reqActionType = null;
+  }
+
+  async function submitRequest() {
+    const btn = $("shopRequestSubmit");
+    if (!_reqPurchaseId || !_reqActionType) return;
+
+    const phone = ($("shopReqPhone") && $("shopReqPhone").value || "").trim();
+    const name = ($("shopReqName") && $("shopReqName").value || "").trim();
+    const address = ($("shopReqAddress") && $("shopReqAddress").value || "").trim();
+    const note = ($("shopReqNote") && $("shopReqNote").value || "").trim();
+
+    /* Validate client */
+    if (_reqActionType === "phone") {
+      if (!phone) { setStatus("Vui lòng nhập SĐT"); return; }
+      if (phone.length > 30) { setStatus("SĐT quá dài"); return; }
+    }
+    if (_reqActionType === "shipping") {
+      if (!name) { setStatus("Vui lòng nhập tên"); return; }
+      if (!phone) { setStatus("Vui lòng nhập SĐT"); return; }
+      if (!address) { setStatus("Vui lòng nhập địa chỉ"); return; }
+      if (name.length > 100) { setStatus("Tên tối đa 100 ký tự"); return; }
+      if (phone.length > 30) { setStatus("SĐT quá dài"); return; }
+      if (address.length > 300) { setStatus("Địa chỉ tối đa 300 ký tự"); return; }
+    }
+    if (note.length > 500) { setStatus("Ghi chú tối đa 500 ký tự"); return; }
+
+    /* Build form_data */
+    const formData = {};
+    if (phone) formData.phone = phone;
+    if (name) formData.name = name;
+    if (address) formData.address = address;
+    if (note) formData.note = note;
+
+    const sb = window.__sb;
+    if (!sb || !sb.rpc) { setStatus("Chưa kết nối máy chủ"); return; }
+
+    if (btn) { btn.disabled = true; btn.textContent = "Đang gửi…"; }
+
+    try {
+      const res = await sb.rpc("rpc_shop_submit_request", {
+        p_purchase_id: _reqPurchaseId,
+        p_form_data: formData
+      });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok !== true) throw new Error(d.error || "Không gửi được");
+
+      setStatus("Đã gửi yêu cầu ✓");
+      try { Toast && Toast.show && Toast.show("Đã gửi yêu cầu đổi thưởng", { type: "success", duration: 2500 }); } catch(_) {}
+
+      closeRequestModal();
+      await sync();
+    } catch(e) {
+      const msg = String((e && e.message) || e || "Lỗi");
+      setStatus("Lỗi: " + msg);
+      try { Toast && Toast.show && Toast.show("Lỗi: " + msg, { type: "error", duration: 3500 }); } catch(_) {}
+      if (btn) { btn.disabled = false; btn.textContent = "Gửi yêu cầu"; }
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════
+     SYNC / OPEN / CLOSE
+     ═══════════════════════════════════════════════════════ */
   async function sync() {
     if (S.loading) return;
     S.loading = true;
@@ -711,6 +1034,7 @@
     const page = $(PAGE_ID);
     if (!page) return;
     closeModal();
+    closeRequestModal();
     page.classList.remove("show");
     page.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
@@ -748,7 +1072,10 @@
     window.addEventListener("checkinDone", function() {
       if (S.pageOpen) sync();
     });
-    log("v1.8 ready ✓");
+    window.addEventListener("shopRequestReviewed", function() {
+      if (S.pageOpen) sync();
+    });
+    log("v1.9 ready ✓");
   }
 
   if (document.readyState === "loading") {
