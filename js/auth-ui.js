@@ -1,6 +1,9 @@
 /* =========================================================
-   SRANK AUTH UI — v10.8 (Role-based + CTA Morph + Verify User)
+   SRANK AUTH UI — v10.9 (Role-based + CTA Morph + Verify User + Shop)
    ---------------------------------------------------------
+   v10.9 CHANGES (SHOP):
+   - getCtaInfo() trả { action: "shop" } khi user đã check hôm nay
+   - intercept() xử lý riêng: action === "shop" → gọi window.__openShop()
    v10.8 CHANGES:
    - Bỏ BOSS_WHITELIST hard-code ['tienloi']
    - isBossMode() delegate sang window.Role.isAdmin()
@@ -117,7 +120,7 @@
     const nav = document.getElementById("appSideNav");
 
     const OVERLAY_IDS = [
-      "adminPage", "attendancePage",
+      "adminPage", "attendancePage", "shopPage",
       "loginOverlay", "checklistPanel",
       "wheelArea", "message"
     ];
@@ -229,6 +232,7 @@
     } catch(_) { return -1; }
   }
 
+  /* ⭐ v10.9: user đã check hôm nay → trả về CTA "shop" */
   function getCtaInfo(){
     if (isChecklistLocked()) return { text: "🔒 Tạm khoá Checklist", locked: true };
     if (!currentUser) return { text: "🔐 Đăng nhập", locked: false };
@@ -237,7 +241,7 @@
     try {
       const st = window.SRank && window.SRank.getCurrentState ? window.SRank.getCurrentState() : null;
       if (st && st.checked && st.checked[idx] && st.times && st.times[idx]){
-        return { text: "✓ Đã chấm công (" + st.times[idx] + ")", locked: true };
+        return { text: "🏪 Shop thưởng", action: "shop", locked: false };
       }
     } catch(_) {}
     return { text: "⏰ Chấm công", locked: false };
@@ -257,8 +261,7 @@
     return un === MINO_USERNAME;
   }
 
-  /* ✅ v10.8: delegate sang window.Role — single source of truth
-     Role.get() tự xử lý: exact match role + whitelist từ config.js */
+  /* ✅ v10.8: delegate sang window.Role — single source of truth */
   function isBossMode(){
     if (!currentUser) return false;
     if (!window.Role) {
@@ -380,13 +383,33 @@
     }
   }
 
+  /* ⭐ v10.9: intercept xử lý cả 3 case: shop / locked / login+checkin */
   function intercept(e){
     const cta = e.target && e.target.closest ? e.target.closest(".landing-cta") : null;
     if (!cta) return;
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
+
     const info = getCtaInfo();
+
+    /* ⭐ SHOP: mở shop page */
+    if (info.action === "shop") {
+      try {
+        if (typeof window.__openShop === "function") {
+          window.__openShop();
+        } else {
+          console.warn("[AUTH-UI] window.__openShop chưa sẵn sàng");
+          if (window.SRank && window.SRank.setStatus) {
+            window.SRank.setStatus("Shop đang tải, thử lại sau 1 giây…");
+          }
+        }
+      } catch(err) {
+        console.error("[AUTH-UI] openShop error:", err);
+      }
+      return;
+    }
+
     if (info.locked) return;
     if (!currentUser) openLoginForm();
     else handleCheckin(cta);
@@ -557,7 +580,6 @@
 
     const sb = window.__sb;
     if (!sb || !sb.rpc) {
-      // Supabase chưa sẵn sàng → retry
       if (_userCheckRetries < MAX_USER_CHECK_RETRIES) {
         _userCheckRetries++;
         setTimeout(() => { verifyUserExists(user); }, 800);
@@ -600,7 +622,7 @@
       _userCheckRetries = 0;
     }
 
-    // ⭐ v10.7: verify user còn tồn tại (delay nhỏ để Supabase sẵn sàng)
+    // ⭐ v10.7: verify user còn tồn tại
     if (user && user.displayName && !_userCheckPassed) {
       setTimeout(() => { verifyUserExists(user); }, 500);
     }
@@ -613,7 +635,7 @@
   currentUser = Auth.getCurrentUser();
   updateLogoutBtn();
 
-  // ⭐ v10.7: verify user khi boot (nếu đã login từ session cũ)
+  // ⭐ v10.7: verify user khi boot
   if (currentUser && currentUser.displayName && !_userCheckPassed) {
     setTimeout(() => { verifyUserExists(currentUser); }, 1500);
   }
@@ -624,5 +646,5 @@
 
   window.SRank.openLogin = openLoginForm;
 
-  console.log("[AUTH-UI] ready ✓ v10.8 — role-based + remember me + morph + verify user");
+  console.log("[AUTH-UI] ready ✓ v10.9 — role-based + remember me + morph + verify + shop");
 })();
