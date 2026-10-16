@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════
-   SHOP THƯỞNG — Styles v1.6
+   SHOP THƯỞNG — Styles v1.7
    ═══════════════════════════════════════════════════════ */
 
 #shopPage {
@@ -767,11 +767,8 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   AVATAR EFFECT — FIRE + PARTICLES
-   ⭐ Revert về bản trước khi sync (user đã confirm OK)
-   - Class `.shop-fire-particles` → đổi thành `.avatar-fx-particles`
-     để khớp với js/avatar-effect.js (giữ tính năng sync)
-   - Toàn bộ giá trị giữ NGUYÊN như bản gốc
+   AVATAR EFFECT — FIRE + WHITE PARTICLES
+   ⭐ v1.7: hạt TRẮNG, TO GẤP 2 (8px)
    ═══════════════════════════════════════════════════════════ */
 
 .avatar-effect-fire {
@@ -803,16 +800,18 @@
   z-index: 4;
   overflow: visible;
 }
+
+/* ⭐ v1.7: hạt 8×8 (to gấp 2), màu trắng, có shadow trắng */
 .avatar-fx-particles span {
   position: absolute;
-  width: 4px;
-  height: 4px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: radial-gradient(circle, #fff5c0, #ffd700 40%, #ff4500 100%);
+  background: radial-gradient(circle, #ffffff 0%, #ffffff 55%, #fff5e0 100%);
   box-shadow:
-    0 0 6px #ff8c00,
-    0 0 12px #ff4500,
-    0 0 18px rgba(255, 69, 0, .5);
+    0 0 8px #ffffff,
+    0 0 16px #ffd700,
+    0 0 24px rgba(255, 200, 0, .7);
   opacity: 0;
   animation: shopFireParticle 2s linear infinite;
 }
@@ -829,9 +828,11 @@
     transform: translateY(0) scale(0);
     opacity: 0;
   }
-  20% { opacity: 1; }
+  20% {
+    opacity: 1;
+  }
   100% {
-    transform: translateY(-70px) scale(1.6);
+    transform: translateY(-70px) scale(1.4);
     opacity: 0;
   }
 }
@@ -853,20 +854,22 @@
   }
 }
 
-/* ═══ Biến thể nhỏ — wrap < 50px (courtier, clv6-av, menu) ═══
-   Tỉ lệ thu nhỏ ~40% so với gốc */
+/* ═══ Biến thể nhỏ — wrap < 50px (courtier, clv6-av, menu) ═══ */
 .avatar-effect-fire.fx-sm::before {
   inset: -3px;
   filter: blur(3px);
   animation-duration: .7s;
 }
+
+/* ⭐ v1.7: hạt 5px (to gấp 2 so với 2.5px cũ), màu trắng */
 .avatar-effect-fire.fx-sm .avatar-fx-particles span {
-  width: 2.5px;
-  height: 2.5px;
+  width: 5px;
+  height: 5px;
+  background: radial-gradient(circle, #ffffff 0%, #ffffff 55%, #fff5e0 100%);
   box-shadow:
-    0 0 3px #ff8c00,
-    0 0 6px #ff4500,
-    0 0 9px rgba(255, 69, 0, .5);
+    0 0 5px #ffffff,
+    0 0 10px #ffd700,
+    0 0 15px rgba(255, 200, 0, .7);
   animation: shopFireParticleSm 2s linear infinite;
 }
 .avatar-effect-fire.fx-sm .avatar-fx-particles span:nth-child(1) { animation-delay: 0s; }
@@ -882,9 +885,11 @@
     transform: translateY(0) scale(0);
     opacity: 0;
   }
-  20% { opacity: 1; }
+  20% {
+    opacity: 1;
+  }
   100% {
-    transform: translateY(-35px) scale(1.6);
+    transform: translateY(-35px) scale(1.3);
     opacity: 0;
   }
 }
@@ -893,7 +898,7 @@
 .menu-user-avatar,
 .courtier-avatar,
 .throne-avatar,
-.advisor-avatar,
+ advisor-avatar,
 .clv6-av {
   overflow: visible !important;
 }
