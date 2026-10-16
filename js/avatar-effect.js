@@ -1,13 +1,13 @@
 /* =========================================================
-   AVATAR EFFECT — v1.0
+   AVATAR EFFECT — v1.1
    ---------------------------------------------------------
-   Áp dụng hiệu ứng avatar (khung lửa...) cho user hiện tại
-   ở MỌI nơi có avatar: shop, menu, landing podium, checklist.
-
-   - Load equipped từ RPC rpc_shop_my_equipped
-   - Tự scan DOM bằng MutationObserver
-   - Tự detect wrap nhỏ → dùng biến thể fx-sm
-   - Chỉ áp dụng cho AVATAR CỦA CHÍNH USER (không user khác)
+   v1.1 FIX (không thấy hạt bay):
+   ✅ Thêm _applying flag — MutationObserver bỏ qua mutation
+      do chính module này gây ra (particles insert/remove)
+   ✅ MutationObserver không còn loop vô tận → animation
+      fireParticle chạy được tới 20% → opacity: 1 → thấy hạt
+   v1.0:
+   - Áp dụng hiệu ứng avatar cho user hiện tại ở mọi nơi
 
    LOAD ORDER: sau auth.js + supabase-adapter.js, trước shop.js
    ========================================================= */
@@ -134,7 +134,11 @@
 
   /* ═══════════════════════════════════════════════════════
      REFRESH — scan toàn bộ DOM
+     ⭐ v1.1: _applying flag để chống MutationObserver loop
      ═══════════════════════════════════════════════════════ */
+  let _applying = false;
+  let _applyResetTimer = null;
+
   function isMe(displayName){
     if (!displayName) return false;
     const me = state.me;
@@ -143,60 +147,73 @@
   }
 
   function refreshAll(){
-    const eff = state.equipped && state.equipped.effect_type;
+    /* ⭐ v1.1: chặn recursive call */
+    if (_applying) return;
+    _applying = true;
 
-    /* Xoá hết effect cũ (kể cả nếu user khác có sẵn class) */
-    clearAll();
+    try {
+      const eff = state.equipped && state.equipped.effect_type;
 
-    if (!state.me || !eff) return;
+      /* Xoá hết effect cũ */
+      clearAll();
 
-    /* 1. Shop user avatar */
-    const shopAv = document.getElementById('shopUserAvatar');
-    if (shopAv) apply(shopAv.parentElement || shopAv, eff);
+      if (!state.me || !eff) return;
 
-    /* 2. Menu 3 gạch user avatar */
-    const menuAv = document.getElementById('menuUserAvatar');
-    if (menuAv) apply(menuAv, eff);
+      /* 1. Shop user avatar */
+      const shopAv = document.getElementById('shopUserAvatar');
+      if (shopAv) apply(shopAv.parentElement || shopAv, eff);
 
-    /* 3. Attendance employee avatar — chỉ khi xem chính mình */
-    const attAv = document.getElementById('attendanceEmployeeAvatar');
-    if (attAv) {
-      let selectedName = '';
-      try {
-        if (typeof window.__getAttendanceSelectedName === 'function') {
-          selectedName = window.__getAttendanceSelectedName() || '';
+      /* 2. Menu 3 gạch user avatar */
+      const menuAv = document.getElementById('menuUserAvatar');
+      if (menuAv) apply(menuAv, eff);
+
+      /* 3. Attendance employee avatar — chỉ khi xem chính mình */
+      const attAv = document.getElementById('attendanceEmployeeAvatar');
+      if (attAv) {
+        let selectedName = '';
+        try {
+          if (typeof window.__getAttendanceSelectedName === 'function') {
+            selectedName = window.__getAttendanceSelectedName() || '';
+          }
+        } catch(_){}
+        if (selectedName && isMe(selectedName)) {
+          apply(attAv, eff);
         }
-      } catch(_){}
-      if (selectedName && isMe(selectedName)) {
-        apply(attAv, eff);
       }
-    }
 
-    /* 4. Landing: throne / advisor / courtier */
-    const landingNodes = document.querySelectorAll(
-      '.courtier[data-name], .court-throne[data-name], .advisor[data-name]'
-    );
-    for (let i = 0; i < landingNodes.length; i++) {
-      const el = landingNodes[i];
-      const raw = el.getAttribute('data-name') || '';
-      if (!isMe(raw)) continue;
-      const wrap = el.querySelector('.courtier-avatar, .throne-avatar, .advisor-avatar');
-      if (wrap) apply(wrap, eff);
-    }
+      /* 4. Landing: throne / advisor / courtier */
+      const landingNodes = document.querySelectorAll(
+        '.courtier[data-name], .court-throne[data-name], .advisor[data-name]'
+      );
+      for (let i = 0; i < landingNodes.length; i++) {
+        const el = landingNodes[i];
+        const raw = el.getAttribute('data-name') || '';
+        if (!isMe(raw)) continue;
+        const wrap = el.querySelector('.courtier-avatar, .throne-avatar, .advisor-avatar');
+        if (wrap) apply(wrap, eff);
+      }
 
-    /* 5. Checklist V6 cards */
-    const clv6Cards = document.querySelectorAll('#clV6List .clv6-card');
-    for (let i = 0; i < clv6Cards.length; i++) {
-      const card = clv6Cards[i];
-      const nameEl = card.querySelector('.clv6-name');
-      if (!nameEl) continue;
-      const cardName = (nameEl.textContent || '').trim();
-      if (!isMe(cardName)) continue;
-      const av = card.querySelector('.clv6-av');
-      if (av) apply(av, eff);
-    }
+      /* 5. Checklist V6 cards */
+      const clv6Cards = document.querySelectorAll('#clV6List .clv6-card');
+      for (let i = 0; i < clv6Cards.length; i++) {
+        const card = clv6Cards[i];
+        const nameEl = card.querySelector('.clv6-name');
+        if (!nameEl) continue;
+        const cardName = (nameEl.textContent || '').trim();
+        if (!isMe(cardName)) continue;
+        const av = card.querySelector('.clv6-av');
+        if (av) apply(av, eff);
+      }
 
-    log('refreshed · equipped=' + (eff || 'none') + ' · me=' + state.me);
+      log('refreshed · equipped=' + (eff || 'none') + ' · me=' + state.me);
+    } finally {
+      /* ⭐ v1.1: giữ _applying=true trong 150ms để MutationObserver
+         bỏ qua hết mutation do particles insert/remove vừa tạo */
+      if (_applyResetTimer) clearTimeout(_applyResetTimer);
+      _applyResetTimer = setTimeout(function(){
+        _applying = false;
+      }, 150);
+    }
   }
 
   /* ═══════════════════════════════════════════════════════
@@ -213,11 +230,14 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     OBSERVER — tự động refresh khi DOM thay đổi
+     OBSERVER — v1.1: bỏ qua mutation khi _applying = true
      ═══════════════════════════════════════════════════════ */
   function startObserver(){
     try {
       const obs = new MutationObserver(function(muts){
+        /* ⭐ v1.1: bỏ qua nếu đang trong quá trình apply */
+        if (_applying) return;
+
         for (let i = 0; i < muts.length; i++) {
           const m = muts[i];
           if (m.type === 'childList') { schedule(); return; }
@@ -265,7 +285,7 @@
     setTimeout(schedule, 300);
     setTimeout(function(){ load(true).then(schedule); }, 1500);
     setTimeout(schedule, 3000);
-    log('v1.0 ready ✓');
+    log('v1.1 ready ✓');
   }
 
   if (document.readyState === 'loading') {
