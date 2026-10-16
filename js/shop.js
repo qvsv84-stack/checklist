@@ -1,11 +1,14 @@
 /* =========================================================
-   SHOP VIEW — v2.1
+   SHOP VIEW — v2.2
    ---------------------------------------------------------
-   v2.1 (spin improvements):
-   ✅ Animation random 3-4s, 8-15 vòng (~2-4 vòng/giây)
-   ✅ Admin test mode: ∞ lượt, miễn phí
-   v2.0:
-   - Vòng quay may mắn
+   v2.2 (optimistic spin):
+   ✅ Trừ 100đ NGAY khi bấm quay (UI instant)
+   ✅ Cộng prize vào UI NGAY sau animation
+   ✅ Refund UI nếu RPC fail
+   ✅ Sync ngầm sau khi xong
+   v2.1:
+   - Animation random 3-4s, 8-15 vòng
+   - Admin test mode
    ========================================================= */
 (function(){
   "use strict";
@@ -807,6 +810,7 @@
     }
   }
 
+  /* ⭐ v2.2: Optimistic update — trừ 100 NGAY, cộng prize sau animation */
   async function doSpin() {
     if (S.spin.spinning) return;
     if (!S.spin.isAdminTest && S.spin.remaining <= 0) {
@@ -822,6 +826,18 @@
     if (!sb || !sb.rpc) return;
 
     S.spin.spinning = true;
+
+    /* ⭐ Optimistic: trừ điểm NGAY khỏi UI trước khi gọi RPC */
+    const isTest = !!S.spin.isAdminTest;
+    const costToDeduct = isTest ? 0 : S.spin.cost;
+    const prevAvail = S.balance.available;
+    const prevSpent = S.balance.spent;
+    if (costToDeduct > 0) {
+      S.balance.available = Math.max(0, S.balance.available - costToDeduct);
+      S.balance.spent = (S.balance.spent || 0) + costToDeduct;
+      renderUserCard();
+    }
+
     renderSpinStatus();
 
     try {
@@ -835,15 +851,30 @@
 
       log("spin result:", d.data);
 
+      /* Animation 3-4s */
       await animateWheelTo(prizeIndex);
+
+      /* ⭐ Cộng prize vào UI ngay sau animation */
+      S.balance.available = S.balance.available + prizeAmount;
+      S.balance.spin_wins = (S.balance.spin_wins || 0) + prizeAmount;
+      renderUserCard();
+
+      /* Modal kết quả */
       showSpinResult(prizeAmount, d.data);
 
       S.spin.used = d.data.spins_used;
       S.spin.remaining = d.data.spins_remaining;
 
+      /* Sync để đồng bộ chính xác với server */
       await sync();
       refreshSpinStatus();
     } catch(e) {
+      /* ⭐ Refund UI nếu RPC fail */
+      if (costToDeduct > 0) {
+        S.balance.available = prevAvail;
+        S.balance.spent = prevSpent;
+        renderUserCard();
+      }
       const msg = String((e && e.message) || e || "Lỗi");
       setStatus("Lỗi: " + msg);
       try { Toast && Toast.show && Toast.show("Lỗi: " + msg, { type: "error", duration: 3500 }); } catch(_) {}
@@ -1316,7 +1347,7 @@
     window.addEventListener("shopRequestReviewed", function() {
       if (S.pageOpen) sync();
     });
-    log("v2.1 ready ✓");
+    log("v2.2 ready ✓");
   }
 
   if (document.readyState === "loading") {
