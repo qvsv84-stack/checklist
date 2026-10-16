@@ -1,12 +1,14 @@
 /* =========================================================
-   SPIN FEED — v1.2
+   SPIN FEED — v1.3
    ---------------------------------------------------------
+   v1.3:
+   ✅ Load 10 tin gần nhất khi vào web
+   ✅ Nhảy dần từ cũ nhất → mới nhất (1s/tin)
+   ✅ Animation: tin cũ bay lên + tan, tin mới bay từ dưới lên
+   ✅ Hết queue → giữ tin mới nhất
+   ✅ Poll 30s: tự append tin mới vào queue
    v1.2:
-   ✅ Chỉ hiện 1 tin mới nhất (1 dòng)
-   ✅ Khi có tin mới: tin cũ bay lên + tan, tin mới bay từ dưới lên
-   ✅ Không khung, chỉ text
-   v1.1:
-   - Fixed height + signature check
+   - 1 dòng + bay lên
    ========================================================= */
 (function(){
   "use strict";
@@ -17,10 +19,16 @@
   const FEED_ID = "spinFeed";
   const CONTAINER_ID = "spinFeedList";
   const ANIM_MS = 480;
+  const STEP_MS = 1000;      // 1s/tin
+  const FETCH_LIMIT = 10;    // 10 tin gần nhất
 
   const state = {
-    current: null,
-    animating: false,
+    queue: [],              // Các tin CHƯA hiển thị (cũ → mới)
+    current: null,          // Tin đang hiển thị
+    lastShownKey: "",       // Key của tin cuối đã hiển thị (chống trùng)
+    running: false,         // Auto-play đang chạy
+    animating: false,       // Đang chạy animation
+    timer: null,
     pollTimer: null,
     booted: false
   };
@@ -54,11 +62,13 @@
     const sb = window.__sb;
     if (!sb || !sb.rpc) return [];
     try {
-      const res = await sb.rpc("rpc_shop_recent_spins", { p_limit: 3 });
+      const res = await sb.rpc("rpc_shop_recent_spins", { p_limit: FETCH_LIMIT });
       if (res.error) throw res.error;
       const d = res.data || {};
       if (d.ok !== true) return [];
-      return Array.isArray(d.data) ? d.data : [];
+      const arr = Array.isArray(d.data) ? d.data : [];
+      /* RPC trả về mới → cũ, đảo lại thành cũ → mới */
+      return arr.slice().reverse();
     } catch(e) {
       log("fetch error:", e && e.message);
       return [];
@@ -86,6 +96,10 @@
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
+  function spinKey(spin) {
+    return spin ? String(spin.id) : "";
+  }
+
   function createItemEl(spin) {
     const el = document.createElement("div");
     el.className = "spin-feed-item";
@@ -108,16 +122,14 @@
     return el;
   }
 
-  /* ⭐ v1.2: Render tin mới với animation */
-  function renderNew(newSpin, isInitial) {
+  /* ⭐ Hiển thị tin (không animation) */
+  function renderStatic(spin) {
     const feedEl = ensureFeedEl();
     if (!feedEl) return;
-
     const listEl = document.getElementById(CONTAINER_ID);
     if (!listEl) return;
 
-    if (!newSpin) {
-      /* Không có tin → ẩn */
+    if (!spin) {
       feedEl.classList.add("spin-feed-hidden");
       feedEl.setAttribute("aria-hidden", "true");
       setTimeout(function() {
@@ -129,58 +141,159 @@
 
     feedEl.classList.remove("spin-feed-hidden");
     feedEl.setAttribute("aria-hidden", "false");
+    listEl.innerHTML = "";
+    listEl.appendChild(createItemEl(spin));
+    state.current = spin;
+  }
 
-    /* Lần đầu → render trực tiếp, không animation */
-    if (isInitial || !listEl.firstElementChild) {
-      listEl.innerHTML = "";
-      listEl.appendChild(createItemEl(newSpin));
+  /* ⭐ Hiển thị tin với animation bay lên */
+  function renderTransition(newSpin) {
+    const feedEl = ensureFeedEl();
+    if (!feedEl) return;
+    const listEl = document.getElementById(CONTAINER_ID);
+    if (!listEl) return;
+
+    feedEl.classList.remove("spin-feed-hidden");
+    feedEl.setAttribute("aria-hidden", "false");
+
+    const oldItem = listEl.firstElementChild;
+    const newItem = createItemEl(newSpin);
+
+    if (!oldItem) {
+      listEl.appendChild(newItem);
       state.current = newSpin;
       return;
     }
 
-    /* Đã có tin cũ → animate out rồi in */
-    if (state.animating) return;
-    state.animating = true;
-
-    const oldItem = listEl.firstElementChild;
     oldItem.classList.add("spin-feed-item-out");
-
-    const newItem = createItemEl(newSpin);
     newItem.classList.add("spin-feed-item-in");
     listEl.appendChild(newItem);
 
     setTimeout(function() {
       if (oldItem && oldItem.parentNode) oldItem.remove();
-      /* Reset classes của tin mới */
       newItem.classList.remove("spin-feed-item-in");
       state.current = newSpin;
-      state.animating = false;
     }, ANIM_MS);
   }
 
-  /* ⭐ v1.2: So sánh tin mới vs tin hiện tại */
-  function spinKey(spin) {
-    return spin ? String(spin.id) : "";
+  /* ⭐ Auto-play: nhảy từng tin trong queue */
+  function startAutoPlay() {
+    if (state.running) return;
+    if (!state.queue.length) return;
+    state.running = true;
+    tick();
   }
 
-  async function refresh() {
-    if (state.animating) return;
+  function tick() {
+    if (!state.running) return;
+    if (!state.queue.length) {
+      state.running = false;
+      log("auto-play done");
+      return;
+    }
+
+    const next = state.queue.shift();
+
+    if (state.animating) {
+      state.timer = setTimeout(tick, STEP_MS);
+      return;
+    }
+
+    if (state.current) {
+      state.animating = true;
+      renderTransition(next);
+      setTimeout(function() {
+        state.animating = false;
+      }, ANIM_MS);
+    } else {
+      renderStatic(next);
+    }
+
+    state.lastShownKey = spinKey(next);
+
+    if (state.queue.length) {
+      state.timer = setTimeout(tick, STEP_MS);
+    } else {
+      state.running = false;
+    }
+  }
+
+  /* ⭐ Load 10 tin + bắt đầu auto-play */
+  async function loadAndPlay() {
+    if (state.running || state.animating) return;
 
     const data = await fetchRecent();
-    const latest = data && data.length ? data[0] : null;
-    const latestKey = spinKey(latest);
-    const currentKey = spinKey(state.current);
+    if (!data.length) {
+      renderStatic(null);
+      return;
+    }
 
-    /* Không đổi → skip */
-    if (latestKey === currentKey) return;
+    /* Nếu không có gì thay đổi so với lần trước → skip */
+    const lastKey = spinKey(data[data.length - 1]);
+    if (lastKey === state.lastShownKey && state.current) return;
 
-    renderNew(latest, !state.current);
+    /* Queue = tất cả trừ tin cuối (tin cuối sẽ hiện cuối cùng) */
+    /* Nhưng nếu lần đầu (current = null) → hiện tin đầu tiên luôn */
+    if (!state.current) {
+      const first = data.shift();
+      renderStatic(first);
+      state.lastShownKey = spinKey(first);
+      state.queue = data;
+      if (state.queue.length) {
+        state.timer = setTimeout(startAutoPlay, STEP_MS);
+      }
+      return;
+    }
+
+    /* Đã có tin đang hiện → append tin mới vào queue */
+    state.queue = state.queue.concat(data);
+    if (!state.running) startAutoPlay();
+  }
+
+  /* ⭐ Refresh: kiểm tra có tin mới không */
+  async function refresh() {
+    if (state.running || state.animating) return;
+
+    const data = await fetchRecent();
+    if (!data.length) return;
+
+    /* Lọc chỉ giữ tin mới hơn tin cuối đã hiển thị */
+    const newOnes = data.filter(function(s) {
+      return spinKey(s) !== state.lastShownKey;
+    });
+
+    /* Nếu không có gì mới → skip */
+    if (!newOnes.length) return;
+
+    /* Nếu lastShownKey không có trong data → toàn bộ đều mới */
+    /* Nếu có → chỉ giữ những tin sau lastShownKey */
+    let toAdd = newOnes;
+    if (state.lastShownKey) {
+      const idx = data.findIndex(function(s) { return spinKey(s) === state.lastShownKey; });
+      if (idx >= 0) toAdd = data.slice(idx + 1);
+    }
+
+    if (!toAdd.length) return;
+
+    if (!state.current) {
+      const first = toAdd.shift();
+      renderStatic(first);
+      state.lastShownKey = spinKey(first);
+      state.queue = toAdd;
+    } else {
+      state.queue = state.queue.concat(toAdd);
+    }
+
+    if (state.queue.length && !state.running) {
+      state.timer = setTimeout(startAutoPlay, 200);
+    }
   }
 
   function startPoll() {
     if (state.pollTimer) clearInterval(state.pollTimer);
     state.pollTimer = setInterval(function() {
       if (document.hidden) return;
+      if (state.running || state.animating) return;
       const isHome = !document.querySelector('.admin-panel-view.show')
         && !document.getElementById('shopPage')?.classList.contains('show')
         && !document.getElementById('attendancePage')?.classList.contains('show')
@@ -191,14 +304,13 @@
   }
 
   function bindEvents() {
-    /* Khi có spin mới ở bất kỳ đâu */
     window.addEventListener("spinCompleted", function() {
-      setTimeout(refresh, 300);
+      setTimeout(refresh, 500);
     });
 
-    /* Đổi tên → update UI nếu có tin */
     window.addEventListener("displayNameUpdated", function() {
-      if (state.current && !state.animating) {
+      if (state.running || state.animating) return;
+      if (state.current) {
         const listEl = document.getElementById(CONTAINER_ID);
         if (listEl) {
           listEl.innerHTML = "";
@@ -208,7 +320,7 @@
     });
 
     document.addEventListener("visibilitychange", function() {
-      if (!document.hidden) refresh();
+      if (!document.hidden && !state.running && !state.animating) refresh();
     });
   }
 
@@ -222,9 +334,9 @@
         state.booted = true;
         ensureFeedEl();
         bindEvents();
-        refresh();
+        loadAndPlay();
         startPoll();
-        log("v1.2 ready ✓");
+        log("v1.3 ready ✓");
         return;
       }
       if (++tries > 60) { log("không tìm thấy #questionWrap"); return; }
@@ -240,6 +352,8 @@
 
   window.SpinFeed = {
     refresh: refresh,
-    getCurrent: function() { return state.current; }
+    reload: loadAndPlay,
+    getCurrent: function() { return state.current; },
+    getQueue: function() { return state.queue.slice(); }
   };
 })();
