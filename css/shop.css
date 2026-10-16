@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════
-   SHOP THƯỞNG — Styles v1.4
+   SHOP THƯỞNG — Styles v1.5
    ═══════════════════════════════════════════════════════ */
 
 #shopPage {
@@ -104,7 +104,6 @@
   box-shadow: 0 3px 10px -4px rgba(160,110,30,.3);
   background-size: cover;
   background-position: center;
-  /* ⭐ Fix: tạo stacking context riêng cho avatar — đè lên glow */
   position: relative;
   z-index: 2;
 }
@@ -771,19 +770,16 @@
 
 /* ═══════════════════════════════════════════════════════════════
    AVATAR EFFECT — FIRE + PARTICLES
-   Copy 100% từ demo gốc (Style 4) + fix z-index
+   Copy 100% từ demo gốc + fix z-index particles hiển thị
    ═══════════════════════════════════════════════════════════════ */
 
-/* Container wrap avatar — JS add class này.
-   z-index: 1 tạo stacking context riêng để:
-   - ::before (glow, z-index -1) nằm DƯỚI mọi con
-   - .avatar-fx-particles (z-index 2) nằm TRÊN mọi con */
 .avatar-effect-fire {
   position: relative;
   z-index: 1;
+  isolation: isolate;
 }
 
-/* ⭐ Glow — z-index -1 để KHÔNG đè lên ảnh avatar */
+/* ⭐ Glow — z-index -1 để nằm dưới mọi con */
 .avatar-effect-fire::before {
   content: '';
   position: absolute;
@@ -802,16 +798,15 @@
   pointer-events: none;
 }
 
-/* Particles container */
+/* ⭐ v1.5 FIX: z-index: 10 để chắc chắn trên avatar (2) */
 .avatar-fx-particles {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 2;
+  z-index: 10;
   overflow: visible;
 }
 
-/* Particles — giống demo */
 .avatar-fx-particles span {
   position: absolute;
   width: 4px;
@@ -830,7 +825,6 @@
 .avatar-fx-particles span:nth-child(6) { left: 25%; bottom: 20%; animation-delay: 1.5s; }
 .avatar-fx-particles span:nth-child(7) { left: 75%; bottom: 20%; animation-delay: 1.8s; }
 
-/* Keyframes — copy 100% từ demo */
 @keyframes fireParticle {
   0% {
     transform: translateY(0) scale(0);
@@ -862,7 +856,7 @@
   }
 }
 
-/* ═══ Biến thể nhỏ — wrap < 50px (courtier, clv6-av, menu) ═══ */
+/* ═══ Biến thể nhỏ — wrap < 50px ═══ */
 .avatar-effect-fire.fx-sm::before {
   inset: -3px;
   filter: blur(2px);
