@@ -1,5 +1,11 @@
 /* =========================================================
-   SHOP VIEW — v2.0
+   SHOP VIEW — v2.1
+   ---------------------------------------------------------
+   v2.1 (spin improvements):
+   ✅ Animation random 3-4s, 8-15 vòng (~2-4 vòng/giây)
+   ✅ Admin test mode: ∞ lượt, miễn phí
+   v2.0:
+   - Vòng quay may mắn
    ========================================================= */
 (function(){
   "use strict";
@@ -14,8 +20,6 @@
   const SPIN_MAX_DAILY = 3;
   const SPIN_COST = 100;
   const SPIN_TOTAL = 20;
-  const SPIN_DURATION_MS = 5000;
-  const SPIN_EXTRA_TURNS = 5;
 
   const S = {
     items: [],
@@ -26,7 +30,7 @@
     currentUser: null,
     activeCategory: "",
     activeTab: "shop",
-    spin: { used: 0, remaining: 3, max: 3, cost: 100, loaded: false, spinning: false },
+    spin: { used: 0, remaining: 3, max: 3, cost: 100, loaded: false, spinning: false, isAdminTest: false },
     loading: false,
     pageOpen: false,
     booted: false,
@@ -734,6 +738,9 @@
       + '</div>';
   }
 
+  /* ═══════════════════════════════════════════════════════
+     SPIN
+     ═══════════════════════════════════════════════════════ */
   async function refreshSpinStatus() {
     const status = await fetchSpinStatus();
     if (status) {
@@ -741,6 +748,7 @@
       S.spin.remaining = status.spins_remaining;
       S.spin.max = status.max_per_day;
       S.spin.cost = status.cost;
+      S.spin.isAdminTest = !!status.is_admin_test;
       S.spin.loaded = true;
     }
     renderSpinStatus();
@@ -757,12 +765,20 @@
     const remaining = S.spin.remaining;
     const cost = S.spin.cost;
     const avail = S.balance.available;
+    const isTest = !!S.spin.isAdminTest;
 
-    statusEl.innerHTML = 'Lượt còn lại: <b>' + remaining + '/' + max + '</b>'
-      + ' · Mỗi lượt: <b>' + cost + 'đ</b>';
+    if (isTest) {
+      statusEl.innerHTML = '<b style="color:#dc2626">🧪 TEST MODE (admin)</b>'
+        + ' · <b>∞ lượt</b> · <b>Miễn phí</b>';
+    } else {
+      statusEl.innerHTML = 'Lượt còn lại: <b>' + remaining + '/' + max + '</b>'
+        + ' · Mỗi lượt: <b>' + cost + 'đ</b>';
+    }
 
     if (hintEl) {
-      if (remaining <= 0) {
+      if (isTest) {
+        hintEl.textContent = '🎰 Admin test — quay bao nhiêu cũng được để kiểm tra';
+      } else if (remaining <= 0) {
         hintEl.textContent = '🎯 Hôm nay đã hết lượt — mai quay tiếp nhé!';
       } else if (avail < cost) {
         hintEl.textContent = '⚠️ Không đủ điểm để quay (cần ' + cost + 'đ, có ' + avail + 'đ)';
@@ -775,6 +791,9 @@
       if (S.spin.spinning) {
         btn.disabled = true;
         btn.textContent = '🎰 Đang quay…';
+      } else if (isTest) {
+        btn.disabled = false;
+        btn.textContent = '🎰 QUAY (test)';
       } else if (remaining <= 0) {
         btn.disabled = true;
         btn.textContent = '🎰 Hết lượt hôm nay';
@@ -790,11 +809,11 @@
 
   async function doSpin() {
     if (S.spin.spinning) return;
-    if (S.spin.remaining <= 0) {
+    if (!S.spin.isAdminTest && S.spin.remaining <= 0) {
       setStatus("Hôm nay đã hết lượt quay");
       return;
     }
-    if (S.balance.available < S.spin.cost) {
+    if (!S.spin.isAdminTest && S.balance.available < S.spin.cost) {
       setStatus("Không đủ điểm để quay");
       return;
     }
@@ -834,6 +853,7 @@
     }
   }
 
+  /* ⭐ v2.1: Random duration 3-4s, 8-15 vòng (~2-4 vòng/giây) */
   function animateWheelTo(prizeIndex) {
     return new Promise(function(resolve) {
       const wheel = $("shopSpinWheel");
@@ -841,17 +861,26 @@
 
       const sliceAngle = 360 / SPIN_TOTAL;
       const targetAngle = prizeIndex * sliceAngle + sliceAngle / 2;
-      const finalAngle = 360 * SPIN_EXTRA_TURNS - targetAngle;
 
+      /* Random duration 3000-4000ms + random speed 2-4 vòng/s */
+      const durationMs = 3000 + Math.floor(Math.random() * 1000);
+      const turnsPerSec = 2 + Math.random() * 2;
+      const durationSec = durationMs / 1000;
+      const totalTurns = Math.max(8, Math.round(durationSec * turnsPerSec));
+      const finalAngle = 360 * totalTurns - targetAngle;
+
+      /* Reset về 0 không animate */
       wheel.style.transition = 'none';
       wheel.style.transform = 'rotate(0deg)';
-
       void wheel.offsetWidth;
 
-      wheel.style.transition = 'transform ' + SPIN_DURATION_MS + 'ms cubic-bezier(0.17, 0.67, 0.16, 1)';
+      /* Animate với cubic-bezier ease-out mạnh */
+      wheel.style.transition = 'transform ' + durationMs + 'ms cubic-bezier(0.15, 0.9, 0.25, 1)';
       wheel.style.transform = 'rotate(' + finalAngle + 'deg)';
 
-      setTimeout(resolve, SPIN_DURATION_MS + 100);
+      log('spin: ' + durationMs + 'ms, ' + totalTurns + ' vòng (~' + turnsPerSec.toFixed(2) + ' v/s)');
+
+      setTimeout(resolve, durationMs + 120);
     });
   }
 
@@ -868,8 +897,13 @@
     if (titleEl) titleEl.textContent = "Chúc mừng!";
     if (amountEl) amountEl.textContent = "+" + amount + "đ";
     if (subEl) {
-      subEl.innerHTML = 'Bạn nhận được <b>' + amount + 'đ</b>'
-        + '<br>Lượt còn lại: <b>' + data.spins_remaining + '/' + data.max_per_day + '</b>';
+      if (data.is_admin_test) {
+        subEl.innerHTML = 'Bạn nhận được <b>' + amount + 'đ</b>'
+          + '<br><i style="color:#dc2626">(test mode — miễn phí)</i>';
+      } else {
+        subEl.innerHTML = 'Bạn nhận được <b>' + amount + 'đ</b>'
+          + '<br>Lượt còn lại: <b>' + data.spins_remaining + '/' + data.max_per_day + '</b>';
+      }
     }
 
     modal.classList.add("show");
@@ -1282,7 +1316,7 @@
     window.addEventListener("shopRequestReviewed", function() {
       if (S.pageOpen) sync();
     });
-    log("v2.0 ready ✓");
+    log("v2.1 ready ✓");
   }
 
   if (document.readyState === "loading") {
