@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════
-   SHOP THƯỞNG — Styles
+   SHOP THƯỞNG — Styles v1.1
    ═══════════════════════════════════════════════════════ */
 
 #shopPage {
@@ -43,7 +43,8 @@
   transition: transform .15s ease, background .15s ease;
 }
 .shop-head-btn:active { transform: scale(.94); background: #fffbf0; }
-.shop-head-btn.spinning svg { animation: shopSpin .8s linear infinite; }
+.shop-head-btn.spinning svg,
+.shop-head-btn.spinning { animation: shopSpin .8s linear infinite; }
 @keyframes shopSpin { to { transform: rotate(360deg); } }
 
 .shop-head-title {
@@ -73,7 +74,9 @@
 
 /* ─── USER CARD ─── */
 .shop-user-card {
-  display: flex; align-items: center; gap: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   padding: 14px 16px;
   border-radius: 20px;
   background: radial-gradient(ellipse 90% 70% at 50% 0%, rgba(255,255,255,.95), transparent 70%),
@@ -81,6 +84,9 @@
   border: 1px solid rgba(220,190,140,.55);
   box-shadow: 0 8px 24px -12px rgba(140,100,40,.2);
   margin-bottom: 14px;
+}
+.shop-user-top {
+  display: flex; align-items: center; gap: 14px;
 }
 .shop-user-avatar {
   width: 56px; height: 56px;
@@ -98,23 +104,85 @@
 }
 .shop-user-info {
   flex: 1; min-width: 0;
-  display: flex; flex-direction: column; gap: 4px;
+  display: flex; flex-direction: column; gap: 2px;
 }
 .shop-user-name {
   font-size: 16px; font-weight: 900; color: #4a3520;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.shop-user-points-row {
-  display: flex; align-items: baseline; gap: 6px;
+.shop-user-month {
+  font-size: 11px; font-weight: 800; color: #b09070;
+  letter-spacing: .02em;
 }
-.shop-user-points {
-  font-size: 20px; font-weight: 950; color: #d68f20;
+
+/* ─── POINTS ROW 3 CỘT ─── */
+.shop-user-points-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(220,190,140,.4);
+}
+.shop-points-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  text-align: center;
+}
+.shop-points-num {
+  font-size: 18px;
+  font-weight: 950;
   font-variant-numeric: tabular-nums;
   letter-spacing: -.01em;
+  line-height: 1.1;
 }
-.shop-user-points-label {
-  font-size: 11px; font-weight: 800; color: #b09070;
-  text-transform: lowercase;
+.shop-points-num-earn { color: #4fa370; }
+.shop-points-num-spent { color: #dc2626; }
+.shop-points-num-avail { color: #d68f20; font-size: 20px; }
+.shop-points-cell-main .shop-points-num {
+  background: linear-gradient(135deg, #ffd88a, #f0a800);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.shop-points-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #b09070;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+/* ─── CHI TIẾT TRẠNG THÁI ─── */
+.shop-points-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: center;
+  min-height: 0;
+}
+.shop-points-detail:empty { display: none; }
+.shop-detail-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 850;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+.shop-detail-ok {
+  background: rgba(79,163,112,.12);
+  color: #4a7a5a;
+  border: 1px solid rgba(122,184,150,.35);
+}
+.shop-detail-x {
+  background: rgba(220,38,38,.1);
+  color: #991b1b;
+  border: 1px solid rgba(220,38,38,.3);
 }
 
 /* ─── FILTERS ─── */
@@ -252,18 +320,14 @@
   text-align: center;
   color: #b09070;
 }
-.shop-empty-emoji {
-  font-size: 52px; margin-bottom: 12px; opacity: .55;
-}
-.shop-empty-title {
-  font-size: 15px; font-weight: 900; color: #8a6a3a;
-  margin-bottom: 4px;
-}
-.shop-empty-sub {
-  font-size: 12px; color: #b09070; font-weight: 700;
-}
+.shop-empty-emoji { font-size: 52px; margin-bottom: 12px; opacity: .55; }
+.shop-empty-title { font-size: 15px; font-weight: 900; color: #8a6a3a; margin-bottom: 4px; }
+.shop-empty-sub { font-size: 12px; color: #b09070; font-weight: 700; }
 
-/* ─── ADMIN: shop tab ─── */
+/* ═══════════════════════════════════════════════════════
+   ADMIN: SHOP TAB
+   ═══════════════════════════════════════════════════════ */
+
 .admin-shop-thumb {
   width: 42px; height: 42px;
   border-radius: 10px;
@@ -274,9 +338,8 @@
   font-size: 20px;
   border: 1px solid rgba(220,190,140,.5);
 }
-.admin-shop-thumb img {
-  width: 100%; height: 100%; object-fit: cover;
-}
+.admin-shop-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
 .admin-shop-info {
   flex: 1; min-width: 0;
   display: flex; flex-direction: column; gap: 2px;
@@ -295,4 +358,69 @@
   background-size: cover;
   background-position: center;
   flex-shrink: 0;
+}
+
+/* ─── CONFIG ĐIỂM ─── */
+.admin-shop-config-row {
+  display: grid;
+  grid-template-columns: 32px 1fr 72px 78px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid rgba(220,190,140,.5);
+  margin-bottom: 6px;
+}
+.admin-shop-config-icon {
+  font-size: 20px;
+  text-align: center;
+  line-height: 1;
+}
+.admin-shop-config-label {
+  font-size: 13px;
+  color: #4a3520;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-shop-config-label b {
+  color: #a06a28;
+  font-weight: 950;
+  margin-right: 4px;
+}
+.admin-shop-config-input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1.5px solid rgba(220,190,140,.7);
+  background: #fffbf3;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  color: #4a3520;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  outline: 0;
+}
+.admin-shop-config-input:focus {
+  border-color: #f5a623;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(245,166,35,.15);
+}
+.admin-shop-config-unit {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
+}
+.admin-shop-config-unit.pos { color: #4fa370; }
+.admin-shop-config-unit.neg { color: #dc2626; }
+.admin-shop-config-unit.zero { color: #b09070; }
+
+@media (min-width: 480px) {
+  .admin-shop-config-row {
+    grid-template-columns: 32px 1fr 90px 90px;
+  }
 }
