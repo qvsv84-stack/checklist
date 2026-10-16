@@ -1,14 +1,12 @@
 /* =========================================================
-   SHOP VIEW — v2.2
+   SHOP VIEW — v2.3
    ---------------------------------------------------------
-   v2.2 (optimistic spin):
-   ✅ Trừ 100đ NGAY khi bấm quay (UI instant)
-   ✅ Cộng prize vào UI NGAY sau animation
-   ✅ Refund UI nếu RPC fail
-   ✅ Sync ngầm sau khi xong
-   v2.1:
-   - Animation random 3-4s, 8-15 vòng
-   - Admin test mode
+   v2.3 (spin speed ổn định):
+   ✅ Cố định tốc độ ~3 vòng/s, random nhẹ ±3%
+   ✅ Số vòng random 9-11, duration tính từ vòng/tốc độ
+   ✅ Tốc độ không còn chênh lệch 2x giữa các lần
+   v2.2:
+   - Optimistic update
    ========================================================= */
 (function(){
   "use strict";
@@ -741,9 +739,6 @@
       + '</div>';
   }
 
-  /* ═══════════════════════════════════════════════════════
-     SPIN
-     ═══════════════════════════════════════════════════════ */
   async function refreshSpinStatus() {
     const status = await fetchSpinStatus();
     if (status) {
@@ -810,7 +805,6 @@
     }
   }
 
-  /* ⭐ v2.2: Optimistic update — trừ 100 NGAY, cộng prize sau animation */
   async function doSpin() {
     if (S.spin.spinning) return;
     if (!S.spin.isAdminTest && S.spin.remaining <= 0) {
@@ -827,7 +821,6 @@
 
     S.spin.spinning = true;
 
-    /* ⭐ Optimistic: trừ điểm NGAY khỏi UI trước khi gọi RPC */
     const isTest = !!S.spin.isAdminTest;
     const costToDeduct = isTest ? 0 : S.spin.cost;
     const prevAvail = S.balance.available;
@@ -851,25 +844,20 @@
 
       log("spin result:", d.data);
 
-      /* Animation 3-4s */
       await animateWheelTo(prizeIndex);
 
-      /* ⭐ Cộng prize vào UI ngay sau animation */
       S.balance.available = S.balance.available + prizeAmount;
       S.balance.spin_wins = (S.balance.spin_wins || 0) + prizeAmount;
       renderUserCard();
 
-      /* Modal kết quả */
       showSpinResult(prizeAmount, d.data);
 
       S.spin.used = d.data.spins_used;
       S.spin.remaining = d.data.spins_remaining;
 
-      /* Sync để đồng bộ chính xác với server */
       await sync();
       refreshSpinStatus();
     } catch(e) {
-      /* ⭐ Refund UI nếu RPC fail */
       if (costToDeduct > 0) {
         S.balance.available = prevAvail;
         S.balance.spent = prevSpent;
@@ -884,7 +872,7 @@
     }
   }
 
-  /* ⭐ v2.1: Random duration 3-4s, 8-15 vòng (~2-4 vòng/giây) */
+  /* ⭐ v2.3: Tốc độ ổn định ~3 vòng/s, không còn chênh lệch 2x */
   function animateWheelTo(prizeIndex) {
     return new Promise(function(resolve) {
       const wheel = $("shopSpinWheel");
@@ -893,11 +881,13 @@
       const sliceAngle = 360 / SPIN_TOTAL;
       const targetAngle = prizeIndex * sliceAngle + sliceAngle / 2;
 
-      /* Random duration 3000-4000ms + random speed 2-4 vòng/s */
-      const durationMs = 3000 + Math.floor(Math.random() * 1000);
-      const turnsPerSec = 2 + Math.random() * 2;
-      const durationSec = durationMs / 1000;
-      const totalTurns = Math.max(8, Math.round(durationSec * turnsPerSec));
+      /* Tốc độ cố định ~3 vòng/s, random nhẹ ±3% để tự nhiên */
+      const speed = 2.9 + Math.random() * 0.2;   // 2.9 - 3.1 vòng/s
+
+      /* Số vòng random 9-11 → duration = vòng / tốc độ */
+      const totalTurns = 9 + Math.floor(Math.random() * 3);  // 9, 10, 11
+      const durationMs = Math.round((totalTurns / speed) * 1000);
+
       const finalAngle = 360 * totalTurns - targetAngle;
 
       /* Reset về 0 không animate */
@@ -905,13 +895,13 @@
       wheel.style.transform = 'rotate(0deg)';
       void wheel.offsetWidth;
 
-      /* Animate với cubic-bezier ease-out mạnh */
+      /* Ease-out mạnh */
       wheel.style.transition = 'transform ' + durationMs + 'ms cubic-bezier(0.15, 0.9, 0.25, 1)';
       wheel.style.transform = 'rotate(' + finalAngle + 'deg)';
 
-      log('spin: ' + durationMs + 'ms, ' + totalTurns + ' vòng (~' + turnsPerSec.toFixed(2) + ' v/s)');
+      log('spin: ' + durationMs + 'ms, ' + totalTurns + ' vòng (~' + speed.toFixed(2) + ' v/s)');
 
-      setTimeout(resolve, durationMs + 120);
+      setTimeout(resolve, durationMs + 100);
     });
   }
 
@@ -1347,7 +1337,7 @@
     window.addEventListener("shopRequestReviewed", function() {
       if (S.pageOpen) sync();
     });
-    log("v2.2 ready ✓");
+    log("v2.3 ready ✓");
   }
 
   if (document.readyState === "loading") {
