@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════
-   SHOP THƯỞNG — Styles v2.5
+   SHOP THƯỞNG — Styles v2.6
    ═══════════════════════════════════════════════════════ */
 
 #shopPage {
@@ -1273,88 +1273,105 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   SPIN FEED — Landing widget
-   ⭐ v2.5: Fixed height + class hidden → không giật landing
+   SPIN FEED — 1 dòng text, bay lên + tan
+   ⭐ v2.6: Bỏ khung, chỉ text, hiệu ứng bay lên
    ═══════════════════════════════════════════════════════════════ */
 
 .spin-feed {
   width: 100%;
   max-width: 440px;
-  margin: 0 auto 14px;
+  margin: 0 auto 10px;
   padding: 0;
-  /* ⭐ Fixed height = 3 × 38px */
-  height: 114px;
-  border-radius: 14px;
-  background: radial-gradient(ellipse 90% 60% at 50% 0%, rgba(255,235,180,.9), transparent 70%),
-              linear-gradient(160deg, #fffdf5 0%, #fff3d4 100%);
-  border: 1.5px solid rgba(245,166,35,.45);
-  box-shadow:
-    0 6px 20px -10px rgba(220,140,20,.35),
-    inset 0 1px 0 rgba(255,255,255,.7);
-  overflow: hidden;
-  /* ⭐ Transition mượt khi ẩn/hiện */
+  /* ⭐ Chỉ 1 dòng = 28px */
+  height: 28px;
+  /* ⭐ Không khung, không nền */
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  overflow: visible;
   transition:
-    height .35s cubic-bezier(.4, 0, .2, 1),
-    margin .35s cubic-bezier(.4, 0, .2, 1),
-    opacity .25s ease,
-    border-color .3s ease,
-    box-shadow .3s ease;
-  animation: spinFeedFadeIn .5s ease;
-}
-@keyframes spinFeedFadeIn {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: translateY(0); }
+    height .3s cubic-bezier(.4, 0, .2, 1),
+    margin .3s cubic-bezier(.4, 0, .2, 1),
+    opacity .25s ease;
 }
 
-/* ⭐ Class ẩn — không dùng display:none nữa */
+/* Ẩn mượt khi không có tin */
 .spin-feed.spin-feed-hidden {
   height: 0 !important;
   margin-top: 0 !important;
   margin-bottom: 0 !important;
   opacity: 0;
-  border-color: transparent;
-  box-shadow: none;
   pointer-events: none;
 }
 
 .spin-feed-list {
+  position: relative;
   display: flex;
   flex-direction: column;
-  /* ⭐ Fixed height để không nhấp nhô */
   height: 100%;
-  will-change: transform;
+  overflow: visible;
 }
+
 .spin-feed-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 38px;
-  padding: 0 12px;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0;
   box-sizing: border-box;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 700;
-  color: #6a4a20;
+  color: #8a6a3a;
   white-space: nowrap;
   overflow: hidden;
-  border-bottom: 1px solid rgba(245,166,35,.12);
+  text-align: center;
 }
-.spin-feed-item:last-child { border-bottom: 0; }
-.spin-feed-item-enter {
-  animation: spinFeedItemPulse .6s ease;
+
+/* ⭐ Tin cũ: bay lên + tan dần */
+.spin-feed-item-out {
+  animation: spinFeedUpOut 0.48s cubic-bezier(0.4, 0, 0.6, 1) forwards;
 }
-@keyframes spinFeedItemPulse {
-  0% { background: rgba(255,235,180,.6); }
-  100% { background: transparent; }
+@keyframes spinFeedUpOut {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-28px) scale(0.92);
+    opacity: 0;
+  }
 }
+
+/* ⭐ Tin mới: bay từ dưới lên + fade in */
+.spin-feed-item-in {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  animation: spinFeedUpIn 0.48s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+@keyframes spinFeedUpIn {
+  0% {
+    transform: translateY(28px) scale(0.92);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
 .spin-feed-icon {
-  font-size: 14px;
+  font-size: 13px;
   flex-shrink: 0;
   line-height: 1;
 }
+
 .spin-feed-av {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   flex-shrink: 0;
   overflow: hidden;
@@ -1363,44 +1380,50 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 900;
-  border: 1.5px solid #fff;
-  box-shadow: 0 1px 4px -1px rgba(160,110,30,.4);
+  border: 1px solid #fff;
+  box-shadow: 0 1px 3px -1px rgba(160,110,30,.35);
 }
 .spin-feed-av-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .spin-feed-av-fb { display: none; }
 .spin-feed-av-fb.show { display: block; }
+
 .spin-feed-text {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 700;
-  color: #6a4a20;
+  color: #8a6a3a;
 }
-.spin-feed-text b { color: #4a2a00; font-weight: 950; }
+.spin-feed-text b { color: #6a4a20; font-weight: 950; }
 .spin-feed-amount { color: #d68f20 !important; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 480px) {
   .spin-feed {
     max-width: 100%;
-    margin: 0 0 12px;
-    height: 108px;   /* 3 × 36px */
+    margin: 0 0 8px;
+    height: 26px;
   }
   .spin-feed.spin-feed-hidden {
     height: 0 !important;
     margin: 0 !important;
   }
   .spin-feed-item {
-    height: 36px;
-    font-size: 12.5px;
-    padding: 0 10px;
-    gap: 6px;
+    height: 26px;
+    font-size: 12px;
+    gap: 5px;
   }
-  .spin-feed-av { width: 20px; height: 20px; font-size: 9px; }
-  .spin-feed-icon { font-size: 13px; }
+  @keyframes spinFeedUpOut {
+    0% { transform: translateY(0) scale(1); opacity: 1; }
+    100% { transform: translateY(-26px) scale(0.92); opacity: 0; }
+  }
+  @keyframes spinFeedUpIn {
+    0% { transform: translateY(26px) scale(0.92); opacity: 0; }
+    100% { transform: translateY(0) scale(1); opacity: 1; }
+  }
 }
 
 html body.landing-locked .spin-feed { display: none !important; }
