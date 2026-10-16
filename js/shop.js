@@ -1,15 +1,16 @@
 /* =========================================================
-   SHOP VIEW — v1.5
+   SHOP VIEW — v1.6
    ---------------------------------------------------------
-   v1.5 (bộ sưu tập + equip badge):
-   ✅ Modal đẹp sau khi mua + nút "Trang bị ngay"
-   ✅ Tab "Bộ sưu tập" — list item đã mua + trạng thái
-   ✅ Trang bị / Bỏ trang bị badge
-   ✅ Card user hiển thị badge đang dùng
+   v1.6 FIX (tab Bộ sưu tập hiển thị cả shop):
+   ✅ setTab() dùng style.display thay vì hidden attribute
+      (CSS .shop-grid { display: grid } override [hidden])
+   ✅ Bấm "Trang bị ngay" trong modal → tự nhảy sang Bộ sưu tập
+   v1.5:
+   - Modal đẹp + confetti + nút "Trang bị ngay"
+   - Tab "Bộ sưu tập" + equip badge
+   - Card user hiển thị badge đang dùng
    v1.4:
    - Điểm từ chấm công (server-side)
-   v1.3:
-   - TYPE Y (mỗi tháng mua lại được)
    ========================================================= */
 (function(){
   "use strict";
@@ -150,7 +151,7 @@
         <div class="shop-filters" id="shopFilters"></div>
         <div class="shop-grid" id="shopGrid"></div>
 
-        <div class="shop-collection" id="shopCollection" hidden>
+        <div class="shop-collection" id="shopCollection" style="display:none">
           <div class="shop-collection-grid" id="shopCollectionGrid"></div>
         </div>
       </div>
@@ -204,26 +205,31 @@
     return page;
   }
 
-  /* ───── Tab ───── */
+  /* ───── Tab ─────
+     ⭐ v1.6 FIX: dùng style.display thay vì hidden attribute
+     vì CSS .shop-grid { display: grid } override [hidden] */
   function setTab(tab) {
     S.activeTab = tab;
     const page = $(PAGE_ID);
     if (!page) return;
+
     page.querySelectorAll(".shop-tab").forEach(function(btn) {
       btn.classList.toggle("active", btn.dataset.tab === tab);
     });
-    const shopContent = page.querySelector(".shop-grid");
+
     const filters = page.querySelector("#shopFilters");
-    const col = page.querySelector("#shopCollection");
+    const shopGrid = page.querySelector("#shopGrid");
+    const collection = page.querySelector("#shopCollection");
+
     if (tab === "shop") {
-      if (shopContent) shopContent.hidden = false;
-      if (filters) filters.hidden = false;
-      if (col) col.hidden = true;
+      if (filters) filters.style.display = "";
+      if (shopGrid) shopGrid.style.display = "";
+      if (collection) collection.style.display = "none";
       renderItems();
     } else {
-      if (shopContent) shopContent.hidden = true;
-      if (filters) filters.hidden = true;
-      if (col) col.hidden = false;
+      if (filters) filters.style.display = "none";
+      if (shopGrid) shopGrid.style.display = "none";
+      if (collection) collection.style.display = "";
       renderCollection();
     }
   }
@@ -646,6 +652,8 @@
         newBtn.textContent = "Đang trang bị…";
         await equipBadge(_modalItemId, null);
         closeModal();
+        /* ⭐ v1.6: nhảy sang tab Bộ sưu tập để user thấy badge đang dùng */
+        setTab("collection");
       });
     }
   }
@@ -709,15 +717,16 @@
     document.body.style.overflow = "hidden";
     try { if (typeof window.syncQuickTools === "function") window.syncQuickTools(); } catch(_) {}
 
+    /* Reset về tab shop khi mở */
+    S.activeTab = "shop";
+    setTab("shop");
     renderUserCard();
-    renderItems();
     sync();
   }
 
   function closePage() {
     const page = $(PAGE_ID);
     if (!page) return;
-    /* Đóng modal nếu đang mở */
     closeModal();
     page.classList.remove("show");
     page.setAttribute("aria-hidden", "true");
@@ -747,7 +756,8 @@
       close: closePage,
       sync: sync,
       state: S,
-      equip: equipBadge
+      equip: equipBadge,
+      setTab: setTab
     };
 
     window.addEventListener("displayNameUpdated", function() {
@@ -762,7 +772,7 @@
       if (S.pageOpen) sync();
     });
 
-    log("v1.5 ready ✓ (collection + badge)");
+    log("v1.6 ready ✓ (fix tab display + auto-jump to collection)");
   }
 
   if (document.readyState === "loading") {
