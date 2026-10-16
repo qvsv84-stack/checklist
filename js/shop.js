@@ -1,12 +1,15 @@
 /* =========================================================
-   SHOP VIEW — v2.4
+   SHOP VIEW — v2.5 (Lazy init)
    ---------------------------------------------------------
+   v2.5 FIX (web chậm):
+   ✅ KHÔNG tạo DOM shop khi boot → tiết kiệm ~500 DOM nodes
+   ✅ DOM chỉ được tạo khi user mở shop lần đầu
+   ✅ Guard sync(): skip nếu shopPage chưa tồn tại
+   ✅ Vẫn register __openShop ngay → CTA click vẫn work
    v2.4:
-   ✅ Dispatch event "spinCompleted" cho spin-feed
+   - Spin feed dispatch event
    v2.3:
-   - Spin speed ổn định ~3 vòng/s
-   v2.2:
-   - Optimistic spin update
+   - Spin speed ổn định
    ========================================================= */
 (function(){
   "use strict";
@@ -35,6 +38,7 @@
     loading: false,
     pageOpen: false,
     booted: false,
+    pageCreated: false,
     timer: null
   };
 
@@ -91,6 +95,9 @@
     } catch(_) { return ""; }
   }
 
+  /* ═══════════════════════════════════════════════════════
+     ENSURE PAGE — chỉ gọi khi user mở shop lần đầu
+     ═══════════════════════════════════════════════════════ */
   function ensurePage() {
     let page = $(PAGE_ID);
     if (page) return page;
@@ -251,6 +258,7 @@
     page.querySelector("#shopSpinBtn").addEventListener("click", doSpin);
 
     buildWheel();
+    S.pageCreated = true;
 
     log("Page created ✓");
     return page;
@@ -852,7 +860,6 @@
 
       showSpinResult(prizeAmount, d.data);
 
-      /* ⭐ v2.4: dispatch event cho spin-feed cập nhật ngay */
       try {
         window.dispatchEvent(new CustomEvent("spinCompleted", {
           detail: { prize_amount: prizeAmount }
@@ -1236,8 +1243,10 @@
     }
   }
 
+  /* ⭐ v2.5: Guard — skip nếu shop chưa tạo DOM */
   async function sync() {
     if (S.loading) return;
+    if (!document.getElementById(PAGE_ID)) return;  // ⭐ v2.5 lazy guard
     S.loading = true;
     try {
       S.currentUser = (window.SRank && window.SRank.Auth && window.SRank.Auth.getCurrentUser)
@@ -1313,17 +1322,18 @@
     }, REFRESH_MS);
   }
 
+  /* ⭐ v2.5: boot KHÔNG tạo DOM — chỉ register global functions */
   function boot() {
     if (S.booted) return;
     S.booted = true;
-    ensurePage();
-    startTimer();
+
     window.__openShop = openPage;
     window.__closeShop = closePage;
     window.ShopView = {
       open: openPage, close: closePage, sync: sync,
       state: S, equip: equipBadge, setTab: setTab
     };
+
     window.addEventListener("displayNameUpdated", function() {
       _avatarCache.clear();
       if (S.pageOpen) sync();
@@ -1338,7 +1348,9 @@
     window.addEventListener("shopRequestReviewed", function() {
       if (S.pageOpen) sync();
     });
-    log("v2.4 ready ✓");
+
+    startTimer();
+    log("v2.5 ready ✓ (lazy init — DOM chỉ tạo khi mở shop)");
   }
 
   if (document.readyState === "loading") {
