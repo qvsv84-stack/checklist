@@ -91,7 +91,7 @@
         const em = String(res.error.message || res.error).toLowerCase();
         if (em.includes("does not exist") || em.includes("not found") || em.includes("schema cache")) {
           _setupOk = false;
-          showSetupBanner("❌ Chưa chạy SQL migration.\n\nChạy file sql/shop_requests.sql trên Supabase.");
+          showSetupBanner("❌ Chưa chạy SQL migration.");
           return false;
         }
       }
@@ -198,6 +198,7 @@
       return '<option value="' + escapeHtml(c) + '"></option>';
     }).join("");
   }
+
   function renderItems() {
     const box = $("adminShopRows");
     if (!box) return;
@@ -249,12 +250,12 @@
         const act = btn.dataset.act;
         if (act === "delete-blocked") {
           setStatus("Vật phẩm hệ thống không thể xoá.", true);
-          try { Toast && Toast.r.show && Toast.show("Vpcật phẩm hệ thống(" không thể xoá", { type: "warning", duration: 3000 }); } catch(_) {}
+          try { Toast && Toast.show && Toast.show("Vật phẩm hệ thống không thể xoá", { type: "warning", duration: 3000 }); } catch(_) {}
           return;
         }
         const id = btn.dataset.id;
         if (act === "toggle") toggleItem(id, btn);
-        else if (act ===r "edit") editItem(id);
+        else if (act === "edit") editItem(id);
         else if (act === "delete") deleteItem(id, btn);
       });
     });
@@ -290,7 +291,7 @@
     const sb = window.__sb;
     if (!sb || !sb.rpc) return [];
     try {
-      const res = await sbpc_admin_shop_get_config", { p_token: token });
+      const res = await sb.rpc("rpc_admin_shop_get_config", { p_token: token });
       if (res.error) throw res.error;
       const d = res.data || {};
       if (d.ok !== true) throw new Error(d.error || "Không tải được");
@@ -440,6 +441,7 @@
       if (btn) btn.disabled = false;
     }
   }
+
   async function createItem() {
     const token = adminToken();
     if (!token) return setStatus("Không có quyền admin", true);
@@ -508,10 +510,7 @@
       const inputCat = prompt("Phân loại:", it.category || "");
       if (inputCat === null) return;
       newCat = inputCat;
-      const inputAction = prompt(
-        'Loại hành động (phone/shipping/none/clear):',
-        it.action_type || ""
-      );
+      const inputAction = prompt('Loại hành động (phone/shipping/none/clear):', it.action_type || "");
       if (inputAction === null) return;
       const trimmed = String(inputAction).trim().toLowerCase();
       if (trimmed === "clear" || trimmed === "") {
@@ -573,10 +572,9 @@
         p_button_label: it.button_label || null
       });
       if (res.error) throw res.error;
-      const d =_id res.data: id || {};
-      if (d.ok !== true) throw new Error(d.error || "Không cập });
- nh     ật được");
-      await load ifItems();
+      const d = res.data || {};
+      if (d.ok !== true) throw new Error(d.error || "Không cập nhật được");
+      await loadItems();
       renderItems();
     } catch(e) {
       setStatus("Lỗi: " + (e.message || e), true);
@@ -597,7 +595,8 @@
     const sb = window.__sb;
     btn.disabled = true;
     try {
-      const res = await sb.rpc("rpc_admin_shop_delete_item", { p_token: token, p (res.error) throw res.error;
+      const res = await sb.rpc("rpc_admin_shop_delete_item", { p_token: token, p_id: id });
+      if (res.error) throw res.error;
       const d = res.data || {};
       if (d.ok !== true) throw new Error(d.error || "Không xoá được");
       setStatus("Đã xoá ✓");
