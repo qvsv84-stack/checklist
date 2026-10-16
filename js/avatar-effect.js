@@ -1,15 +1,17 @@
 /* =========================================================
-   AVATAR EFFECT — v1.1
+   AVATAR EFFECT — v1.2 (Performance fix)
    ---------------------------------------------------------
-   v1.1 FIX (không thấy hạt bay):
-   ✅ Thêm _applying flag — MutationObserver bỏ qua mutation
-      do chính module này gây ra (particles insert/remove)
-   ✅ MutationObserver không còn loop vô tận → animation
-      fireParticle chạy được tới 20% → opacity: 1 → thấy hạt
-   v1.0:
-   - Áp dụng hiệu ứng avatar cho user hiện tại ở mọi nơi
-
-   LOAD ORDER: sau auth.js + supabase-adapter.js, trước shop.js
+   v1.2 FIX (web chậm):
+   ✅ MutationObserver bây giờ LỌC mutations:
+      - Bỏ qua mutations trong #spinFeed (rotate 1s/tin)
+      - Bỏ qua mutations trong .shop-modal
+      - Bỏ qua mutations trong .avatar-effect-fire (tránh self-trigger)
+      - Chỉ schedule nếu target nằm trong container liên quan
+   ✅ Debounce 400ms (thay vì rAF ngay lập tức)
+   ✅ _applying lock tăng 800ms (thay 150ms)
+   ✅ Boot chỉ refresh 2 lần thay vì 4 lần
+   v1.1:
+   - _applying flag chống loop
    ========================================================= */
 (function(){
   "use strict";
@@ -17,12 +19,28 @@
   window.__avatarEffectLoaded = true;
 
   const TTL_MS = 30000;
+  const APPLY_LOCK_MS = 800;
+  const DEBOUNCE_MS = 400;
+
+  /* Containers ta QUAN TÂM — mutation ngoài các container này bị bỏ qua */
+  const RELEVANT_SELECTORS = [
+    '#question',         // landing podium, courtiers, throne, advisors
+    '#menuOverlay',      // menu 3 gạch
+    '#attendancePage',   // chấm công
+    '#clV6Page',         // checklist V6
+    '#shopPage'          // shop
+  ];
+
   const state = {
     equipped: null,
     loading: false,
     lastFetch: 0,
     me: ''
   };
+
+  let _applying = false;
+  let _applyResetTimer = null;
+  let _scheduleTimer = null;
 
   function log(){ if (window.__SRANK_DEBUG) console.log.apply(console, ["[AvatarEffect]"].concat([].slice.call(arguments))); }
 
@@ -111,7 +129,6 @@
     const eff = EFFECT_MAP[effectType];
     if (!eff) return;
 
-    /* Đảm bảo position relative để pseudo ::before hoạt động */
     try {
       const cs = getComputedStyle(wrapEl);
       if (cs.position === 'static') {
@@ -120,7 +137,6 @@
       }
     } catch(_){}
 
-    /* Detect size → dùng biến thể nhỏ nếu wrap < 50px */
     let isSmall = false;
     try {
       const r = wrapEl.getBoundingClientRect();
@@ -134,11 +150,7 @@
 
   /* ═══════════════════════════════════════════════════════
      REFRESH — scan toàn bộ DOM
-     ⭐ v1.1: _applying flag để chống MutationObserver loop
      ═══════════════════════════════════════════════════════ */
-  let _applying = false;
-  let _applyResetTimer = null;
-
   function isMe(displayName){
     if (!displayName) return false;
     const me = state.me;
@@ -147,14 +159,12 @@
   }
 
   function refreshAll(){
-    /* ⭐ v1.1: chặn recursive call */
     if (_applying) return;
     _applying = true;
 
     try {
       const eff = state.equipped && state.equipped.effect_type;
 
-      /* Xoá hết effect cũ */
       clearAll();
 
       if (!state.me || !eff) return;
@@ -207,42 +217,90 @@
 
       log('refreshed · equipped=' + (eff || 'none') + ' · me=' + state.me);
     } finally {
-      /* ⭐ v1.1: giữ _applying=true trong 150ms để MutationObserver
-         bỏ qua hết mutation do particles insert/remove vừa tạo */
       if (_applyResetTimer) clearTimeout(_applyResetTimer);
       _applyResetTimer = setTimeout(function(){
         _applying = false;
-      }, 150);
+      }, APPLY_LOCK_MS);
     }
   }
 
   /* ═══════════════════════════════════════════════════════
-     SCHEDULE
+     SCHEDULE — debounce 400ms
      ═══════════════════════════════════════════════════════ */
-  let scheduled = false;
   function schedule(){
-    if (scheduled) return;
-    scheduled = true;
-    requestAnimationFrame(function(){
-      scheduled = false;
+    if (_scheduleTimer) clearTimeout(_scheduleTimer);
+    _scheduleTimer = setTimeout(function(){
+      _scheduleTimer = null;
       try { refreshAll(); } catch(e) { console.warn('[AvatarEffect] refresh error:', e); }
-    });
+    }, DEBOUNCE_MS);
   }
 
   /* ═══════════════════════════════════════════════════════
-     OBSERVER — v1.1: bỏ qua mutation khi _applying = true
+     v1.2: MUTATION FILTER
+     ═══════════════════════════════════════════════════════ */
+  function hasClosest(node, sel){
+    if (!node || !node.closest) return false;
+    try { return !!node.closest(sel); } catch(_) { return false; }
+  }
+
+  function nodeMatches(node, sel){
+    if (!node || node.nodeType !== 1) return false;
+    try {
+      if (node.matches && node.matches(sel)) return true;
+      if (node.querySelector && node.querySelector(sel)) return true;
+    } catch(_){}
+    return false;
+  }
+
+  function shouldSchedule(mutations){
+    /* Nếu đang apply → bỏ qua */
+    if (_applying) return false;
+
+    for (let i = 0; i < mutations.length; i++){
+      const m = mutations[i];
+      const target = m.target;
+      if (!target) continue;
+
+      /* Skip mutations trong các vùng "ồn ào" */
+      if (hasClosest(target, '#spinFeed')) continue;
+      if (hasClosest(target, '.shop-modal')) continue;
+      if (hasClosest(target, '.avatar-effect-fire')) continue;
+
+      /* Attribute data-name → relevant */
+      if (m.type === 'attributes' && m.attributeName === 'data-name'){
+        return true;
+      }
+
+      /* childList → chỉ relevant nếu target hoặc addedNodes trong container */
+      if (m.type === 'childList'){
+        /* Check target */
+        for (let j = 0; j < RELEVANT_SELECTORS.length; j++){
+          if (hasClosest(target, RELEVANT_SELECTORS[j])) return true;
+        }
+
+        /* Check added nodes */
+        const added = m.addedNodes;
+        if (added && added.length){
+          for (let k = 0; k < added.length; k++){
+            const n = added[k];
+            if (!n) continue;
+            for (let j = 0; j < RELEVANT_SELECTORS.length; j++){
+              if (nodeMatches(n, RELEVANT_SELECTORS[j])) return true;
+            }
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  /* ═══════════════════════════════════════════════════════
+     OBSERVER
      ═══════════════════════════════════════════════════════ */
   function startObserver(){
     try {
       const obs = new MutationObserver(function(muts){
-        /* ⭐ v1.1: bỏ qua nếu đang trong quá trình apply */
-        if (_applying) return;
-
-        for (let i = 0; i < muts.length; i++) {
-          const m = muts[i];
-          if (m.type === 'childList') { schedule(); return; }
-          if (m.type === 'attributes' && m.attributeName === 'data-name') { schedule(); return; }
-        }
+        if (shouldSchedule(muts)) schedule();
       });
       obs.observe(document.body, {
         childList: true,
@@ -276,16 +334,16 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     BOOT
+     BOOT — v1.2: chỉ 2 refreshes
      ═══════════════════════════════════════════════════════ */
   function boot(){
+    /* 1st refresh sau khi load equipped */
     load(true).then(schedule);
     startObserver();
     bindEvents();
-    setTimeout(schedule, 300);
-    setTimeout(function(){ load(true).then(schedule); }, 1500);
-    setTimeout(schedule, 3000);
-    log('v1.1 ready ✓');
+    /* 2nd (safety) sau 2s — catch late DOM render */
+    setTimeout(function(){ load(false).then(schedule); }, 2000);
+    log('v1.2 ready ✓ (mutation filter + 400ms debounce)');
   }
 
   if (document.readyState === 'loading') {
@@ -294,9 +352,6 @@
     setTimeout(boot, 400);
   }
 
-  /* ═══════════════════════════════════════════════════════
-     EXPOSE
-     ═══════════════════════════════════════════════════════ */
   window.AvatarEffect = {
     load: load,
     getEquipped: function(){ return state.equipped; },
