@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════
-   SHOP THƯỞNG — Styles v2.4
+   SHOP THƯỞNG — Styles v2.5
    ═══════════════════════════════════════════════════════ */
 
 #shopPage {
@@ -1274,6 +1274,7 @@
 
 /* ═══════════════════════════════════════════════════════════════
    SPIN FEED — Landing widget
+   ⭐ v2.5: Fixed height + class hidden → không giật landing
    ═══════════════════════════════════════════════════════════════ */
 
 .spin-feed {
@@ -1281,6 +1282,8 @@
   max-width: 440px;
   margin: 0 auto 14px;
   padding: 0;
+  /* ⭐ Fixed height = 3 × 38px */
+  height: 114px;
   border-radius: 14px;
   background: radial-gradient(ellipse 90% 60% at 50% 0%, rgba(255,235,180,.9), transparent 70%),
               linear-gradient(160deg, #fffdf5 0%, #fff3d4 100%);
@@ -1289,15 +1292,36 @@
     0 6px 20px -10px rgba(220,140,20,.35),
     inset 0 1px 0 rgba(255,255,255,.7);
   overflow: hidden;
+  /* ⭐ Transition mượt khi ẩn/hiện */
+  transition:
+    height .35s cubic-bezier(.4, 0, .2, 1),
+    margin .35s cubic-bezier(.4, 0, .2, 1),
+    opacity .25s ease,
+    border-color .3s ease,
+    box-shadow .3s ease;
   animation: spinFeedFadeIn .5s ease;
 }
 @keyframes spinFeedFadeIn {
   from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ⭐ Class ẩn — không dùng display:none nữa */
+.spin-feed.spin-feed-hidden {
+  height: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  opacity: 0;
+  border-color: transparent;
+  box-shadow: none;
+  pointer-events: none;
+}
+
 .spin-feed-list {
   display: flex;
   flex-direction: column;
+  /* ⭐ Fixed height để không nhấp nhô */
+  height: 100%;
   will-change: transform;
 }
 .spin-feed-item {
@@ -1360,7 +1384,15 @@
 .spin-feed-amount { color: #d68f20 !important; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 480px) {
-  .spin-feed { max-width: 100%; margin: 0 0 12px; }
+  .spin-feed {
+    max-width: 100%;
+    margin: 0 0 12px;
+    height: 108px;   /* 3 × 36px */
+  }
+  .spin-feed.spin-feed-hidden {
+    height: 0 !important;
+    margin: 0 !important;
+  }
   .spin-feed-item {
     height: 36px;
     font-size: 12.5px;
