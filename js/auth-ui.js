@@ -1,34 +1,18 @@
 /* =========================================================
-   SRANK AUTH UI — v10.9 (Role-based + CTA Morph + Verify User + Shop)
+   SRANK AUTH UI — v10.10 (Shop luôn hiện khi đã check)
    ---------------------------------------------------------
-   v10.9 CHANGES (SHOP):
-   - getCtaInfo() trả { action: "shop" } khi user đã check hôm nay
-   - intercept() xử lý riêng: action === "shop" → gọi window.__openShop()
-   v10.8 CHANGES:
-   - Bỏ BOSS_WHITELIST hard-code ['tienloi']
-   - isBossMode() delegate sang window.Role.isAdmin()
-   - Single source of truth: admin whitelist ở config.js
-   v10.7 CHANGES:
-   - Verify user còn tồn tại trong employees sau login
-   - Force logout nếu user đã bị admin xoá
-   - Chỉ logout khi RPC trả lời rõ ràng "không tồn tại"
-   - Network fail / RPC error → KHÔNG logout (an toàn)
-   v10.6 CHANGES:
-   - handleCheckin(cta) → gọi window.__ctaMorph.start() nếu có
-   - intercept truyền cta vào handleCheckin
-   - Fallback miniBurst nếu morph không tồn tại
-   v10.5 CHANGES:
-   - BOSS_WHITELIST chỉ còn ['tienloi']
-   v10.4 CHANGES:
-   - Thêm checkbox "Lưu mật khẩu cho lần sau"
-   - Tự động điền credentials đã lưu khi mở form
-   - Lưu/xoá theo checkbox khi login thành công
-   - Storage key: srank_saved_credentials_v1
-   v10.3 CHANGES:
-   - Bỏ hẳn mọi reference đến password admin
-   - isBossMode() check role admin từ Auth metadata
-   - Auth.onChange KHÔNG clear gì → role auto-refresh
-   - Logout mới clear AdminSession (dù là no-op)
+   v10.10 FIX:
+   - getCtaInfo() đổi thứ tự ưu tiên:
+       1. Chưa login + locked → locked
+       2. Chưa login → login
+       3. Đã login nhưng tên không khớp → mismatch
+       4. Đã check hôm nay → SHOP (bất kể locked)
+       5. Chưa check + locked → locked
+       6. Chưa check + chưa locked → chấm công
+   v10.9:
+   - action: "shop"
+   v10.8:
+   - Role-based
    ========================================================= */
 (function(){
   "use strict";
@@ -114,7 +98,7 @@
   })();
 
   /* ============================================================
-     AUTO-HIDE — ẩn sidebar + 🔔 + 🎂 khi có overlay mở
+     AUTO-HIDE
      ============================================================ */
   (function initAutoHide(){
     const nav = document.getElementById("appSideNav");
@@ -160,7 +144,7 @@
     console.log("[NAV] auto-hide ready ✓");
   })();
 
-  /* ============ WAVE KICKER CSS ============ */
+  /* ============ WAVE KICKER ============ */
   function injectBaseCss(){
     if (document.getElementById('bossKickerCss')) return;
     const s = document.createElement('style');
@@ -232,25 +216,44 @@
     } catch(_) { return -1; }
   }
 
-  /* ⭐ v10.9: user đã check hôm nay → trả về CTA "shop" */
+  /* ⭐ v10.10: Ưu tiên Shop khi đã check, bất kể locked */
   function getCtaInfo(){
-    if (isChecklistLocked()) return { text: "🔒 Tạm khoá Checklist", locked: true };
-    if (!currentUser) return { text: "🔐 Đăng nhập", locked: false };
+    /* 1. Chưa login */
+    if (!currentUser) {
+      if (isChecklistLocked()) return { text: "🔒 Tạm khoá Checklist", locked: true };
+      return { text: "🔐 Đăng nhập", locked: false };
+    }
+
+    /* 2. Đã login — check tên có trong checklist không */
     const idx = findUserIndex(currentUser.displayName);
     if (idx < 0) return { text: "⚠ Tên không khớp checklist", locked: true };
+
+    /* 3. Check user đã check hôm nay chưa */
+    let hasChecked = false;
     try {
       const st = window.SRank && window.SRank.getCurrentState ? window.SRank.getCurrentState() : null;
       if (st && st.checked && st.checked[idx] && st.times && st.times[idx]){
-        return { text: "🏪 Shop thưởng", action: "shop", locked: false };
+        hasChecked = true;
       }
     } catch(_) {}
+
+    /* ⭐ 4. Đã check → Shop (BẤT KỂ locked hay chưa) */
+    if (hasChecked) {
+      return { text: "🏪 Shop thưởng", action: "shop", locked: false };
+    }
+
+    /* 5. Chưa check + locked → khoá */
+    if (isChecklistLocked()) {
+      return { text: "🔒 Tạm khoá Checklist", locked: true };
+    }
+
+    /* 6. Chưa check + chưa locked → chấm công */
     return { text: "⏰ Chấm công", locked: false };
   }
   window.__getCtaInfo = getCtaInfo;
 
   /* ============ KICKER CONFIG ============ */
   const MINO_USERNAME = 'thaouyen';
-
   const KICKER_DEFAULT = '🐱 DAILY TEAM HUB';
   const KICKER_BOSS = '🕶️ BOSS TỔ CHỨC ÁO ĐEN';
   const KICKER_MINO = '🎀 MINO ÁO HỒNG';
@@ -261,18 +264,10 @@
     return un === MINO_USERNAME;
   }
 
-  /* ✅ v10.8: delegate sang window.Role — single source of truth */
   function isBossMode(){
     if (!currentUser) return false;
-    if (!window.Role) {
-      console.warn('[AUTH-UI] window.Role chưa load — kiểm tra load order');
-      return false;
-    }
-    try {
-      return window.Role.isAdmin(currentUser);
-    } catch(_) {
-      return false;
-    }
+    if (!window.Role) return false;
+    try { return window.Role.isAdmin(currentUser); } catch(_) { return false; }
   }
 
   function splitGraphemes(text){
@@ -308,23 +303,12 @@
   }
 
   function getKickerRender(){
-    if (isMinoMode()){
-      return { html: buildWaveHtml(KICKER_MINO), text: KICKER_MINO, version: 'mino' };
-    }
-    if (isBossMode()){
-      return { html: buildWaveHtml(KICKER_BOSS), text: KICKER_BOSS, version: 'boss' };
-    }
+    if (isMinoMode()) return { html: buildWaveHtml(KICKER_MINO), text: KICKER_MINO, version: 'mino' };
+    if (isBossMode()) return { html: buildWaveHtml(KICKER_BOSS), text: KICKER_BOSS, version: 'boss' };
     return { html: null, text: KICKER_DEFAULT, version: 'default' };
   }
 
-  function getKickerText(){
-    if (isMinoMode()) return KICKER_MINO;
-    if (isBossMode()) return KICKER_BOSS;
-    return KICKER_DEFAULT;
-  }
-
   window.__getKickerRender = getKickerRender;
-  window.__getKickerText = getKickerText;
 
   /* ============ CTA HANDLER ============ */
   function miniBurst(){
@@ -351,7 +335,6 @@
     setTimeout(function(){ for (const h of hearts) h.remove(); }, 1600);
   }
 
-  /* ⭐ v10.6: nhận cta element, ưu tiên morph animation */
   async function handleCheckin(cta){
     if (!currentUser) return;
     const idx = findUserIndex(currentUser.displayName);
@@ -364,26 +347,16 @@
       return;
     }
 
-    /* ⭐ v10.6: dùng morph animation nếu có */
     if (window.__ctaMorph && typeof window.__ctaMorph.start === "function" && cta) {
-      try {
-        await window.__ctaMorph.start(cta);
-        return;
-      } catch(err) {
-        console.error("[AUTH-UI] morph failed, fallback:", err);
-      }
+      try { await window.__ctaMorph.start(cta); return; }
+      catch(err) { console.error("[AUTH-UI] morph failed, fallback:", err); }
     }
 
-    /* Fallback: checkin trực tiếp */
     miniBurst();
-    try {
-      await window.SRank.requestCheckin(currentUser.displayName);
-    } catch(err){
-      console.error("[AUTH-UI] checkin error:", err);
-    }
+    try { await window.SRank.requestCheckin(currentUser.displayName); }
+    catch(err){ console.error("[AUTH-UI] checkin error:", err); }
   }
 
-  /* ⭐ v10.9: intercept xử lý cả 3 case: shop / locked / login+checkin */
   function intercept(e){
     const cta = e.target && e.target.closest ? e.target.closest(".landing-cta") : null;
     if (!cta) return;
@@ -393,7 +366,6 @@
 
     const info = getCtaInfo();
 
-    /* ⭐ SHOP: mở shop page */
     if (info.action === "shop") {
       try {
         if (typeof window.__openShop === "function") {
@@ -404,9 +376,7 @@
             window.SRank.setStatus("Shop đang tải, thử lại sau 1 giây…");
           }
         }
-      } catch(err) {
-        console.error("[AUTH-UI] openShop error:", err);
-      }
+      } catch(err) { console.error("[AUTH-UI] openShop error:", err); }
       return;
     }
 
@@ -425,8 +395,6 @@
   }
 
   /* ============ LOGIN FORM ============ */
-
-  /* ⭐ v10.4: lưu/đọc/xoá credentials */
   function loadSavedCredentials(){
     try {
       const raw = localStorage.getItem(CRED_KEY);
@@ -457,7 +425,6 @@
     overlay.setAttribute("aria-hidden", "false");
     msgEl.textContent = "";
     msgEl.classList.remove("ok");
-    /* ⭐ v10.4: tự điền credentials đã lưu */
     const saved = loadSavedCredentials();
     if (saved){
       if (!userInput.value) userInput.value = saved.username;
@@ -498,8 +465,6 @@
     setMsg("");
     try {
       await Auth.login(u, p);
-      /* v10.3: không clear gì — role được đọc từ Auth metadata */
-      /* ⭐ v10.4: lưu/xoá credentials theo checkbox */
       if (rememberCheckbox && rememberCheckbox.checked) {
         saveCredentials(u, p);
       } else {
@@ -556,18 +521,16 @@
   async function handleLogout(){
     if (!confirm("Đăng xuất khỏi tài khoản?")) return;
     try { await Auth.logout(); } catch(_) {}
-    /* v10.3: Clear AdminSession (no-op nhưng gọi cho sạch) */
     try {
       if (window.AdminSession && typeof window.AdminSession.clear === "function") {
         window.AdminSession.clear();
       }
     } catch(_) {}
-    /* ⭐ v10.4: KHÔNG xoá credentials — để lần sau tự điền */
   }
 
   if (logoutBtn) logoutBtn.addEventListener("click", handleLogout);
 
-  /* ⭐ v10.7: verify user còn tồn tại trong employees — force logout nếu bị xoá */
+  /* ⭐ Verify user còn tồn tại */
   let _userCheckInFlight = false;
   let _userCheckPassed = false;
   let _userCheckRetries = 0;
@@ -611,18 +574,15 @@
     return true;
   }
 
-  /* v10.3: Auth.onChange không clear gì cả */
   Auth.onChange(function(user){
     currentUser = user;
     updateLogoutBtn();
 
-    // Reset verify flag khi user logout → login lại sẽ check lại
     if (!user) {
       _userCheckPassed = false;
       _userCheckRetries = 0;
     }
 
-    // ⭐ v10.7: verify user còn tồn tại
     if (user && user.displayName && !_userCheckPassed) {
       setTimeout(() => { verifyUserExists(user); }, 500);
     }
@@ -635,7 +595,6 @@
   currentUser = Auth.getCurrentUser();
   updateLogoutBtn();
 
-  // ⭐ v10.7: verify user khi boot
   if (currentUser && currentUser.displayName && !_userCheckPassed) {
     setTimeout(() => { verifyUserExists(currentUser); }, 1500);
   }
@@ -646,5 +605,5 @@
 
   window.SRank.openLogin = openLoginForm;
 
-  console.log("[AUTH-UI] ready ✓ v10.9 — role-based + remember me + morph + verify + shop");
+  console.log("[AUTH-UI] ready ✓ v10.10 — shop ưu tiên khi đã check");
 })();
