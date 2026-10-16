@@ -20,10 +20,8 @@
 (function(){
   "use strict";
   var LS_KEY = '__srank_ver';
-
   function getStored(){ try { return localStorage.getItem(LS_KEY) || ''; } catch(_){ return ''; } }
   function setStored(v){ try { localStorage.setItem(LS_KEY, v); } catch(_){} }
-
   async function fetchVersion(){
     try {
       var res = await fetch('/version.json?_=' + Date.now(), { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
@@ -32,7 +30,6 @@
       return data && data.v ? String(data.v) : null;
     } catch(_){ return null; }
   }
-
   async function clearAll(){
     var tasks = [];
     if ('serviceWorker' in navigator){
@@ -47,13 +44,11 @@
     }
     await Promise.all(tasks);
   }
-
   function hardReload(){
     var url = new URL(location.href);
     url.searchParams.set('_v', Date.now());
     location.replace(url.toString());
   }
-
   (async function(){
     var stored = getStored();
     var remote = await fetchVersion();
@@ -64,7 +59,6 @@
     setStored(remote);
     hardReload();
   })();
-
   setInterval(async function(){
     if (document.hidden) return;
     var remote = await fetchVersion();
@@ -72,7 +66,6 @@
     var stored = getStored();
     if (stored && stored !== remote){ await clearAll(); setStored(remote); hardReload(); }
   }, 5 * 60 * 1000);
-
   document.addEventListener('visibilitychange', async function(){
     if (document.hidden) return;
     var remote = await fetchVersion();
@@ -107,12 +100,9 @@ html body #question .landing-title { margin: 0 0 10px !important; }
 html body #question .landing-top3.landing-court, html body #question .landing-court { display: flex !important; flex-direction: column !important; align-items: stretch !important; justify-content: flex-start !important; flex-wrap: nowrap !important; gap: 8px !important; padding: 0 !important; margin: 0 0 12px !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; height: auto !important; max-height: none !important; overflow: visible !important; position: static !important; background: none !important; border: 0 !important; box-shadow: none !important; box-sizing: border-box !important; }
 html body #question .landing-court::before, html body #question .landing-court::after { display: none !important; content: none !important; }
 html body #question .landing-court > * { flex: 0 0 auto !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; box-sizing: border-box !important; }
-
-/* PODIUM 3 CỘT */
 html body #question .court-podium { display: flex !important; flex-direction: row !important; justify-content: center !important; align-items: flex-end !important; gap: 6px !important; width: 100% !important; max-width: 100% !important; margin: 0 0 12px 0 !important; padding: 0 !important; box-sizing: border-box !important; }
 html body #question .podium-slot { flex: 1 1 0 !important; min-width: 0 !important; max-width: 33.333% !important; width: auto !important; display: flex !important; flex-direction: column !important; justify-content: flex-end !important; align-items: center !important; box-sizing: border-box !important; }
 html body #question .podium-slot-1 { padding-bottom: 25px !important; }
-
 html body #question .court-throne { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; gap: 4px !important; width: 100% !important; margin: 0 !important; }
 html body #question .throne-crown { font-size: 22px !important; line-height: 1 !important; margin-bottom: 2px !important; }
 html body #question .throne-avatar { position: relative !important; width: 68px !important; height: 68px !important; border-radius: 50% !important; overflow: hidden !important; border: 3px solid #ffb800 !important; background: linear-gradient(135deg,#fffbe9,#fff0c4) !important; box-shadow: 0 0 0 4px rgba(255,200,0,.25), 0 8px 24px -8px rgba(255,140,0,.55) !important; display: flex !important; align-items: center !important; justify-content: center !important; }
@@ -170,8 +160,6 @@ html body #question .landing-lock-note { display: block !important; margin-top: 
   html body #question .courtier-name { font-size: 12px !important; }
   html body #question .courtier-time { font-size: 10px !important; }
 }
-
-/* ATTENDANCE CARD — Stats inline */
 html body .att-employee-info { min-width: 0 !important; flex: 1 !important; display: flex !important; flex-direction: column !important; gap: 2px !important; }
 html body .att-employee-line { display: flex !important; align-items: baseline !important; gap: 8px !important; min-width: 0 !important; flex-wrap: wrap !important; }
 html body .att-employee-line .wheel-value { min-width: 0 !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; flex: 0 1 auto !important; }
@@ -189,13 +177,9 @@ html body .att-employee-stats .att-stats-rank.rank-B { background: linear-gradie
 
 <style id="hideBdFabForce">
 body:not(.user-is-admin) #adminBtn { display: none !important; }
-
-/* Login remember checkbox */
 .login-remember-label { display: flex !important; align-items: center !important; gap: 8px !important; font-size: 13px !important; color: #5a7a60 !important; font-weight: 700 !important; margin: 4px 0 10px !important; cursor: pointer !important; user-select: none !important; padding: 2px 0 !important; }
 .login-remember-label input[type="checkbox"] { width: 18px !important; height: 18px !important; cursor: pointer !important; accent-color: #4fa370 !important; margin: 0 !important; flex-shrink: 0 !important; }
 .login-remember-label span { line-height: 1.2 !important; }
-
-/* FIX pinch-zoom */
 html, body { touch-action: pan-x pan-y !important; -webkit-text-size-adjust: 100% !important; text-size-adjust: 100% !important; }
 #menuOverlay { touch-action: manipulation !important; overscroll-behavior: contain !important; }
 #menuOverlay *, #menuOverlayInner *, .menu-item, .menu-float { touch-action: manipulation !important; }
@@ -205,7 +189,6 @@ body.menu-open #menuOverlay { transform: none !important; }
 </style>
 
 <style id="neonCtaForce">
-/* ═══ NEON CTA — XANH LÁ TƯƠI ═══ */
 html body #question .landing-cta[data-cta="login"],
 html body #question .landing-cta[data-cta="checkin"] {
   position: relative !important;
@@ -245,8 +228,6 @@ html body #question .landing-cta[data-cta="checkin"]:active {
     0 0 44px hsl(140 60% 50% / .55),
     inset 0 0 18px hsl(140 60% 85% / .4) !important;
 }
-
-/* ⭐ SHOP CTA — vàng gold */
 html body #question .landing-cta[data-cta="shop"] {
   position: relative !important;
   z-index: 0 !important;
@@ -275,9 +256,7 @@ html body #question .landing-cta[data-cta="shop"]::before {
   pointer-events: none !important;
   box-shadow: 0 0 18px hsl(38 90% 58% / .5) !important;
 }
-html body #question .landing-cta[data-cta="shop"]:active {
-  transform: scale(.96) !important;
-}
+html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96) !important; }
 </style>
 </head>
 <body>
@@ -373,34 +352,22 @@ html body #question .landing-cta[data-cta="shop"]:active {
           <div class="admin-card">
             <div class="admin-card-row">
               <div class="admin-card-icon">👤</div>
-              <div class="admin-card-info">
-                <label for="adminNewUsername">Username</label>
-                <p>Chữ thường, số, _ (3-32 ký tự)</p>
-              </div>
+              <div class="admin-card-info"><label for="adminNewUsername">Username</label><p>Chữ thường, số, _ (3-32 ký tự)</p></div>
               <input id="adminNewUsername" type="text" inputmode="text" maxlength="32" placeholder="tenuser" autocomplete="off" autocapitalize="none" spellcheck="false">
             </div>
             <div class="admin-card-row">
               <div class="admin-card-icon">🔑</div>
-              <div class="admin-card-info">
-                <label for="adminNewPassword">Mật khẩu</label>
-                <p>Tối thiểu 6 ký tự</p>
-              </div>
+              <div class="admin-card-info"><label for="adminNewPassword">Mật khẩu</label><p>Tối thiểu 6 ký tự</p></div>
               <input id="adminNewPassword" type="text" inputmode="text" maxlength="64" placeholder="••••••" autocomplete="new-password">
             </div>
             <div class="admin-card-row">
               <div class="admin-card-icon">🏷</div>
-              <div class="admin-card-info">
-                <label for="adminNewDisplayName">Tên hiển thị</label>
-                <p>Tên trong checklist / chấm công</p>
-              </div>
+              <div class="admin-card-info"><label for="adminNewDisplayName">Tên hiển thị</label><p>Tên trong checklist / chấm công</p></div>
               <input id="adminNewDisplayName" type="text" inputmode="text" maxlength="100" placeholder="VD: Nguyễn Văn A" autocomplete="off">
             </div>
             <div class="admin-card-row">
               <div class="admin-card-icon">📊</div>
-              <div class="admin-card-info">
-                <label for="adminNewAttRow">Thứ tự (tùy chọn)</label>
-                <p>Số nhỏ hiện trước trong chấm công</p>
-              </div>
+              <div class="admin-card-info"><label for="adminNewAttRow">Thứ tự (tùy chọn)</label><p>Số nhỏ hiện trước trong chấm công</p></div>
               <input id="adminNewAttRow" type="text" inputmode="numeric" maxlength="3" placeholder="1" autocomplete="off">
             </div>
           </div>
@@ -423,35 +390,23 @@ html body #question .landing-cta[data-cta="shop"]:active {
             </div>
             <div class="admin-card-row">
               <div class="admin-card-icon">🏷</div>
-              <div class="admin-card-info">
-                <label for="adminShopName">Tên vật phẩm</label>
-                <p>Tối đa 100 ký tự</p>
-              </div>
+              <div class="admin-card-info"><label for="adminShopName">Tên vật phẩm</label><p>Tối đa 100 ký tự</p></div>
               <input id="adminShopName" type="text" maxlength="100" placeholder="Cà phê sữa" autocomplete="off">
             </div>
             <div class="admin-card-row">
               <div class="admin-card-icon">💰</div>
-              <div class="admin-card-info">
-                <label for="adminShopCost">Giá điểm</label>
-                <p>Số điểm cần để đổi</p>
-              </div>
+              <div class="admin-card-info"><label for="adminShopCost">Giá điểm</label><p>Số điểm cần để đổi</p></div>
               <input id="adminShopCost" type="text" inputmode="numeric" maxlength="7" placeholder="50" autocomplete="off">
             </div>
             <div class="admin-card-row">
               <div class="admin-card-icon">📂</div>
-              <div class="admin-card-info">
-                <label for="adminShopCategory">Phân loại</label>
-                <p>Gõ tự do — gợi ý từ các phân loại đã có</p>
-              </div>
+              <div class="admin-card-info"><label for="adminShopCategory">Phân loại</label><p>Gõ tự do — gợi ý từ các phân loại đã có</p></div>
               <input id="adminShopCategory" type="text" maxlength="50" list="adminShopCategoryList" placeholder="Đồ uống" autocomplete="off">
               <datalist id="adminShopCategoryList"></datalist>
             </div>
             <div class="admin-card-row">
               <div class="admin-card-icon">⚡</div>
-              <div class="admin-card-info">
-                <label for="adminShopActionType">Loại hành động</label>
-                <p>User sẽ thấy form gì khi bấm nút</p>
-              </div>
+              <div class="admin-card-info"><label for="adminShopActionType">Loại hành động</label><p>User sẽ thấy form gì khi bấm nút</p></div>
               <select id="adminShopActionType" class="admin-shop-action-select">
                 <option value="">— Không (item thường) —</option>
                 <option value="phone">📱 Nhập SĐT</option>
@@ -461,10 +416,7 @@ html body #question .landing-cta[data-cta="shop"]:active {
             </div>
             <div class="admin-card-row">
               <div class="admin-card-icon">🔘</div>
-              <div class="admin-card-info">
-                <label for="adminShopButtonLabel">Tên nút</label>
-                <p>VD: Sử dụng, Đặt hàng, Đổi thưởng (tối đa 30 ký tự)</p>
-              </div>
+              <div class="admin-card-info"><label for="adminShopButtonLabel">Tên nút</label><p>VD: Sử dụng, Đặt hàng, Đổi thưởng (tối đa 30 ký tự)</p></div>
               <input id="adminShopButtonLabel" type="text" maxlength="30" placeholder="Sử dụng" autocomplete="off">
             </div>
           </div>
@@ -535,6 +487,7 @@ html body #question .landing-cta[data-cta="shop"]:active {
 </div>
 
 <!-- #shopPage được js/shop.js tự tạo khi boot -->
+<!-- #spinFeed được js/spin-feed.js tự tạo khi boot -->
 
 <section id="attendancePage" aria-label="Lịch chấm công">
   <div class="att-page-inner"><div class="att-shell">
@@ -620,9 +573,6 @@ html body #question .landing-cta[data-cta="shop"]:active {
   <button class="att-multi-action clear" data-multi-status="" type="button">Xóa</button>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════════
-     SCRIPT LOAD ORDER
-     ══════════════════════════════════════════════════════════════ -->
 <script src="js/config.js"></script>
 <script src="js/debug-menu.js"></script>
 <script src="js/role.js" defer></script>
@@ -635,11 +585,9 @@ html body #question .landing-cta[data-cta="shop"]:active {
 <script src="js/display-name.js" defer></script>
 <script src="js/auth.js" defer></script>
 <script src="js/main.js" defer></script>
-<!-- ⬇️ View modules -->
 <script src="js/landing.js" defer></script>
 <script src="js/admin.js" defer></script>
 <script src="js/checklist-view.js" defer></script>
-<!-- ⬇️ Feature modules -->
 <script src="js/cta-morph.js" defer></script>
 <script src="js/auth-ui.js" defer></script>
 <script src="js/avatar-upload.js" defer></script>
@@ -654,6 +602,7 @@ html body #question .landing-cta[data-cta="shop"]:active {
 <script src="js/shop.js" defer></script>
 <script src="js/shop-admin.js" defer></script>
 <script src="js/shop-requests.js" defer></script>
+<script src="js/spin-feed.js" defer></script>
 
 <script>
 (function(){
