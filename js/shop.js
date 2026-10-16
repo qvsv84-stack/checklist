@@ -1,17 +1,14 @@
 /* =========================================================
-   SHOP VIEW — v1.9
+   SHOP VIEW — v2.0
    ---------------------------------------------------------
-   v1.9 (yêu cầu đổi thưởng):
-   ✅ Nút trong Bộ sưu tập theo button_label admin đặt
-   ✅ Bấm nút → form động theo action_type:
-        • phone    → nhập SĐT
-        • shipping → Tên + SĐT + Địa chỉ + Ghi chú
-        • none     → confirm đơn giản
-   ✅ Submit → RPC rpc_shop_submit_request
-   ✅ Status: pending → "⏳ Chờ duyệt"
-             approved → "✅ Thành công" + note admin
-             rejected → "❌ Từ chối" + note admin + nút "Thử lại"
-   ✅ Purchase bị refund → badge "💰 Đã hoàn điểm"
+   v2.0 (Vòng quay may mắn):
+   ✅ Tab thứ 3 "🎰 Vòng quay" trong shop
+   ✅ Wheel SVG 20 ô: 10-200 (bước 10)
+   ✅ Mỗi ngày 3 lượt, mỗi lượt 100đ
+   ✅ Animation 5s ease-out, dừng đúng ô trúng
+   ✅ Modal kết quả + cộng điểm
+   v1.9:
+   - Yêu cầu đổi thưởng (form động)
    v1.8:
    - Bỏ badge tròn vàng — dùng effect qua AvatarEffect
    ========================================================= */
@@ -25,6 +22,12 @@
   const $ = id => document.getElementById(id);
   const Toast = window.Toast;
 
+  const SPIN_MAX_DAILY = 3;
+  const SPIN_COST = 100;
+  const SPIN_TOTAL = 20;
+  const SPIN_DURATION_MS = 5000;
+  const SPIN_EXTRA_TURNS = 5;
+
   const S = {
     items: [],
     categories: [],
@@ -34,6 +37,7 @@
     currentUser: null,
     activeCategory: "",
     activeTab: "shop",
+    spin: { used: 0, remaining: 3, max: 3, cost: 100, loaded: false, spinning: false },
     loading: false,
     pageOpen: false,
     booted: false,
@@ -52,11 +56,11 @@
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function displayName(name) {
-    try { if (window.DN) return window.DN(name) || name; } catch(_) {}
-    return name || "";
+    try { if (window.DN) return window.DN(name)Month || name; } catch(_()) {}
+    + return name || "";
   }
-  function initialOf(name) {
-    const s = String(name || "").trim();
+  function  initialOf(name) {
+1    const s = String(name || "").trim();
     return s ? s.slice(0, 1).toUpperCase() : "?";
   }
   function avatarUrl(name) {
@@ -81,7 +85,7 @@
   }
   function getMonthLabel() {
     const d = new Date();
-    return "Tháng " + (d.getMonth() + 1) + "/" + d.getFullYear();
+    return "Tháng " + (d.get) + "/" + d.getFullYear();
   }
   function fmtDate(iso) {
     if (!iso) return "";
@@ -150,6 +154,10 @@
             <span class="shop-tab-label">Bộ sưu tập</span>
             <span class="shop-tab-count" id="shopCollectionCount"></span>
           </button>
+          <button class="shop-tab" data-tab="spin" type="button">
+            <span class="shop-tab-icon">🎰</span>
+            <span class="shop-tab-label">Vòng quay</span>
+          </button>
         </div>
 
         <div class="shop-filters" id="shopFilters"></div>
@@ -157,6 +165,23 @@
 
         <div class="shop-collection" id="shopCollection" style="display:none">
           <div class="shop-collection-grid" id="shopCollectionGrid"></div>
+        </div>
+
+        <div class="shop-spin" id="shopSpin" style="display:none">
+          <div class="shop-spin-info" id="shopSpinInfo"></div>
+          <div class="shop-spin-stage">
+            <div class="shop-spin-pointer">▼</div>
+            <div class="shop-spin-wheel-wrap">
+              <svg class="shop-spin-wheel" id="shopSpinWheel" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+                <g id="shopSpinWheelG"></g>
+                <circle cx="200" cy="200" r="38" fill="#fff" stroke="#f5a623" stroke-width="3" filter="drop-shadow(0 2px 6px rgba(0,0,0,0.3))"/>
+                <text x="200" y="210" text-anchor="middle" font-family="ui-rounded, system-ui" font-size="20" font-weight="900" fill="#f5a623">SPIN</text>
+              </svg>
+            </div>
+          </div>
+          <div class="shop-spin-status" id="shopSpinStatus">Đang tải…</div>
+          <button class="shop-spin-btn" id="shopSpinBtn" type="button">🎰 QUAY</button>
+          <div class="shop-spin-hint" id="shopSpinHint"></div>
         </div>
       </div>
 
@@ -183,7 +208,7 @@
         </div>
       </div>
 
-      <!-- Modal gửi yêu cầu đổi thưởng -->
+      <!-- Modal gửi yêu cầu -->
       <div class="shop-modal" id="shopRequestModal" aria-hidden="true">
         <div class="shop-modal-backdrop"></div>
         <div class="shop-request-panel" role="dialog" aria-modal="true">
@@ -194,13 +219,21 @@
           <div class="shop-request-item" id="shopRequestItemInfo"></div>
           <div class="shop-request-form" id="shopRequestForm"></div>
           <div class="shop-request-actions">
-            <button class="shop-modal-btn shop-modal-btn-primary" id="shopRequestSubmit" type="button">
-              Gửi yêu cầu
-            </button>
-            <button class="shop-modal-btn shop-modal-btn-ghost" id="shopRequestCancel" type="button">
-              Hủy
-            </button>
+            <button class="shop-modal-btn shop-modal-btn-primary" id="shopRequestSubmit" type="button">Gửi yêu cầu</button>
+            <button class="shop-modal-btn shop-modal-btn-ghost" id="shopRequestCancel" type="button">Hủy</button>
           </div>
+        </div>
+      </div>
+
+      <!-- Modal kết quả vòng quay -->
+      <div class="shop-modal" id="shopSpinModal" aria-hidden="true">
+        <div class="shop-modal-backdrop"></div>
+        <div class="shop-spin-result-panel" role="dialog" aria-modal="true">
+          <div class="shop-spin-result-emoji" id="shopSpinResultEmoji">🎉</div>
+          <div class="shop-spin-result-title" id="shopSpinResultTitle">Chúc mừng!</div>
+          <div class="shop-spin-result-amount" id="shopSpinResultAmount">+100đ</div>
+          <div class="shop-spin-result-sub" id="shopSpinResultSub"></div>
+          <button class="shop-modal-btn shop-modal-btn-primary" id="shopSpinResultClose" type="button">Đóng</button>
         </div>
       </div>
     `;
@@ -221,17 +254,89 @@
     });
     page.querySelector("#shopModalClose").addEventListener("click", closeModal);
     page.querySelector("#shopModal .shop-modal-backdrop").addEventListener("click", closeModal);
-
-    /* Request modal */
     page.querySelector("#shopRequestClose").addEventListener("click", closeRequestModal);
     page.querySelector("#shopRequestCancel").addEventListener("click", closeRequestModal);
     page.querySelector("#shopRequestModal .shop-modal-backdrop").addEventListener("click", closeRequestModal);
     page.querySelector("#shopRequestSubmit").addEventListener("click", submitRequest);
+    page.querySelector("#shopSpinResultClose").addEventListener("click", closeSpinModal);
+    page.querySelector("#shopSpinModal .shop-modal-backdrop").addEventListener("click", closeSpinModal);
+    page.querySelector("#shopSpinBtn").addEventListener("click", doSpin);
+
+    /* Build wheel SVG */
+    buildWheel();
 
     log("Page created ✓");
     return page;
   }
 
+  /* ═══════════════════════════════════════════════════════
+     BUILD WHEEL SVG — 20 ô, 10-200
+     ═══════════════════════════════════════════════════════ */
+  const WHEEL_COLORS = [
+    ["#ffd88a", "#f5b73a"],   // vàng đậm
+    ["#ffb366", "#ff8c00"],   // cam
+    ["#a3e0b8", "#4fa370"],   // xanh lá
+    ["#93c5fd", "#3b82f6"],   // xanh dương
+    ["#f0a5ff", "#c026d3"],   // tím
+    ["#ff8a8a", "#dc2626"]    // đỏ
+  ];
+
+  function buildWheel() {
+    const g = $("shopSpinWheelG");
+    if (!g) return;
+    g.innerHTML = "";
+
+    const cx = 200, cy = 200, r = 180, labelR = 130;
+    const sliceAngle = 360 / SPIN_TOTAL; // 18deg
+
+    for (let i = 0; i < SPIN_TOTAL; i++) {
+      const startAngle = i * sliceAngle - 90; // -90 để bắt đầu từ 12h
+      const endAngle = startAngle + sliceAngle;
+
+      const startRad = startAngle * Math.PI / 180;
+      const endRad = endAngle * Math.PI / 180;
+
+      const x1 = cx + r * Math.cos(startRad);
+      const y1 = cy + r * Math.sin(startRad);
+      const x2 = cx + r * Math.cos(endRad);
+      const y2 = cy + r * Math.sin(endRad);
+
+      const largeArc = sliceAngle > 180 ? 1 : 0;
+
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d",
+        `M ${cx},${cy} L ${x1},${y1} A ${r},${r} 0 ${largeArc} 1 ${x2},${y2} Z`
+      );
+      const colors = WHEEL_COLORS[i % WHEEL_COLORS.length];
+      path.setAttribute("fill", colors[i % 2 === 0 ? 0 : 1]);
+      path.setAttribute("stroke", "#ffffff");
+      path.setAttribute("stroke-width", "2");
+      g.appendChild(path);
+
+      /* Label */
+      const midAngle = (startAngle + endAngle) / 2;
+      const midRad = midAngle * Math.PI / 180;
+      const lx = cx + labelR * Math.cos(midRad);
+      const ly = cy + labelR * Math.sin(midRad);
+
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", lx);
+      text.setAttribute("y", ly);
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("dominant-baseline", "middle");
+      text.setAttribute("font-family", "ui-rounded, system-ui");
+      text.setAttribute("font-size", "18");
+      text.setAttribute("font-weight", "900");
+      text.setAttribute("fill", "#4a3520");
+      text.setAttribute("transform", `rotate(${midAngle}, ${lx}, ${ly})`);
+      text.textContent = String((i + 1) * 10);
+      g.appendChild(text);
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════
+     TAB
+     ═══════════════════════════════════════════════════════ */
   function setTab(tab) {
     S.activeTab = tab;
     const page = $(PAGE_ID);
@@ -242,16 +347,26 @@
     const filters = page.querySelector("#shopFilters");
     const shopGrid = page.querySelector("#shopGrid");
     const collection = page.querySelector("#shopCollection");
+    const spin = page.querySelector("#shopSpin");
+
     if (tab === "shop") {
       if (filters) filters.style.display = "";
       if (shopGrid) shopGrid.style.display = "";
       if (collection) collection.style.display = "none";
+      if (spin) spin.style.display = "none";
       renderItems();
-    } else {
+    } else if (tab === "collection") {
       if (filters) filters.style.display = "none";
       if (shopGrid) shopGrid.style.display = "none";
       if (collection) collection.style.display = "";
+      if (spin) spin.style.display = "none";
       renderCollection();
+    } else if (tab === "spin") {
+      if (filters) filters.style.display = "none";
+      if (shopGrid) shopGrid.style.display = "none";
+      if (collection) collection.style.display = "none";
+      if (spin) spin.style.display = "";
+      refreshSpinStatus();
     }
   }
 
@@ -267,10 +382,7 @@
       const d = res.data || {};
       if (d.ok !== true) throw new Error(d.error || "Không tải được");
       return Array.isArray(d.data) ? d.data : [];
-    } catch(e) {
-      log("fetchItems error:", e && e.message);
-      return [];
-    }
+    } catch(e) { return []; }
   }
 
   async function fetchCategories() {
@@ -301,10 +413,11 @@
         available: Number(b.available) || 0,
         display_name: b.display_name || "",
         month_key: b.month_key || getMonthKey(),
-        detail: (b.detail && typeof b.detail === "object") ? b.detail : {}
+        detail: (b.detail && typeof b.detail === "object") ? b.detail : {},
+        spin_spent: Number(b.spin_spent) || 0,
+        spin_wins: Number(b.spin_wins) || 0
       };
     } catch(e) {
-      log("fetchMyBalance error:", e && e.message);
       return { points: 0, spent: 0, available: 0, detail: {} };
     }
   }
@@ -318,10 +431,7 @@
       const d = res.data || {};
       if (d.ok !== true) return [];
       return Array.isArray(d.data) ? d.data : [];
-    } catch(e) {
-      log("fetchCollection error:", e && e.message);
-      return [];
-    }
+    } catch(e) { return []; }
   }
 
   async function fetchEquipped() {
@@ -329,6 +439,18 @@
     if (!sb || !sb.rpc) return null;
     try {
       const res = await sb.rpc("rpc_shop_my_equipped");
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok !== true) return null;
+      return d.data || null;
+    } catch(_) { return null; }
+  }
+
+  async function fetchSpinStatus() {
+    const sb = window.__sb;
+    if (!sb || !sb.rpc) return null;
+    try {
+      const res = await sb.rpc("rpc_shop_spin_status");
       if (res.error) throw res.error;
       const d = res.data || {};
       if (d.ok !== true) return null;
@@ -409,16 +531,18 @@
         if (["V","T","P","O","Q","X"].indexOf(k) >= 0) return;
         const cnt = Number(d[k]) || 0;
         if (cnt > 0) {
-          parts.push('<span class="shop-detail-chip shop-detail-ok">✨ '
-            + k + ' ' + cnt + '</span>');
+          parts.push('<span class="shop-detail-chip shop-detail-ok">✨ ' + k + ' ' + cnt + '</span>');
         }
       });
+      if (S.balance.spin_wins > 0) {
+        parts.push('<span class="shop-detail-chip shop-detail-ok">🎰 +' + S.balance.spin_wins + '</span>');
+      }
       detailEl.innerHTML = parts.length ? parts.join("") : "";
     }
   }
 
   /* ═══════════════════════════════════════════════════════
-     RENDER FILTERS / ITEMS
+     RENDER ITEMS
      ═══════════════════════════════════════════════════════ */
   function renderFilters() {
     const box = $("shopFilters");
@@ -508,7 +632,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     RENDER COLLECTION — v1.9 (thêm request status)
+     RENDER COLLECTION
      ═══════════════════════════════════════════════════════ */
   function renderCollection() {
     const grid = $("shopCollectionGrid");
@@ -542,7 +666,6 @@
         imgHtml = '<span class="shop-collection-img-fallback show">🎁</span>';
       }
 
-      /* ⭐ Build action area */
       const actionHtml = buildCollectionAction(it);
 
       el.innerHTML =
@@ -557,7 +680,6 @@
       grid.appendChild(el);
     });
 
-    /* Wire buttons */
     grid.querySelectorAll('[data-action="equip"]').forEach(function(btn) {
       btn.addEventListener("click", function() {
         const id = btn.dataset.itemId;
@@ -581,14 +703,12 @@
     const hasEffect = !!it.effect_type;
     const hasAction = !!it.action_type;
 
-    /* 1. Đã hoàn điểm */
     if (isRefunded) {
       return '<div class="shop-collection-action">'
         + '<div class="shop-collection-badge refunded">💰 Đã hoàn điểm</div>'
         + '</div>';
     }
 
-    /* 2. Effect item → trang bị */
     if (hasEffect) {
       const eqBtnText = it.is_equipped ? "✓ Đang dùng" : "Trang bị";
       const eqBtnClass = it.is_equipped ? "equipped" : "";
@@ -600,14 +720,12 @@
         + '</div>';
     }
 
-    /* 3. Item có action_type → theo request status */
     if (hasAction) {
       const req = it.request_id ? {
         id: it.request_id,
         status: it.request_status,
         note: it.request_admin_note,
-        created_at: it.request_created_at,
-        reviewed_at: it.request_reviewed_at
+        created_at: it.request_created_at
       } : null;
 
       if (req) {
@@ -639,7 +757,6 @@
         }
       }
 
-      /* Chưa gửi request → nút theo button_label */
       const label = it.button_label || "Sử dụng";
       return '<div class="shop-collection-action">'
         + '<button class="shop-collection-btn"'
@@ -651,10 +768,167 @@
         + '</div>';
     }
 
-    /* 4. Item thường, không effect, không action */
     return '<div class="shop-collection-action">'
       + '<div class="shop-collection-badge">✓ Đã đổi</div>'
       + '</div>';
+  }
+
+  /* ═══════════════════════════════════════════════════════
+     SPIN — VÒNG QUAY
+     ═══════════════════════════════════════════════════════ */
+  async function refreshSpinStatus() {
+    const status = await fetchSpinStatus();
+    if (status) {
+      S.spin.used = status.spins_used;
+      S.spin.remaining = status.spins_remaining;
+      S.spin.max = status.max_per_day;
+      S.spin.cost = status.cost;
+      S.spin.loaded = true;
+    }
+    renderSpinStatus();
+  }
+
+  function renderSpinStatus() {
+    const statusEl = $("shopSpinStatus");
+    const hintEl = $("shopSpinHint");
+    const btn = $("shopSpinBtn");
+    if (!statusEl) return;
+
+    const used = S.spin.used;
+    const max = S.spin.max;
+    const remaining = S.spin.remaining;
+    const cost = S.spin.cost;
+    const avail = S.balance.available;
+
+    statusEl.innerHTML = 'Lượt còn lại: <b>' + remaining + '/' + max + '</b>'
+      + ' · Mỗi lượt: <b>' + cost + 'đ</b>';
+
+    if (hintEl) {
+      if (remaining <= 0) {
+        hintEl.textContent = '🎯 Hôm nay đã hết lượt — mai quay tiếp nhé!';
+      } else if (avail < cost) {
+        hintEl.textContent = '⚠️ Không đủ điểm để quay (cần ' + cost + 'đ, có ' + avail + 'đ)';
+      } else {
+        hintEl.textContent = '🎰 Bấm quay để thử vận may — tối đa 200đ!';
+      }
+    }
+
+    if (btn) {
+      if (S.spin.spinning) {
+        btn.disabled = true;
+        btn.textContent = '🎰 Đang quay…';
+      } else if (remaining <= 0) {
+        btn.disabled = true;
+        btn.textContent = '🎰 Hết lượt hôm nay';
+      } else if (avail < cost) {
+        btn.disabled = true;
+        btn.textContent = '🎰 Không đủ điểm';
+      } else {
+        btn.disabled = false;
+        btn.textContent = '🎰 QUAY (' + cost + 'đ)';
+      }
+    }
+  }
+
+  async function doSpin() {
+    if (S.spin.spinning) return;
+    if (S.spin.remaining <= 0) {
+      setStatus("Hôm nay đã hết lượt quay");
+      return;
+    }
+    if (S.balance.available < S.spin.cost) {
+      setStatus("Không đủ điểm để quay");
+      return;
+    }
+
+    const sb = window.__sb;
+    if (!sb || !sb.rpc) return;
+
+    S.spin.spinning = true;
+    renderSpinStatus();
+
+    try {
+      const res = await sb.rpc("rpc_shop_spin");
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok !== true) throw new Error(d.error || "Không quay được");
+
+      const prizeIndex = Number(d.data.prize_index) || 0;
+      const prizeAmount = Number(d.data.prize_amount) || 0;
+
+      log("spin result:", d.data);
+
+      await animateWheelTo(prizeIndex);
+      showSpinResult(prizeAmount, d.data);
+
+      /* Update spin state */
+      S.spin.used = d.data.spins_used;
+      S.spin.remaining = d.data.spins_remaining;
+
+      /* Refresh balance + status */
+      await sync();
+      refreshSpinStatus();
+    } catch(e) {
+      const msg = String((e && e.message) || e || "Lỗi");
+      setStatus("Lỗi: " + msg);
+      try { Toast && Toast.show && Toast.show("Lỗi: " + msg, { type: "error", duration: 3500 }); } catch(_) {}
+    } finally {
+      S.spin.spinning = false;
+      renderSpinStatus();
+    }
+  }
+
+  function animateWheelTo(prizeIndex) {
+    return new Promise(function(resolve) {
+      const wheel = $("shopSpinWheel");
+      if (!wheel) return resolve();
+
+      const sliceAngle = 360 / SPIN_TOTAL;
+      const targetAngle = prizeIndex * sliceAngle + sliceAngle / 2;
+      const finalAngle = 360 * SPIN_EXTRA_TURNS - targetAngle;
+
+      wheel.style.transition = 'none';
+      wheel.style.transform = 'rotate(0deg)';
+
+      /* force reflow */
+      void wheel.offsetWidth;
+
+      wheel.style.transition = 'transform ' + SPIN_DURATION_MS + 'ms cubic-bezier(0.17, 0.67, 0.16, 1)';
+      wheel.style.transform = 'rotate(' + finalAngle + 'deg)';
+
+      setTimeout(resolve, SPIN_DURATION_MS + 100);
+    });
+  }
+
+  let _spinModalTimer = null;
+  function showSpinResult(amount, data) {
+    const modal = $("shopSpinModal");
+    if (!modal) return;
+
+    const emojiEl = $("shopSpinResultEmoji");
+    const titleEl = $("shopSpinResultTitle");
+    const amountEl = $("shopSpinResultAmount");
+    const subEl = $("shopSpinResultSub");
+
+    if (emojiEl) emojiEl.textContent = "🎉";
+    if (titleEl) titleEl.textContent = "Chúc mừng!";
+    if (amountEl) amountEl.textContent = "+" + amount + "đ";
+    if (subEl) {
+      subEl.innerHTML = 'Bạn nhận được <b>' + amount + 'đ</b>'
+        + '<br>Lượt còn lại: <b>' + data.spins_remaining + '/' + data.max_per_day + '</b>';
+    }
+
+    modal.classList.add("show");
+    modal.setAttribute("aria-hidden", "false");
+
+    try { Toast && Toast.show && Toast.show("🎉 Trúng " + amount + "đ!", { type: "success", duration: 2500 }); } catch(_) {}
+  }
+
+  function closeSpinModal() {
+    const modal = $("shopSpinModal");
+    if (!modal) return;
+    modal.classList.remove("show");
+    modal.setAttribute("aria-hidden", "true");
   }
 
   /* ═══════════════════════════════════════════════════════
@@ -671,13 +945,9 @@
       if (d.ok !== true) throw new Error(d.error || "Không trang bị được");
       setStatus(itemId ? "Đã trang bị ⭐" : "Đã bỏ trang bị");
       try { Toast && Toast.show && Toast.show(itemId ? "Đã trang bị!" : "Đã bỏ trang bị", { type: "success", duration: 2000 }); } catch(_) {}
-
       try {
-        window.dispatchEvent(new CustomEvent("shopEquippedChanged", {
-          detail: { itemId: itemId }
-        }));
+        window.dispatchEvent(new CustomEvent("shopEquippedChanged", { detail: { itemId: itemId } }));
       } catch(_) {}
-
       await sync();
     } catch(e) {
       setStatus("Lỗi: " + (e.message || e));
@@ -758,7 +1028,6 @@
     if (nameEl) nameEl.textContent = item.name || "";
     if (costEl) costEl.textContent = "−" + formatPoints(item.cost);
 
-    /* Nút primary: nếu effect → "Trang bị ngay", nếu action → "Dùng ngay", else → ẩn */
     if (eqBtn) {
       const isEffect = !!item.effect_type;
       const hasAction = !!item.action_type;
@@ -821,7 +1090,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     REQUEST MODAL — v1.9
+     REQUEST MODAL
      ═══════════════════════════════════════════════════════ */
   let _reqPurchaseId = null;
   let _reqActionType = null;
@@ -833,7 +1102,6 @@
     _reqPurchaseId = purchaseId;
     _reqActionType = actionType;
 
-    /* Title + item info */
     const titleEl = $("shopRequestTitle");
     const infoEl = $("shopRequestItemInfo");
     const formEl = $("shopRequestForm");
@@ -895,11 +1163,8 @@
         +     ' placeholder="VD: giao buổi chiều" maxlength="500" rows="2"></textarea>'
         + '</label>';
     }
-    /* none */
     return ''
-      + '<div class="shop-req-info">'
-      +   'Bạn có chắc muốn gửi yêu cầu đổi thưởng này?'
-      + '</div>'
+      + '<div class="shop-req-info">Bạn có chắc muốn gửi yêu cầu đổi thưởng này?</div>'
       + '<label class="shop-req-field">'
       +   '<span class="shop-req-label">Ghi chú (không bắt buộc)</span>'
       +   '<textarea class="shop-req-input shop-req-textarea" id="shopReqNote"'
@@ -926,7 +1191,6 @@
     const address = ($("shopReqAddress") && $("shopReqAddress").value || "").trim();
     const note = ($("shopReqNote") && $("shopReqNote").value || "").trim();
 
-    /* Validate client */
     if (_reqActionType === "phone") {
       if (!phone) { setStatus("Vui lòng nhập SĐT"); return; }
       if (phone.length > 30) { setStatus("SĐT quá dài"); return; }
@@ -941,7 +1205,6 @@
     }
     if (note.length > 500) { setStatus("Ghi chú tối đa 500 ký tự"); return; }
 
-    /* Build form_data */
     const formData = {};
     if (phone) formData.phone = phone;
     if (name) formData.name = name;
@@ -1001,7 +1264,11 @@
       renderUserCard();
       renderFilters();
       if (S.activeTab === "shop") renderItems();
-      else renderCollection();
+      else if (S.activeTab === "collection") renderCollection();
+      else if (S.activeTab === "spin") {
+        renderSpinStatus();
+        refreshSpinStatus();
+      }
     } finally {
       S.loading = false;
     }
@@ -1035,6 +1302,7 @@
     if (!page) return;
     closeModal();
     closeRequestModal();
+    closeSpinModal();
     page.classList.remove("show");
     page.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
@@ -1075,7 +1343,7 @@
     window.addEventListener("shopRequestReviewed", function() {
       if (S.pageOpen) sync();
     });
-    log("v1.9 ready ✓");
+    log("v2.0 ready ✓");
   }
 
   if (document.readyState === "loading") {
