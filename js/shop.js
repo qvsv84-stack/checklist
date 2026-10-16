@@ -1,11 +1,16 @@
 /* =========================================================
-   SHOP VIEW — v1.0
+   SHOP VIEW — v1.1
    ---------------------------------------------------------
-   Trang Shop thưởng "Hệ thống thần hào".
-   - List item (lọc theo category)
-   - Mua item (TYPE B: mỗi item mua 1 lần)
-   - Balance = điểm tháng (scoreLeaderboard) - tổng đã tiêu tháng
-   - Đọc dữ liệu qua Supabase RPC (xem sql/shop_migration.sql)
+   v1.1 FIX (điểm = 0 dù có điểm):
+   ✅ Resolve tên GỐC checklist (raw name) từ auth user
+      → ưu tiên tìm raw name trong checklist_names khớp displayName qua DN()
+   ✅ Match scoreLeaderboard.row.name với raw name (không phải displayName)
+   ✅ Fallback nhiều lớp: username → displayName → SrankCore.points
+   ✅ Debug log để dễ kiểm tra khi cần
+   v1.0:
+   - List item (lọc category)
+   - Mua item (TYPE B: 1 lần/item)
+   - Balance = điểm tháng - đã tiêu tháng
 
    LOAD ORDER: SAU main.js
    ========================================================= */
@@ -24,6 +29,7 @@
     categories: [],
     balance: { points: 0, spent: 0, available: 0 },
     currentUser: null,
+    rawName: "",
     activeCategory: "",
     loading: false,
     pageOpen: false,
@@ -74,6 +80,49 @@
   function getMonthKey() {
     const d = new Date();
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  }
+
+  /* ⭐ v1.1 FIX: resolve tên GỐC checklist từ auth user
+     Trả về tên gốc dùng để match với scoreLeaderboard.row.name */
+  function resolveRawChecklistName(u) {
+    if (!u) return "";
+    const dn = String(u.displayName || "").trim();
+    const un = String(u.username || "").trim();
+
+    try {
+      const state = window.__getChecklistState?.();
+      if (state && Array.isArray(state.names) && state.names.length) {
+        const names = state.names.map(n => String(n || "").trim());
+
+        // 1. displayName có trong checklist không? (user đặt tên trùng)
+        if (dn && names.includes(dn)) {
+          log("resolve: match displayName in checklist →", dn);
+          return dn;
+        }
+
+        // 2. Duyệt từng raw name, so DN(raw) === displayName
+        if (dn) {
+          for (const raw of names) {
+            const d = window.DN ? window.DN(raw) : raw;
+            if (d && String(d).trim() === dn) {
+              log("resolve: match DN(raw) === displayName →", raw);
+              return raw;
+            }
+          }
+        }
+
+        // 3. username có trong checklist không?
+        if (un && names.includes(un)) {
+          log("resolve: match username in checklist →", un);
+          return un;
+        }
+      }
+    } catch(e) { log("resolve error:", e); }
+
+    // 4. Fallback: displayName trước, rồi username
+    const fallback = dn || un;
+    log("resolve fallback →", fallback);
+    return fallback;
   }
 
   /* ───── Ensure page ───── */
@@ -152,20 +201,75 @@
     } catch(_) { return []; }
   }
 
+  /* ⭐ v1.1 FIX: fetch điểm tháng — match bằng tên GỐC + fallback */
   async function fetchMyScore() {
     const u = S.currentUser;
-    if (!u || !u.displayName) return 0;
+    if (!u) { log("fetchMyScore: no currentUser"); return 0; }
+
+    const rawName = S.rawName || resolveRawChecklistName(u);
+    S.rawName = rawName;
+
+    const candidates = new Set();
+    if (rawName) candidates.add(String(rawName).trim());
+    if (u.displayName) candidates.add(String(u.displayName).trim());
+    if (u.username) candidates.add(String(u.username).trim());
+
+    log("fetchMyScore candidates:", Array.from(candidates));
+
     try {
       const m = new Date().getMonth() + 1;
       const r = await window.__srankApi("scoreLeaderboard", { month: m, _ts: Date.now() }, 15000);
-      if (!r || !r.ok || !r.data) return 0;
+      if (!r || !r.ok || !r.data) {
+        log("fetchMyScore: API fail", r);
+        return 0;
+      }
       const rows = Array.isArray(r.data.rows)
         ? r.data.rows
         : (Array.isArray(r.data) ? r.data : []);
-      const target = String(u.displayName).trim();
-      const me = rows.find(row => String(row.name || "").trim() === target);
-      return me ? (Number(me.points) || 0) : 0;
-    } catch(_) { return 0; }
+
+      log("fetchMyScore rows sample:", rows.slice(0, 5).map(x => ({ name: x.name, points: x.points })));
+
+      // Ưu tiên 1: match chính xác rawName
+      for (const row of rows) {
+        const nm = String(row.name || "").trim();
+        if (nm === String(rawName).trim()) {
+          const pts = Number(row.points) || 0;
+          log("fetchMyScore: matched EXACT", nm, "→", pts);
+          return pts;
+        }
+      }
+
+      // Fallback: match bất kỳ candidate nào
+      for (const row of rows) {
+        const nm = String(row.name || "").trim();
+        if (candidates.has(nm)) {
+          const pts = Number(row.points) || 0;
+          log("fetchMyScore: matched candidate", nm, "→", pts);
+          return pts;
+        }
+      }
+
+      log("fetchMyScore: NO MATCH");
+    } catch(e) {
+      log("fetchMyScore error:", e && e.message);
+    }
+
+    /* Fallback cuối: dùng SrankCore.points nếu có (điểm hôm nay) */
+    try {
+      const core = window.SrankCore;
+      if (core && Array.isArray(core.names) && Array.isArray(core.points)) {
+        for (const c of candidates) {
+          const idx = core.names.indexOf(c);
+          if (idx >= 0) {
+            const pts = Number(core.points[idx]) || 0;
+            log("fetchMyScore: fallback SrankCore.points", c, "→", pts);
+            return pts;
+          }
+        }
+      }
+    } catch(e) {}
+
+    return 0;
   }
 
   async function fetchMySpent() {
@@ -187,6 +291,7 @@
       spent: spent,
       available: Math.max(0, points - spent)
     };
+    log("balance:", S.balance);
     return S.balance;
   }
 
@@ -351,6 +456,9 @@
       S.currentUser = (window.SRank && window.SRank.Auth && window.SRank.Auth.getCurrentUser)
         ? window.SRank.Auth.getCurrentUser()
         : null;
+      S.rawName = resolveRawChecklistName(S.currentUser);
+      log("sync: user =", S.currentUser && S.currentUser.displayName, "| rawName =", S.rawName);
+
       const [items, cats] = await Promise.all([fetchItems(), fetchCategories()]);
       S.items = items;
       S.categories = cats;
@@ -376,6 +484,7 @@
       return;
     }
     S.currentUser = u;
+    S.rawName = resolveRawChecklistName(u);
     S.pageOpen = true;
     page.classList.add("show");
     page.setAttribute("aria-hidden", "false");
@@ -419,7 +528,8 @@
       open: openPage,
       close: closePage,
       sync: sync,
-      state: S
+      state: S,
+      _resolveRawChecklistName: resolveRawChecklistName
     };
 
     window.addEventListener("displayNameUpdated", function() {
@@ -430,8 +540,11 @@
       _avatarCache.clear();
       if (S.pageOpen) renderUserCard();
     });
+    window.addEventListener("checkinDone", function() {
+      if (S.pageOpen) sync();
+    });
 
-    log("v1.0 ready ✓");
+    log("v1.1 ready ✓ (fix balance match)");
   }
 
   if (document.readyState === "loading") {
