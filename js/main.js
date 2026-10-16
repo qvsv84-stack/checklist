@@ -1,6 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════
-   MAIN.JS — CORE v4.0.1 🐱 (Orchestrator)
+   MAIN.JS — CORE v4.0.2 🐱 (Orchestrator)
    ---------------------------------------------------------
+   v4.0.2 — SHOP support:
+   - _syncQuickTools() nhận diện #shopPage đang mở
+     → body.overlay-open = true → ẩn FAB menu, khoá scroll hợp lý
    v4.0.1 — FIX boot race condition:
    - Nếu main.js load sau DOMContentLoaded (rare), đợi 1 tick
      (setTimeout 0) để 3 view modules kịp đăng ký callbacks
@@ -475,6 +478,7 @@
 
   /* ═══════════════════════════════════════════════════════
      10. SYNC QUICK TOOLS
+     ⭐ v4.0.2: thêm #shopPage
      ═══════════════════════════════════════════════════════ */
   function _syncQuickTools() {
     const otherOpen =
@@ -482,6 +486,7 @@
       els.adminPage.classList.contains('show') ||
       document.getElementById('attendanceNameWheel')?.classList.contains('show') ||
       document.getElementById('attendancePage')?.classList.contains('show') ||
+      document.getElementById('shopPage')?.classList.contains('show') ||
       document.getElementById('loginOverlay')?.classList.contains('show');
     document.body.classList.toggle('overlay-open', otherOpen);
   }
@@ -788,6 +793,9 @@
     if (capturePreview) { capturePreview.remove(); e.preventDefault(); return; }
     if (els.checklistPanel.classList.contains('show')) { window.__clV6?.close?.(); e.preventDefault(); return; }
     if (els.adminPage.classList.contains('show')) { S.callbacks.closeAdmin?.(); e.preventDefault(); return; }
+    if (document.getElementById('shopPage')?.classList.contains('show')) {
+      window.__closeShop?.(); e.preventDefault(); return;
+    }
     const attendanceNameWheel = document.getElementById('attendanceNameWheel');
     if (attendanceNameWheel && attendanceNameWheel.classList.contains('show')) {
       attendanceNameWheel.classList.remove('show');
@@ -1013,16 +1021,10 @@
       }).catch(() => {});
     });
 
-    console.log('[main] ready ✓ v4.0.1 (orchestrator, 3 view modules, race-safe)');
+    console.log('[main] ready ✓ v4.0.2 (orchestrator, 3 view modules, race-safe, shop-aware)');
   }
 
   // ✅ v4.0.1: FIX boot race condition
-  // - Normal case: main.js chạy khi readyState = 'interactive'
-  //   → đợi DOMContentLoaded (tất cả defer scripts đã chạy xong)
-  // - Edge case: main.js chạy khi readyState = 'complete' (load từ cache nhanh,
-  //   hoặc script inject muộn) → DOMContentLoaded đã fire rồi
-  //   → cần setTimeout(0) để 3 view modules (defer, chạy ngay sau main.js)
-  //     kịp đăng ký callbacks trước khi boot() gọi renderLanding lần đầu.
   if (document.readyState === 'complete') {
     setTimeout(boot, 0);
   } else {
