@@ -1,16 +1,5 @@
 /* =========================================================
    SHOP VIEW — v2.0
-   ---------------------------------------------------------
-   v2.0 (Vòng quay may mắn):
-   ✅ Tab thứ 3 "🎰 Vòng quay" trong shop
-   ✅ Wheel SVG 20 ô: 10-200 (bước 10)
-   ✅ Mỗi ngày 3 lượt, mỗi lượt 100đ
-   ✅ Animation 5s ease-out, dừng đúng ô trúng
-   ✅ Modal kết quả + cộng điểm
-   v1.9:
-   - Yêu cầu đổi thưởng (form động)
-   v1.8:
-   - Bỏ badge tròn vàng — dùng effect qua AvatarEffect
    ========================================================= */
 (function(){
   "use strict";
@@ -56,11 +45,11 @@
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function displayName(name) {
-    try { if (window.DN) return window.DN(name)Month || name; } catch(_()) {}
-    + return name || "";
+    try { if (window.DN) return window.DN(name) || name; } catch(_) {}
+    return name || "";
   }
-  function  initialOf(name) {
-1    const s = String(name || "").trim();
+  function initialOf(name) {
+    const s = String(name || "").trim();
     return s ? s.slice(0, 1).toUpperCase() : "?";
   }
   function avatarUrl(name) {
@@ -85,7 +74,7 @@
   }
   function getMonthLabel() {
     const d = new Date();
-    return "Tháng " + (d.get) + "/" + d.getFullYear();
+    return "Tháng " + (d.getMonth() + 1) + "/" + d.getFullYear();
   }
   function fmtDate(iso) {
     if (!iso) return "";
@@ -97,9 +86,6 @@
     } catch(_) { return ""; }
   }
 
-  /* ═══════════════════════════════════════════════════════
-     ENSURE PAGE
-     ═══════════════════════════════════════════════════════ */
   function ensurePage() {
     let page = $(PAGE_ID);
     if (page) return page;
@@ -174,7 +160,7 @@
             <div class="shop-spin-wheel-wrap">
               <svg class="shop-spin-wheel" id="shopSpinWheel" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
                 <g id="shopSpinWheelG"></g>
-                <circle cx="200" cy="200" r="38" fill="#fff" stroke="#f5a623" stroke-width="3" filter="drop-shadow(0 2px 6px rgba(0,0,0,0.3))"/>
+                <circle cx="200" cy="200" r="38" fill="#fff" stroke="#f5a623" stroke-width="3"/>
                 <text x="200" y="210" text-anchor="middle" font-family="ui-rounded, system-ui" font-size="20" font-weight="900" fill="#f5a623">SPIN</text>
               </svg>
             </div>
@@ -185,7 +171,6 @@
         </div>
       </div>
 
-      <!-- Modal mua thành công -->
       <div class="shop-modal" id="shopModal" aria-hidden="true">
         <div class="shop-modal-backdrop"></div>
         <div class="shop-modal-panel" role="dialog" aria-modal="true">
@@ -208,7 +193,6 @@
         </div>
       </div>
 
-      <!-- Modal gửi yêu cầu -->
       <div class="shop-modal" id="shopRequestModal" aria-hidden="true">
         <div class="shop-modal-backdrop"></div>
         <div class="shop-request-panel" role="dialog" aria-modal="true">
@@ -225,7 +209,6 @@
         </div>
       </div>
 
-      <!-- Modal kết quả vòng quay -->
       <div class="shop-modal" id="shopSpinModal" aria-hidden="true">
         <div class="shop-modal-backdrop"></div>
         <div class="shop-spin-result-panel" role="dialog" aria-modal="true">
@@ -262,23 +245,19 @@
     page.querySelector("#shopSpinModal .shop-modal-backdrop").addEventListener("click", closeSpinModal);
     page.querySelector("#shopSpinBtn").addEventListener("click", doSpin);
 
-    /* Build wheel SVG */
     buildWheel();
 
     log("Page created ✓");
     return page;
   }
 
-  /* ═══════════════════════════════════════════════════════
-     BUILD WHEEL SVG — 20 ô, 10-200
-     ═══════════════════════════════════════════════════════ */
   const WHEEL_COLORS = [
-    ["#ffd88a", "#f5b73a"],   // vàng đậm
-    ["#ffb366", "#ff8c00"],   // cam
-    ["#a3e0b8", "#4fa370"],   // xanh lá
-    ["#93c5fd", "#3b82f6"],   // xanh dương
-    ["#f0a5ff", "#c026d3"],   // tím
-    ["#ff8a8a", "#dc2626"]    // đỏ
+    ["#ffd88a", "#f5b73a"],
+    ["#ffb366", "#ff8c00"],
+    ["#a3e0b8", "#4fa370"],
+    ["#93c5fd", "#3b82f6"],
+    ["#f0a5ff", "#c026d3"],
+    ["#ff8a8a", "#dc2626"]
   ];
 
   function buildWheel() {
@@ -287,12 +266,11 @@
     g.innerHTML = "";
 
     const cx = 200, cy = 200, r = 180, labelR = 130;
-    const sliceAngle = 360 / SPIN_TOTAL; // 18deg
+    const sliceAngle = 360 / SPIN_TOTAL;
 
     for (let i = 0; i < SPIN_TOTAL; i++) {
-      const startAngle = i * sliceAngle - 90; // -90 để bắt đầu từ 12h
+      const startAngle = i * sliceAngle - 90;
       const endAngle = startAngle + sliceAngle;
-
       const startRad = startAngle * Math.PI / 180;
       const endRad = endAngle * Math.PI / 180;
 
@@ -300,12 +278,11 @@
       const y1 = cy + r * Math.sin(startRad);
       const x2 = cx + r * Math.cos(endRad);
       const y2 = cy + r * Math.sin(endRad);
-
       const largeArc = sliceAngle > 180 ? 1 : 0;
 
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
       path.setAttribute("d",
-        `M ${cx},${cy} L ${x1},${y1} A ${r},${r} 0 ${largeArc} 1 ${x2},${y2} Z`
+        "M " + cx + "," + cy + " L " + x1 + "," + y1 + " A " + r + "," + r + " 0 " + largeArc + " 1 " + x2 + "," + y2 + " Z"
       );
       const colors = WHEEL_COLORS[i % WHEEL_COLORS.length];
       path.setAttribute("fill", colors[i % 2 === 0 ? 0 : 1]);
@@ -313,7 +290,6 @@
       path.setAttribute("stroke-width", "2");
       g.appendChild(path);
 
-      /* Label */
       const midAngle = (startAngle + endAngle) / 2;
       const midRad = midAngle * Math.PI / 180;
       const lx = cx + labelR * Math.cos(midRad);
@@ -328,15 +304,12 @@
       text.setAttribute("font-size", "18");
       text.setAttribute("font-weight", "900");
       text.setAttribute("fill", "#4a3520");
-      text.setAttribute("transform", `rotate(${midAngle}, ${lx}, ${ly})`);
+      text.setAttribute("transform", "rotate(" + midAngle + ", " + lx + ", " + ly + ")");
       text.textContent = String((i + 1) * 10);
       g.appendChild(text);
     }
   }
 
-  /* ═══════════════════════════════════════════════════════
-     TAB
-     ═══════════════════════════════════════════════════════ */
   function setTab(tab) {
     S.activeTab = tab;
     const page = $(PAGE_ID);
@@ -370,9 +343,6 @@
     }
   }
 
-  /* ═══════════════════════════════════════════════════════
-     DATA
-     ═══════════════════════════════════════════════════════ */
   async function fetchItems() {
     const sb = window.__sb;
     if (!sb || !sb.rpc) return [];
@@ -458,9 +428,6 @@
     } catch(_) { return null; }
   }
 
-  /* ═══════════════════════════════════════════════════════
-     RENDER USER CARD
-     ═══════════════════════════════════════════════════════ */
   function renderUserCard() {
     const u = S.currentUser;
     const nameEl = $("shopUserName");
@@ -541,9 +508,6 @@
     }
   }
 
-  /* ═══════════════════════════════════════════════════════
-     RENDER ITEMS
-     ═══════════════════════════════════════════════════════ */
   function renderFilters() {
     const box = $("shopFilters");
     if (!box) return;
@@ -631,9 +595,6 @@
     });
   }
 
-  /* ═══════════════════════════════════════════════════════
-     RENDER COLLECTION
-     ═══════════════════════════════════════════════════════ */
   function renderCollection() {
     const grid = $("shopCollectionGrid");
     const countEl = $("shopCollectionCount");
@@ -773,9 +734,6 @@
       + '</div>';
   }
 
-  /* ═══════════════════════════════════════════════════════
-     SPIN — VÒNG QUAY
-     ═══════════════════════════════════════════════════════ */
   async function refreshSpinStatus() {
     const status = await fetchSpinStatus();
     if (status) {
@@ -861,11 +819,9 @@
       await animateWheelTo(prizeIndex);
       showSpinResult(prizeAmount, d.data);
 
-      /* Update spin state */
       S.spin.used = d.data.spins_used;
       S.spin.remaining = d.data.spins_remaining;
 
-      /* Refresh balance + status */
       await sync();
       refreshSpinStatus();
     } catch(e) {
@@ -890,7 +846,6 @@
       wheel.style.transition = 'none';
       wheel.style.transform = 'rotate(0deg)';
 
-      /* force reflow */
       void wheel.offsetWidth;
 
       wheel.style.transition = 'transform ' + SPIN_DURATION_MS + 'ms cubic-bezier(0.17, 0.67, 0.16, 1)';
@@ -900,7 +855,6 @@
     });
   }
 
-  let _spinModalTimer = null;
   function showSpinResult(amount, data) {
     const modal = $("shopSpinModal");
     if (!modal) return;
@@ -931,9 +885,6 @@
     modal.setAttribute("aria-hidden", "true");
   }
 
-  /* ═══════════════════════════════════════════════════════
-     EQUIP
-     ═══════════════════════════════════════════════════════ */
   async function equipBadge(itemId, btn) {
     const sb = window.__sb;
     if (!sb || !sb.rpc) return;
@@ -955,9 +906,6 @@
     }
   }
 
-  /* ═══════════════════════════════════════════════════════
-     PURCHASE
-     ═══════════════════════════════════════════════════════ */
   async function purchase(itemId, btn) {
     const item = S.items.find(function(i) { return String(i.id) === String(itemId); });
     if (!item) return;
@@ -999,9 +947,6 @@
     }
   }
 
-  /* ═══════════════════════════════════════════════════════
-     SUCCESS MODAL
-     ═══════════════════════════════════════════════════════ */
   let _modalItemId = null;
   function showSuccessModal(item) {
     const modal = $("shopModal");
@@ -1089,9 +1034,6 @@
     _modalItemId = null;
   }
 
-  /* ═══════════════════════════════════════════════════════
-     REQUEST MODAL
-     ═══════════════════════════════════════════════════════ */
   let _reqPurchaseId = null;
   let _reqActionType = null;
 
@@ -1238,9 +1180,6 @@
     }
   }
 
-  /* ═══════════════════════════════════════════════════════
-     SYNC / OPEN / CLOSE
-     ═══════════════════════════════════════════════════════ */
   async function sync() {
     if (S.loading) return;
     S.loading = true;
