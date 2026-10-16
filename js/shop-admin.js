@@ -1,18 +1,19 @@
 /* =========================================================
-   SHOP ADMIN — v1.3
+   SHOP ADMIN — v1.4
    ---------------------------------------------------------
-   v1.3 FIX (không nhập được dấu âm):
-   ✅ Đổi inputmode="numeric" → "text" (bàn phím iOS đầy đủ,
-      có nút dấu trừ)
-   ✅ Thêm nút −/+ mỗi bên ô input (step ±5) — chỉnh nhanh
-   ✅ Layout grid: icon | label | − | input | + | unit
-   ✅ Sanitize giữ dấu âm đúng cách
+   v1.4 (item hệ thống):
+   ✅ Badge "⚙ HỆ THỐNG" cho item is_system=true
+   ✅ Nút Xoá bị vô hiệu với item hệ thống (chỉ ẩn/mở + sửa giá)
+   ✅ Hiển thị effect_type nếu là item hiệu ứng
+   ✅ Nút Sửa vẫn cho phép với item hệ thống (chỉ đổi tên/giá, không đổi effect_type)
+   v1.3:
+   - Fix nhập dấu âm + nút -/+ cho config
    v1.2:
-   - Section "⚙ Cấu hình điểm" trong tab Shop
+   - Section "⚙ Cấu hình điểm"
    v1.1:
-   - Wire events sớm, check setup
+   - Wire events sớm
    v1.0:
-   - Tab Shop — upload ảnh, CRUD item
+   - Tab Shop — CRUD item
    ========================================================= */
 (function(){
   "use strict";
@@ -65,6 +66,11 @@
     el.textContent = m || "";
     el.classList.remove("error", "warn");
     if (isError) el.classList.add("error");
+  }
+  function effectLabel(type) {
+    if (!type) return "";
+    if (type === "fire_particles") return "🔥 Lửa + hạt bay";
+    return "✨ " + type;
   }
 
   /* ───── Banner setup ───── */
@@ -225,7 +231,9 @@
     }).join("");
   }
 
-  /* ───── Item list ───── */
+  /* ═══════════════════════════════════════════════════════
+     ITEM LIST — v1.4 (phân biệt system)
+     ═══════════════════════════════════════════════════════ */
   function renderItems() {
     const box = $("adminShopRows");
     if (!box) return;
@@ -235,17 +243,43 @@
     }
     box.innerHTML = "";
     _items.forEach(function(it) {
+      const isSys = !!it.is_system;
       const row = document.createElement("div");
       row.className = "admin-row-item" + (it.active ? " checked" : "");
-      const imgHtml = it.image_url
-        ? '<img src="' + escapeHtml(it.image_url) + '" alt="" loading="lazy">'
-        : '<span>🎁</span>';
+
+      /* Ảnh / icon */
+      let imgHtml;
+      if (it.image_url) {
+        imgHtml = '<img src="' + escapeHtml(it.image_url) + '" alt="" loading="lazy">';
+      } else if (it.effect_type === "fire_particles") {
+        imgHtml = '<span>🔥</span>';
+      } else {
+        imgHtml = '<span>🎁</span>';
+      }
+
+      /* Meta: category + effect + giá */
+      const metaParts = [];
+      if (it.category) metaParts.push(escapeHtml(it.category));
+      if (it.effect_type) metaParts.push(effectLabel(it.effect_type));
+      metaParts.push(Number(it.cost || 0).toLocaleString("vi-VN") + 'đ');
+      const metaText = metaParts.join(' · ');
+
+      /* Badge hệ thống */
+      const sysBadge = isSys
+        ? '<span class="admin-shop-system-badge">⚙ Hệ thống</span>'
+        : '';
+
+      /* Nút Xoá: disable nếu is_system */
+      const delBtn = isSys
+        ? '<button class="admin-row-btn disabled-system" data-act="delete-blocked" type="button" title="Vật phẩm hệ thống không thể xoá">🔒 Xoá</button>'
+        : '<button class="admin-row-btn" data-act="delete" data-id="' + escapeHtml(it.id)
+          + '" type="button" style="background:#dc2626;color:#fff;border-color:#dc2626;">Xoá</button>';
+
       row.innerHTML =
         '<span class="admin-shop-thumb">' + imgHtml + '</span>'
         + '<span class="admin-shop-info">'
-        +   '<span class="admin-row-name">' + escapeHtml(it.name || "") + '</span>'
-        +   '<span class="admin-row-time">' + escapeHtml(it.category || "—")
-        +     ' · ' + Number(it.cost || 0).toLocaleString("vi-VN") + 'đ</span>'
+        +   '<span class="admin-row-name">' + escapeHtml(it.name || "") + sysBadge + '</span>'
+        +   '<span class="admin-row-time">' + metaText + '</span>'
         + '</span>'
         + '<span class="admin-shop-actions">'
         +   '<button class="admin-row-btn' + (it.active ? " checked" : "")
@@ -253,14 +287,19 @@
         +     (it.active ? "Đang bán" : "Đã ẩn") + '</button>'
         +   '<button class="admin-row-btn" data-act="edit" data-id="' + escapeHtml(it.id)
         +     '" type="button" style="background:#3b82f6;color:#fff;border-color:#3b82f6;">Sửa</button>'
-        +   '<button class="admin-row-btn" data-act="delete" data-id="' + escapeHtml(it.id)
-        +     '" type="button" style="background:#dc2626;color:#fff;border-color:#dc2626;">Xoá</button>'
+        +   delBtn
         + '</span>';
       box.appendChild(row);
     });
+
     box.querySelectorAll("button[data-act]").forEach(function(btn) {
       btn.addEventListener("click", function() {
         const act = btn.dataset.act;
+        if (act === "delete-blocked") {
+          setStatus("Vật phẩm hệ thống không thể xoá. Chỉ có thể ẩn/mở hoặc sửa giá.", true);
+          try { Toast && Toast.show && Toast.show("Vật phẩm hệ thống không thể xoá", { type: "warning", duration: 3000 }); } catch(_) {}
+          return;
+        }
         const id = btn.dataset.id;
         if (act === "toggle") toggleItem(id, btn);
         else if (act === "edit") editItem(id);
@@ -269,6 +308,7 @@
     });
   }
 
+  /* ───── Load items ───── */
   async function loadItems() {
     const token = adminToken();
     if (!token) return [];
@@ -294,7 +334,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     CONFIG ĐIỂM — v1.3 (fix dấu âm)
+     CONFIG ĐIỂM
      ═══════════════════════════════════════════════════════ */
   async function loadConfig() {
     const token = adminToken();
@@ -335,8 +375,6 @@
       const icon = iconMap[k] || "•";
       const pts = Number(c.points || 0);
       const cls = pts < 0 ? "neg" : (pts > 0 ? "pos" : "zero");
-      /* ⭐ v1.3: inputmode="text" để bàn phím iOS có dấu trừ
-         + 2 nút −/+ để chỉnh nhanh không cần gõ dấu */
       return ''
         + '<div class="admin-shop-config-row">'
         +   '<span class="admin-shop-config-icon">' + icon + '</span>'
@@ -356,7 +394,6 @@
         + '</div>';
     }).join("");
 
-    /* Wire nút −/+ */
     box.querySelectorAll(".admin-shop-config-step").forEach(function(btn) {
       btn.addEventListener("click", function() {
         const key = btn.dataset.status;
@@ -373,7 +410,6 @@
       });
     });
 
-    /* Wire input thay đổi */
     box.querySelectorAll(".admin-shop-config-input").forEach(function(input) {
       input.addEventListener("input", function() { updateUnitColor(input); });
     });
@@ -410,7 +446,6 @@
     try {
       for (const input of inputs) {
         const key = String(input.dataset.status || "").trim();
-        /* ⭐ Sanitize: chỉ giữ số và dấu − ở đầu */
         const raw = String(input.value || "0").trim();
         const cleaned = raw.replace(/[^\d\-]/g, "").replace(/(?!^)-/g, "");
         const pts = parseInt(cleaned || "0", 10);
@@ -534,12 +569,24 @@
   async function editItem(id) {
     const it = _items.find(function(x) { return String(x.id) === String(id); });
     if (!it) return;
-    const newName = prompt("Tên vật phẩm:", it.name || "");
+
+    /* Item hệ thống: không đổi effect_type, chỉ đổi tên + giá + category */
+    const isSys = !!it.is_system;
+
+    const newName = prompt(
+      (isSys ? "Tên hiệu ứng (hệ thống):" : "Tên vật phẩm:"),
+      it.name || ""
+    );
     if (newName === null) return;
     const newCost = prompt("Giá điểm:", String(it.cost || 0));
     if (newCost === null) return;
-    const newCat = prompt("Phân loại (để trống = không có):", it.category || "");
-    if (newCat === null) return;
+
+    let newCat = it.category || "";
+    if (!isSys) {
+      const inputCat = prompt("Phân loại (để trống = không có):", it.category || "");
+      if (inputCat === null) return;
+      newCat = inputCat;
+    }
 
     const cost = parseInt(String(newCost).replace(/\D/g, ""), 10);
     if (!Number.isFinite(cost) || cost < 0 || cost > 1000000) {
@@ -551,12 +598,13 @@
     if (!token) return;
     const sb = window.__sb;
     try {
+      /* Item hệ thống: giữ nguyên image_url + effect_type + category */
       const res = await sb.rpc("rpc_admin_shop_update_item", {
         p_token: token, p_id: id,
         p_name: newName.trim(),
         p_image_url: it.image_url || null,
         p_cost: cost,
-        p_category: newCat.trim() || null,
+        p_category: isSys ? (it.category || null) : (String(newCat).trim() || null),
         p_active: it.active
       });
       if (res.error) throw res.error;
@@ -600,6 +648,14 @@
   async function deleteItem(id, btn) {
     const it = _items.find(function(x) { return String(x.id) === String(id); });
     if (!it) return;
+
+    /* Double check phía client */
+    if (it.is_system) {
+      setStatus("Vật phẩm hệ thống không thể xoá", true);
+      try { Toast && Toast.show && Toast.show("Vật phẩm hệ thống không thể xoá", { type: "warning", duration: 3000 }); } catch(_) {}
+      return;
+    }
+
     if (!confirm('Xoá VĨNH VIỄN vật phẩm "' + it.name + '"?\n\nKhông thể hoàn tác.')) return;
     const token = adminToken();
     if (!token) return;
@@ -703,5 +759,5 @@
   setTimeout(tryWire, 500);
   setTimeout(tryWire, 1500);
 
-  log("v1.3 ready ✓ (fix dấu âm + nút step)");
+  log("v1.4 ready ✓ (system item support)");
 })();
