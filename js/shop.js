@@ -1,16 +1,15 @@
 /* =========================================================
-   SHOP VIEW — v1.6
+   SHOP VIEW — v1.7
    ---------------------------------------------------------
-   v1.6 FIX (tab Bộ sưu tập hiển thị cả shop):
-   ✅ setTab() dùng style.display thay vì hidden attribute
-      (CSS .shop-grid { display: grid } override [hidden])
-   ✅ Bấm "Trang bị ngay" trong modal → tự nhảy sang Bộ sưu tập
+   v1.7 (hiệu ứng avatar):
+   ✅ Item có effect_type → hiệu ứng quanh avatar khi equipped
+   ✅ Hỗ trợ effect fire_particles (lửa + hạt bay)
+   ✅ Item hệ thống (is_system) hiển thị đầu danh sách
+   ✅ Auto-jump sang Collection sau khi mua item effect
+   v1.6:
+   - Fix tab display
    v1.5:
-   - Modal đẹp + confetti + nút "Trang bị ngay"
-   - Tab "Bộ sưu tập" + equip badge
-   - Card user hiển thị badge đang dùng
-   v1.4:
-   - Điểm từ chấm công (server-side)
+   - Modal + Bộ sưu tập
    ========================================================= */
 (function(){
   "use strict";
@@ -30,7 +29,7 @@
     balance: { points: 0, spent: 0, available: 0, detail: {} },
     currentUser: null,
     activeCategory: "",
-    activeTab: "shop",     // "shop" | "collection"
+    activeTab: "shop",
     loading: false,
     pageOpen: false,
     booted: false,
@@ -90,6 +89,17 @@
     } catch(_) { return ""; }
   }
 
+  /* ───── Effect CSS mapping ───── */
+  const EFFECT_MAP = {
+    fire_particles: {
+      wrapClass: "avatar-effect-fire",
+      html: '<div class="shop-fire-particles">'
+        + '<span></span><span></span><span></span><span></span>'
+        + '<span></span><span></span><span></span>'
+        + '</div>'
+    }
+  };
+
   /* ───── Ensure page ───── */
   function ensurePage() {
     let page = $(PAGE_ID);
@@ -110,7 +120,7 @@
       <div class="shop-body" id="shopBody">
         <div class="shop-user-card" id="shopUserCard">
           <div class="shop-user-top">
-            <div class="shop-user-avatar-wrap">
+            <div class="shop-user-avatar-wrap" id="shopUserAvatarWrap">
               <div class="shop-user-avatar" id="shopUserAvatar">?</div>
               <div class="shop-user-badge" id="shopUserBadge" hidden></div>
             </div>
@@ -156,7 +166,6 @@
         </div>
       </div>
 
-      <!-- Modal mua thành công -->
       <div class="shop-modal" id="shopModal" aria-hidden="true">
         <div class="shop-modal-backdrop"></div>
         <div class="shop-modal-panel" role="dialog" aria-modal="true">
@@ -189,15 +198,11 @@
         setTimeout(function() { btn.classList.remove("spinning"); }, 400);
       });
     });
-
-    /* Tab switching */
     page.querySelectorAll(".shop-tab").forEach(function(btn) {
       btn.addEventListener("click", function() {
         setTab(btn.dataset.tab || "shop");
       });
     });
-
-    /* Modal close */
     page.querySelector("#shopModalClose").addEventListener("click", closeModal);
     page.querySelector(".shop-modal-backdrop").addEventListener("click", closeModal);
 
@@ -205,22 +210,17 @@
     return page;
   }
 
-  /* ───── Tab ─────
-     ⭐ v1.6 FIX: dùng style.display thay vì hidden attribute
-     vì CSS .shop-grid { display: grid } override [hidden] */
+  /* ───── Tab ───── */
   function setTab(tab) {
     S.activeTab = tab;
     const page = $(PAGE_ID);
     if (!page) return;
-
     page.querySelectorAll(".shop-tab").forEach(function(btn) {
       btn.classList.toggle("active", btn.dataset.tab === tab);
     });
-
     const filters = page.querySelector("#shopFilters");
     const shopGrid = page.querySelector("#shopGrid");
     const collection = page.querySelector("#shopCollection");
-
     if (tab === "shop") {
       if (filters) filters.style.display = "";
       if (shopGrid) shopGrid.style.display = "";
@@ -313,12 +313,29 @@
     } catch(_) { return null; }
   }
 
+  /* ───── Apply effect vào avatar ───── */
+  function applyAvatarEffect(wrapEl, effectType) {
+    if (!wrapEl) return;
+    /* Xoá effect cũ */
+    wrapEl.classList.remove("avatar-effect-fire");
+    wrapEl.querySelectorAll(".shop-fire-particles").forEach(function(el) { el.remove(); });
+
+    if (!effectType) return;
+
+    const eff = EFFECT_MAP[effectType];
+    if (!eff) return;
+
+    wrapEl.classList.add(eff.wrapClass);
+    wrapEl.insertAdjacentHTML("beforeend", eff.html);
+  }
+
   /* ───── Render ───── */
   function renderUserCard() {
     const u = S.currentUser;
     const nameEl = $("shopUserName");
     const monthEl = $("shopUserMonth");
     const avEl = $("shopUserAvatar");
+    const wrapEl = $("shopUserAvatarWrap");
     const badgeEl = $("shopUserBadge");
     const earnEl = $("shopPointsEarn");
     const spentEl = $("shopPointsSpent");
@@ -332,6 +349,7 @@
       avEl.style.backgroundImage = "";
       avEl.textContent = "?";
       if (badgeEl) badgeEl.hidden = true;
+      applyAvatarEffect(wrapEl, null);
       if (earnEl) earnEl.textContent = "0đ";
       if (spentEl) spentEl.textContent = "0đ";
       if (availEl) availEl.textContent = "0đ";
@@ -352,18 +370,24 @@
       avEl.textContent = initialOf(dn);
     }
 
-    /* Badge đang dùng */
-    if (badgeEl) {
-      if (S.equipped && S.equipped.image_url) {
-        badgeEl.style.backgroundImage = 'url("' + S.equipped.image_url.replace(/"/g, '\\"') + '")';
-        badgeEl.textContent = "";
-        badgeEl.hidden = false;
-      } else if (S.equipped && !S.equipped.image_url) {
-        badgeEl.style.backgroundImage = "";
-        badgeEl.textContent = "🎖";
-        badgeEl.hidden = false;
-      } else {
-        badgeEl.hidden = true;
+    /* Effect + badge */
+    if (S.equipped && S.equipped.effect_type) {
+      applyAvatarEffect(wrapEl, S.equipped.effect_type);
+      if (badgeEl) badgeEl.hidden = true;  /* effect thay thế badge */
+    } else {
+      applyAvatarEffect(wrapEl, null);
+      if (badgeEl) {
+        if (S.equipped && S.equipped.image_url) {
+          badgeEl.style.backgroundImage = 'url("' + S.equipped.image_url.replace(/"/g, '\\"') + '")';
+          badgeEl.textContent = "";
+          badgeEl.hidden = false;
+        } else if (S.equipped && !S.equipped.image_url) {
+          badgeEl.style.backgroundImage = "";
+          badgeEl.textContent = "🎖";
+          badgeEl.hidden = false;
+        } else {
+          badgeEl.hidden = true;
+        }
       }
     }
 
@@ -391,7 +415,6 @@
             + icon + ' ' + cnt + ' ' + lbl + '</span>');
         }
       });
-      /* Custom statuses (Z, ...) */
       Object.keys(d).forEach(function(k) {
         if (["V","T","P","O","Q","X"].indexOf(k) >= 0) return;
         const cnt = Number(d[k]) || 0;
@@ -452,18 +475,30 @@
       el.className = "shop-item" + (it.is_purchased ? " purchased" : "");
       const cost = Number(it.cost || 0);
       const canBuy = !it.is_purchased && balance >= cost;
-      const imgHtml = it.image_url
-        ? '<img src="' + escapeHtml(it.image_url)
+
+      /* Icon cho item effect không có ảnh */
+      let imgHtml;
+      if (it.image_url) {
+        imgHtml = '<img src="' + escapeHtml(it.image_url)
           + '" alt="" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.classList.add(\'show\');">'
-          + '<span class="shop-item-img-fallback">🎁</span>'
-        : '<span class="shop-item-img-fallback show">🎁</span>';
+          + '<span class="shop-item-img-fallback">🎁</span>';
+      } else if (it.effect_type === "fire_particles") {
+        imgHtml = '<span class="shop-item-img-fallback show">🔥</span>';
+      } else {
+        imgHtml = '<span class="shop-item-img-fallback show">🎁</span>';
+      }
+
       const btnClass = it.is_purchased ? "purchased" : (canBuy ? "" : "disabled");
       const btnText = it.is_purchased ? "✓ Đã đổi" : (canBuy ? "Đổi" : "Thiếu điểm");
+      const sysTag = it.is_system
+        ? '<div class="shop-item-cat" style="color:#7c3aed;font-weight:950">⚙ Hệ thống</div>'
+        : (it.category ? '<div class="shop-item-cat">' + escapeHtml(it.category) + '</div>' : '');
+
       el.innerHTML =
         '<div class="shop-item-img">' + imgHtml + '</div>'
         + '<div class="shop-item-body">'
         +   '<div class="shop-item-name">' + escapeHtml(it.name || "") + '</div>'
-        +   (it.category ? '<div class="shop-item-cat">' + escapeHtml(it.category) + '</div>' : '')
+        +   sysTag
         + '</div>'
         + '<div class="shop-item-footer">'
         +   '<div class="shop-item-cost">' + formatPoints(cost) + '</div>'
@@ -485,7 +520,6 @@
     const grid = $("shopCollectionGrid");
     const countEl = $("shopCollectionCount");
     if (!grid) return;
-
     if (countEl) countEl.textContent = S.collection.length ? String(S.collection.length) : "";
 
     if (!S.collection.length) {
@@ -501,11 +535,18 @@
     S.collection.forEach(function(it) {
       const el = document.createElement("div");
       el.className = "shop-collection-item" + (it.is_equipped ? " equipped" : "");
-      const imgHtml = it.item_image_url
-        ? '<img src="' + escapeHtml(it.item_image_url)
+
+      let imgHtml;
+      if (it.item_image_url) {
+        imgHtml = '<img src="' + escapeHtml(it.item_image_url)
           + '" alt="" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.classList.add(\'show\');">'
-          + '<span class="shop-collection-img-fallback">🎁</span>'
-        : '<span class="shop-collection-img-fallback show">🎁</span>';
+          + '<span class="shop-collection-img-fallback">🎁</span>';
+      } else if (it.effect_type === "fire_particles") {
+        imgHtml = '<span class="shop-collection-img-fallback show">🔥</span>';
+      } else {
+        imgHtml = '<span class="shop-collection-img-fallback show">🎁</span>';
+      }
+
       const eqBtnText = it.is_equipped ? "✓ Đang dùng" : "Trang bị";
       const eqBtnClass = it.is_equipped ? "equipped" : "";
       el.innerHTML =
@@ -525,11 +566,8 @@
       btn.addEventListener("click", function() {
         const id = btn.dataset.itemId;
         const isEquipped = btn.classList.contains("equipped");
-        if (isEquipped) {
-          equipBadge(null, btn);
-        } else {
-          equipBadge(id, btn);
-        }
+        if (isEquipped) equipBadge(null, btn);
+        else equipBadge(id, btn);
       });
     });
   }
@@ -564,10 +602,8 @@
       try { Toast && Toast.show && Toast.show("Không đủ điểm", { type: "warning", duration: 3000 }); } catch(_) {}
       return;
     }
-
     btn.disabled = true;
     btn.textContent = "⏳";
-
     const sb = window.__sb;
     if (!sb || !sb.rpc) {
       setStatus("Chưa kết nối máy chủ");
@@ -585,7 +621,6 @@
       const d = res.data || {};
       if (d.ok !== true) throw new Error(d.error || "Không đổi được");
 
-      /* ⭐ Hiện modal thành công */
       showSuccessModal(item);
       try { Toast && Toast.show && Toast.show("Đổi thành công: " + (item.name || ""), { type: "success", duration: 2000 }); } catch(_) {}
       await sync();
@@ -613,6 +648,9 @@
       if (item.image_url) {
         imgEl.style.backgroundImage = 'url("' + item.image_url.replace(/"/g, '\\"') + '")';
         imgEl.textContent = "";
+      } else if (item.effect_type === "fire_particles") {
+        imgEl.style.backgroundImage = "";
+        imgEl.textContent = "🔥";
       } else {
         imgEl.style.backgroundImage = "";
         imgEl.textContent = "🎁";
@@ -625,7 +663,6 @@
     modal.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
 
-    /* Confetti */
     const confetti = $("shopModalConfetti");
     if (confetti) {
       confetti.innerHTML = "";
@@ -642,7 +679,6 @@
       }
     }
 
-    /* Wire equip button */
     const eqBtn = $("shopModalEquip");
     if (eqBtn) {
       const newBtn = eqBtn.cloneNode(true);
@@ -652,7 +688,6 @@
         newBtn.textContent = "Đang trang bị…";
         await equipBadge(_modalItemId, null);
         closeModal();
-        /* ⭐ v1.6: nhảy sang tab Bộ sưu tập để user thấy badge đang dùng */
         setTab("collection");
       });
     }
@@ -675,7 +710,6 @@
       S.currentUser = (window.SRank && window.SRank.Auth && window.SRank.Auth.getCurrentUser)
         ? window.SRank.Auth.getCurrentUser()
         : null;
-
       const [items, cats, collection, equipped, balance] = await Promise.all([
         fetchItems(),
         fetchCategories(),
@@ -716,8 +750,6 @@
     page.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
     try { if (typeof window.syncQuickTools === "function") window.syncQuickTools(); } catch(_) {}
-
-    /* Reset về tab shop khi mở */
     S.activeTab = "shop";
     setTab("shop");
     renderUserCard();
@@ -748,18 +780,12 @@
     S.booted = true;
     ensurePage();
     startTimer();
-
     window.__openShop = openPage;
     window.__closeShop = closePage;
     window.ShopView = {
-      open: openPage,
-      close: closePage,
-      sync: sync,
-      state: S,
-      equip: equipBadge,
-      setTab: setTab
+      open: openPage, close: closePage, sync: sync,
+      state: S, equip: equipBadge, setTab: setTab
     };
-
     window.addEventListener("displayNameUpdated", function() {
       _avatarCache.clear();
       if (S.pageOpen) sync();
@@ -771,8 +797,7 @@
     window.addEventListener("checkinDone", function() {
       if (S.pageOpen) sync();
     });
-
-    log("v1.6 ready ✓ (fix tab display + auto-jump to collection)");
+    log("v1.7 ready ✓ (effect avatar)");
   }
 
   if (document.readyState === "loading") {
