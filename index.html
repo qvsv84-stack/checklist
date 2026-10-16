@@ -93,6 +93,7 @@
 <link rel="preload" href="js/main.js" as="script">
 <link rel="stylesheet" href="css/main.css">
 <link rel="stylesheet" href="css/menu.css">
+<link rel="stylesheet" href="css/shop.css">
 
 <style id="landingCourtForce">
 html, body { overflow-y: auto !important; overflow-x: hidden !important; height: auto !important; min-height: 100% !important; }
@@ -203,12 +204,7 @@ body.menu-open { touch-action: none !important; overscroll-behavior: none !impor
 body.menu-open #menuOverlay { transform: none !important; }
 </style>
 
-<style id="ctaHideDoneForce">
-/* ⭐ Ẩn nút "Đã chấm công" — không cần thiết vì đã có card ở grid */
-html body #question .landing-cta[data-cta="done"] {
-  display: none !important;
-}
-</style>
+<!-- ⭐ SHOP: block ctaHideDoneForce đã được XOÁ để hiện nút Shop thưởng -->
 
 <style id="neonCtaForce">
 /* ═══ NEON CTA — XANH LÁ TƯƠI (khớp theme app) ═══ */
@@ -250,6 +246,39 @@ html body #question .landing-cta[data-cta="checkin"]:active {
     0 0 22px hsl(140 60% 55% / .85),
     0 0 44px hsl(140 60% 50% / .55),
     inset 0 0 18px hsl(140 60% 85% / .4) !important;
+}
+
+/* ⭐ SHOP CTA — vàng gold */
+html body #question .landing-cta[data-cta="shop"] {
+  position: relative !important;
+  z-index: 0 !important;
+  background: linear-gradient(135deg, hsl(38 90% 55%), hsl(28 85% 48%)) !important;
+  color: #fff !important;
+  border: 0 !important;
+  padding: 14px 32px !important;
+  border-radius: 999px !important;
+  font-weight: 800 !important;
+  letter-spacing: .01em !important;
+  text-shadow: 0 1px 3px rgba(120,60,0,.3) !important;
+  box-shadow:
+    0 0 0 1px hsl(38 90% 70% / .55),
+    0 0 14px hsl(38 90% 58% / .6),
+    0 0 32px hsl(38 90% 55% / .35),
+    inset 0 0 14px hsl(38 90% 80% / .35) !important;
+  transition: box-shadow .2s ease, transform .12s ease !important;
+}
+html body #question .landing-cta[data-cta="shop"]::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: -5px !important;
+  z-index: -1 !important;
+  border: 2px solid hsl(38 90% 65% / .55) !important;
+  border-radius: 999px !important;
+  pointer-events: none !important;
+  box-shadow: 0 0 18px hsl(38 90% 58% / .5) !important;
+}
+html body #question .landing-cta[data-cta="shop"]:active {
+  transform: scale(.96) !important;
 }
 </style>
 </head>
@@ -311,6 +340,7 @@ html body #question .landing-cta[data-cta="checkin"]:active {
         <button class="admin-tab" data-admin-tab="checklist" type="button"><span class="admin-tab-icon">☑</span><span class="admin-tab-label">Checklist</span></button>
         <button class="admin-tab" data-admin-tab="stats" type="button"><span class="admin-tab-icon">📊</span><span class="admin-tab-label">Thống kê</span></button>
         <button class="admin-tab" data-admin-tab="users" type="button"><span class="admin-tab-icon">👥</span><span class="admin-tab-label">Users</span></button>
+        <button class="admin-tab" data-admin-tab="shop" type="button"><span class="admin-tab-icon">🏪</span><span class="admin-tab-label">Shop</span></button>
       </nav>
       <div id="adminPageContent">
         <div class="admin-panel-view active" data-admin-view="schedule">
@@ -382,6 +412,49 @@ html body #question .landing-cta[data-cta="checkin"]:active {
           <div class="admin-toolbar"><input id="adminUsersSearch" type="text" placeholder="🔍 Tìm username / tên..." autocomplete="off"></div>
           <div id="adminUsersRows" class="admin-list"></div>
         </div>
+        <div class="admin-panel-view" data-admin-view="shop">
+          <h2 class="admin-section-title">Thêm vật phẩm mới</h2>
+          <div class="admin-card">
+            <div class="admin-card-row" style="align-items:flex-start;gap:14px">
+              <div class="admin-shop-form-preview" id="adminShopImagePreview">🖼</div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+                <button id="adminShopImageBtn" type="button" class="admin-row-btn" style="align-self:flex-start">Chọn ảnh</button>
+                <span style="font-size:11px;color:#8a6a3a">JPG/PNG/WebP · tối đa 5MB · tự crop vuông 400×400</span>
+              </div>
+            </div>
+            <div class="admin-card-row">
+              <div class="admin-card-icon">🏷</div>
+              <div class="admin-card-info">
+                <label for="adminShopName">Tên vật phẩm</label>
+                <p>Tối đa 100 ký tự</p>
+              </div>
+              <input id="adminShopName" type="text" maxlength="100" placeholder="Cà phê sữa" autocomplete="off">
+            </div>
+            <div class="admin-card-row">
+              <div class="admin-card-icon">💰</div>
+              <div class="admin-card-info">
+                <label for="adminShopCost">Giá điểm</label>
+                <p>Số điểm cần để đổi</p>
+              </div>
+              <input id="adminShopCost" type="text" inputmode="numeric" maxlength="7" placeholder="50" autocomplete="off">
+            </div>
+            <div class="admin-card-row">
+              <div class="admin-card-icon">📂</div>
+              <div class="admin-card-info">
+                <label for="adminShopCategory">Phân loại</label>
+                <p>Gõ tự do — gợi ý từ các phân loại đã có</p>
+              </div>
+              <input id="adminShopCategory" type="text" maxlength="50" list="adminShopCategoryList" placeholder="Đồ uống" autocomplete="off">
+              <datalist id="adminShopCategoryList"></datalist>
+            </div>
+          </div>
+          <input type="file" id="adminShopImageInput" accept="image/jpeg,image/png,image/webp" hidden>
+          <div id="adminShopStatus" class="admin-status"></div>
+          <div class="admin-actions"><button id="adminShopCreateBtn" type="button">➕ Thêm vật phẩm</button></div>
+
+          <h2 class="admin-section-title" style="margin-top:24px">Danh sách vật phẩm</h2>
+          <div id="adminShopRows" class="admin-list"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -414,6 +487,8 @@ html body #question .landing-cta[data-cta="checkin"]:active {
     <button id="loginSubmit" type="button">Đăng nhập</button>
   </section>
 </div>
+
+<!-- #shopPage được js/shop.js tự tạo khi boot -->
 
 <section id="attendancePage" aria-label="Lịch chấm công">
   <div class="att-page-inner"><div class="att-shell">
@@ -501,20 +576,6 @@ html body #question .landing-cta[data-cta="checkin"]:active {
 
 <!-- ══════════════════════════════════════════════════════════════
      SCRIPT LOAD ORDER — KHÔNG THAY ĐỔI
-     ══════════════════════════════════════════════════════════════
-     v1.2 (Task 2 refactor):
-       - main.js giờ là orchestrator, expose window.SrankCore
-       - 3 view modules: landing.js, admin.js, checklist-view.js
-       - Views đọc SrankCore → đăng ký callbacks
-       - main.js boot đợi DOMContentLoaded → callbacks đã sẵn sàng
-
-     THỨ TỰ BẮT BUỘC:
-       config → role → toast → admin-session → store → scheduler
-       → supabase CDN → supabase-adapter → display-name → auth
-       → main (define SrankCore, đợi DOMContentLoaded)
-       → landing / admin / checklist-view (đăng ký callbacks)
-       → cta-morph / auth-ui / avatar-upload / checklist-ui / bridge
-       → attendance / attendance-top3 / realtime / menu
      ══════════════════════════════════════════════════════════════ -->
 <script src="js/config.js"></script>
 <script src="js/debug-menu.js"></script>
@@ -543,6 +604,8 @@ html body #question .landing-cta[data-cta="checkin"]:active {
 <script src="js/attendance-top3.js" defer></script>
 <script src="js/realtime.js" defer></script>
 <script src="js/menu.js" defer></script>
+<script src="js/shop.js" defer></script>
+<script src="js/shop-admin.js" defer></script>
 
 <script>
 (function(){
@@ -591,7 +654,7 @@ html body #question .landing-cta[data-cta="checkin"]:active {
       <div class="menu-user-avatar" id="menuUserAvatar">🐱</div>
       <div class="menu-user-info">
         <div class="menu-user-name" id="menuUserName">Khách</div>
-        <div class="menu-user-sub" id="menuUserRole">Thành viên</div>
+        <div class="menu-user-role" id="menuUserRole">Thành viên</div>
       </div>
       <button class="menu-user-action" id="menuAvatarBtn" type="button" aria-label="Đổi avatar">📷</button>
       <button class="menu-user-logout" id="menuLogoutBtn" type="button" aria-label="Đăng xuất">🚪</button>
