@@ -1,13 +1,12 @@
 /* =========================================================
-   SPIN FEED — v1.1
+   SPIN FEED — v1.2
    ---------------------------------------------------------
-   v1.1 FIX (giật landing):
-   ✅ Fixed height container (114px = 3×38) → không nhảy
-   ✅ Dùng class .spin-feed-hidden thay display:none
-   ✅ Signature check → không rebuild khi data không đổi
-   ✅ Smooth height transition khi ẩn/hiện
-   v1.0:
-   - Hiện 3 tin mới nhất + auto-rotate 1s/tin
+   v1.2:
+   ✅ Chỉ hiện 1 tin mới nhất (1 dòng)
+   ✅ Khi có tin mới: tin cũ bay lên + tan, tin mới bay từ dưới lên
+   ✅ Không khung, chỉ text
+   v1.1:
+   - Fixed height + signature check
    ========================================================= */
 (function(){
   "use strict";
@@ -15,24 +14,16 @@
   window.__spinFeedLoaded = true;
 
   const POLL_MS = 30000;
-  const VISIBLE_COUNT = 3;
-  const AUTO_ROTATE_THRESHOLD = 10;
-  const ROTATE_INTERVAL_MS = 1000;
   const FEED_ID = "spinFeed";
   const CONTAINER_ID = "spinFeedList";
+  const ANIM_MS = 480;
 
   const state = {
-    data: [],
-    queue: [],
-    displayed: [],
-    rotating: false,
-    rotateTimer: null,
+    current: null,
+    animating: false,
     pollTimer: null,
-    booted: false,
-    lastFetch: 0
+    booted: false
   };
-
-  let _lastSig = "";
 
   function log(...a) { if (window.__SRANK_DEBUG) console.log("[SpinFeed]", ...a); }
 
@@ -63,7 +54,7 @@
     const sb = window.__sb;
     if (!sb || !sb.rpc) return [];
     try {
-      const res = await sb.rpc("rpc_shop_recent_spins", { p_limit: 20 });
+      const res = await sb.rpc("rpc_shop_recent_spins", { p_limit: 3 });
       if (res.error) throw res.error;
       const d = res.data || {};
       if (d.ok !== true) return [];
@@ -117,132 +108,73 @@
     return el;
   }
 
-  function renderInitial() {
+  /* ⭐ v1.2: Render tin mới với animation */
+  function renderNew(newSpin, isInitial) {
     const feedEl = ensureFeedEl();
     if (!feedEl) return;
 
     const listEl = document.getElementById(CONTAINER_ID);
     if (!listEl) return;
 
-    const data = state.data || [];
-    const count = Math.min(VISIBLE_COUNT, data.length);
-
-    if (!count) {
-      /* ⭐ v1.1: dùng class thay vì display:none → transition mượt */
+    if (!newSpin) {
+      /* Không có tin → ẩn */
       feedEl.classList.add("spin-feed-hidden");
       feedEl.setAttribute("aria-hidden", "true");
-      listEl.innerHTML = "";
-      state.displayed = [];
-      state.queue = [];
+      setTimeout(function() {
+        listEl.innerHTML = "";
+      }, 350);
+      state.current = null;
       return;
     }
 
     feedEl.classList.remove("spin-feed-hidden");
     feedEl.setAttribute("aria-hidden", "false");
 
-    state.displayed = data.slice(0, count);
-    state.queue = data.slice(count);
-
-    /* ⭐ v1.1: reset transform trước khi rebuild */
-    listEl.style.transition = "none";
-    listEl.style.transform = "translateY(0)";
-
-    listEl.innerHTML = "";
-    state.displayed.forEach(function(s) {
-      listEl.appendChild(createItemEl(s));
-    });
-  }
-
-  function shouldRotate() {
-    return (state.data.length >= AUTO_ROTATE_THRESHOLD) && (state.queue.length > 0);
-  }
-
-  function stopRotate() {
-    state.rotating = false;
-    if (state.rotateTimer) {
-      clearTimeout(state.rotateTimer);
-      state.rotateTimer = null;
-    }
-  }
-
-  function startRotate() {
-    if (state.rotating) return;
-    if (!shouldRotate()) return;
-    state.rotating = true;
-    tickRotate();
-  }
-
-  function tickRotate() {
-    if (!state.rotating) return;
-    if (!state.queue.length) { stopRotate(); return; }
-
-    const listEl = document.getElementById(CONTAINER_ID);
-    if (!listEl) { stopRotate(); return; }
-
-    const feedEl = document.getElementById(FEED_ID);
-    if (!feedEl || feedEl.classList.contains("spin-feed-hidden")) {
-      state.rotateTimer = setTimeout(tickRotate, ROTATE_INTERVAL_MS);
+    /* Lần đầu → render trực tiếp, không animation */
+    if (isInitial || !listEl.firstElementChild) {
+      listEl.innerHTML = "";
+      listEl.appendChild(createItemEl(newSpin));
+      state.current = newSpin;
       return;
     }
 
-    const next = state.queue.shift();
-    if (!next) { stopRotate(); return; }
+    /* Đã có tin cũ → animate out rồi in */
+    if (state.animating) return;
+    state.animating = true;
 
-    const newItem = createItemEl(next);
-    newItem.classList.add("spin-feed-item-enter");
+    const oldItem = listEl.firstElementChild;
+    oldItem.classList.add("spin-feed-item-out");
+
+    const newItem = createItemEl(newSpin);
+    newItem.classList.add("spin-feed-item-in");
     listEl.appendChild(newItem);
 
-    const firstItem = listEl.firstElementChild;
-    const lineH = firstItem ? firstItem.getBoundingClientRect().height : 38;
-
-    listEl.style.transition = "transform 0.42s cubic-bezier(0.4, 0.0, 0.2, 1)";
-    listEl.style.transform = "translateY(-" + lineH + "px)";
-
     setTimeout(function() {
-      if (listEl.firstElementChild) {
-        listEl.removeChild(listEl.firstElementChild);
-      }
-      listEl.style.transition = "none";
-      listEl.style.transform = "translateY(0)";
-      void listEl.offsetHeight;
-
-      state.displayed.shift();
-      state.displayed.push(next);
-
-      if (state.queue.length) {
-        state.rotateTimer = setTimeout(tickRotate, ROTATE_INTERVAL_MS - 420);
-      } else {
-        stopRotate();
-      }
-    }, 440);
+      if (oldItem && oldItem.parentNode) oldItem.remove();
+      /* Reset classes của tin mới */
+      newItem.classList.remove("spin-feed-item-in");
+      state.current = newSpin;
+      state.animating = false;
+    }, ANIM_MS);
   }
 
-  /* ⭐ v1.1: signature để skip rebuild */
-  function dataSignature(data) {
-    return (data || []).slice(0, VISIBLE_COUNT).map(function(x) { return x.id; }).join("|");
+  /* ⭐ v1.2: So sánh tin mới vs tin hiện tại */
+  function spinKey(spin) {
+    return spin ? String(spin.id) : "";
   }
 
   async function refresh() {
-    if (state.rotating) return;
+    if (state.animating) return;
 
     const data = await fetchRecent();
-    const sig = dataSignature(data);
+    const latest = data && data.length ? data[0] : null;
+    const latestKey = spinKey(latest);
+    const currentKey = spinKey(state.current);
 
-    /* ⭐ v1.1: nếu data không đổi → không rebuild */
-    if (sig === _lastSig && state.data.length) {
-      state.lastFetch = Date.now();
-      return;
-    }
+    /* Không đổi → skip */
+    if (latestKey === currentKey) return;
 
-    _lastSig = sig;
-    state.data = data;
-    state.lastFetch = Date.now();
-
-    renderInitial();
-
-    if (shouldRotate()) {
-      state.rotateTimer = setTimeout(startRotate, 1200);
-    }
+    renderNew(latest, !state.current);
   }
 
   function startPoll() {
@@ -259,26 +191,20 @@
   }
 
   function bindEvents() {
+    /* Khi có spin mới ở bất kỳ đâu */
     window.addEventListener("spinCompleted", function() {
-      /* ⭐ v1.1: force refresh sau khi user khác quay */
-      _lastSig = "";
-      if (state.rotating) {
-        const check = setInterval(function() {
-          if (!state.rotating) {
-            clearInterval(check);
-            refresh();
-          }
-        }, 500);
-      } else {
-        refresh();
-      }
+      setTimeout(refresh, 300);
     });
 
+    /* Đổi tên → update UI nếu có tin */
     window.addEventListener("displayNameUpdated", function() {
-      if (state.rotating) return;
-      /* Force rebuild để update tên mới */
-      _lastSig = "";
-      if (state.data.length) refresh();
+      if (state.current && !state.animating) {
+        const listEl = document.getElementById(CONTAINER_ID);
+        if (listEl) {
+          listEl.innerHTML = "";
+          listEl.appendChild(createItemEl(state.current));
+        }
+      }
     });
 
     document.addEventListener("visibilitychange", function() {
@@ -298,7 +224,7 @@
         bindEvents();
         refresh();
         startPoll();
-        log("v1.1 ready ✓");
+        log("v1.2 ready ✓");
         return;
       }
       if (++tries > 60) { log("không tìm thấy #questionWrap"); return; }
@@ -314,6 +240,6 @@
 
   window.SpinFeed = {
     refresh: refresh,
-    getData: function() { return state.data; }
+    getCurrent: function() { return state.current; }
   };
 })();
