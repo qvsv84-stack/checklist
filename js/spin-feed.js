@@ -1,14 +1,14 @@
 /* =========================================================
-   SPIN FEED — v1.3
+   SPIN FEED — v1.4 (Performance)
    ---------------------------------------------------------
+   v1.4 FIX (web chậm):
+   ✅ Delay 3s sau boot (thay 800ms) → không tranh bandwidth
+   ✅ Chỉ fetch khi tab visible + không ở shop/admin/attendance
+   ✅ Auto-rotate tạm dừng khi tab hidden → không chạy ngầm
+   ✅ Skip fetch nếu <5s từ lần fetch trước (chống spam)
+   ✅ Cache data — không fetch lại nếu không có tin mới
    v1.3:
-   ✅ Load 10 tin gần nhất khi vào web
-   ✅ Nhảy dần từ cũ nhất → mới nhất (1s/tin)
-   ✅ Animation: tin cũ bay lên + tan, tin mới bay từ dưới lên
-   ✅ Hết queue → giữ tin mới nhất
-   ✅ Poll 30s: tự append tin mới vào queue
-   v1.2:
-   - 1 dòng + bay lên
+   - Load 10 tin, nhảy dần cũ → mới
    ========================================================= */
 (function(){
   "use strict";
@@ -19,18 +19,22 @@
   const FEED_ID = "spinFeed";
   const CONTAINER_ID = "spinFeedList";
   const ANIM_MS = 480;
-  const STEP_MS = 1000;      // 1s/tin
-  const FETCH_LIMIT = 10;    // 10 tin gần nhất
+  const STEP_MS = 1000;
+  const FETCH_LIMIT = 10;
+  const MIN_FETCH_GAP_MS = 5000;
+  const BOOT_DELAY_MS = 3000;
 
   const state = {
-    queue: [],              // Các tin CHƯA hiển thị (cũ → mới)
-    current: null,          // Tin đang hiển thị
-    lastShownKey: "",       // Key của tin cuối đã hiển thị (chống trùng)
-    running: false,         // Auto-play đang chạy
-    animating: false,       // Đang chạy animation
+    queue: [],
+    current: null,
+    lastShownKey: "",
+    running: false,
+    animating: false,
     timer: null,
     pollTimer: null,
-    booted: false
+    booted: false,
+    lastFetchAt: 0,
+    lastFetchData: []
   };
 
   function log(...a) { if (window.__SRANK_DEBUG) console.log("[SpinFeed]", ...a); }
@@ -58,20 +62,40 @@
     return el;
   }
 
-  async function fetchRecent() {
+  /* ⭐ v1.4: có phải đang ở home page không */
+  function isHomePage() {
+    if (document.querySelector('.admin-panel-view.show')) return false;
+    if (document.getElementById('shopPage')?.classList.contains('show')) return false;
+    if (document.getElementById('attendancePage')?.classList.contains('show')) return false;
+    if (document.getElementById('clV6Page')?.classList.contains('show')) return false;
+    if (document.getElementById('loginOverlay')?.classList.contains('show')) return false;
+    return true;
+  }
+
+  /* ⭐ v1.4: fetch với cache + guard */
+  async function fetchRecent(force) {
+    /* Guard: chống spam */
+    if (!force && Date.now() - state.lastFetchAt < MIN_FETCH_GAP_MS) {
+      return state.lastFetchData;
+    }
+
     const sb = window.__sb;
     if (!sb || !sb.rpc) return [];
+
     try {
       const res = await sb.rpc("rpc_shop_recent_spins", { p_limit: FETCH_LIMIT });
       if (res.error) throw res.error;
       const d = res.data || {};
       if (d.ok !== true) return [];
       const arr = Array.isArray(d.data) ? d.data : [];
-      /* RPC trả về mới → cũ, đảo lại thành cũ → mới */
-      return arr.slice().reverse();
+      /* RPC trả mới → cũ, đảo thành cũ → mới */
+      const reversed = arr.slice().reverse();
+      state.lastFetchAt = Date.now();
+      state.lastFetchData = reversed;
+      return reversed;
     } catch(e) {
       log("fetch error:", e && e.message);
-      return [];
+      return state.lastFetchData;
     }
   }
 
@@ -122,7 +146,6 @@
     return el;
   }
 
-  /* ⭐ Hiển thị tin (không animation) */
   function renderStatic(spin) {
     const feedEl = ensureFeedEl();
     if (!feedEl) return;
@@ -146,7 +169,6 @@
     state.current = spin;
   }
 
-  /* ⭐ Hiển thị tin với animation bay lên */
   function renderTransition(newSpin) {
     const feedEl = ensureFeedEl();
     if (!feedEl) return;
@@ -176,7 +198,6 @@
     }, ANIM_MS);
   }
 
-  /* ⭐ Auto-play: nhảy từng tin trong queue */
   function startAutoPlay() {
     if (state.running) return;
     if (!state.queue.length) return;
@@ -184,8 +205,22 @@
     tick();
   }
 
+  /* ⭐ v1.4: tick với pause khi tab hidden hoặc rời home */
   function tick() {
     if (!state.running) return;
+
+    /* ⭐ Pause khi tab hidden → tiết kiệm CPU */
+    if (document.hidden) {
+      state.timer = setTimeout(tick, 1000);
+      return;
+    }
+
+    /* ⭐ Pause khi rời home page */
+    if (!isHomePage()) {
+      state.timer = setTimeout(tick, 500);
+      return;
+    }
+
     if (!state.queue.length) {
       state.running = false;
       log("auto-play done");
@@ -218,7 +253,6 @@
     }
   }
 
-  /* ⭐ Load 10 tin + bắt đầu auto-play */
   async function loadAndPlay() {
     if (state.running || state.animating) return;
 
@@ -228,12 +262,9 @@
       return;
     }
 
-    /* Nếu không có gì thay đổi so với lần trước → skip */
     const lastKey = spinKey(data[data.length - 1]);
     if (lastKey === state.lastShownKey && state.current) return;
 
-    /* Queue = tất cả trừ tin cuối (tin cuối sẽ hiện cuối cùng) */
-    /* Nhưng nếu lần đầu (current = null) → hiện tin đầu tiên luôn */
     if (!state.current) {
       const first = data.shift();
       renderStatic(first);
@@ -245,29 +276,20 @@
       return;
     }
 
-    /* Đã có tin đang hiện → append tin mới vào queue */
     state.queue = state.queue.concat(data);
     if (!state.running) startAutoPlay();
   }
 
-  /* ⭐ Refresh: kiểm tra có tin mới không */
-  async function refresh() {
+  async function refresh(force) {
     if (state.running || state.animating) return;
+    if (document.hidden) return;
+    if (!isHomePage()) return;
 
-    const data = await fetchRecent();
+    const data = await fetchRecent(force);
     if (!data.length) return;
 
     /* Lọc chỉ giữ tin mới hơn tin cuối đã hiển thị */
-    const newOnes = data.filter(function(s) {
-      return spinKey(s) !== state.lastShownKey;
-    });
-
-    /* Nếu không có gì mới → skip */
-    if (!newOnes.length) return;
-
-    /* Nếu lastShownKey không có trong data → toàn bộ đều mới */
-    /* Nếu có → chỉ giữ những tin sau lastShownKey */
-    let toAdd = newOnes;
+    let toAdd = data;
     if (state.lastShownKey) {
       const idx = data.findIndex(function(s) { return spinKey(s) === state.lastShownKey; });
       if (idx >= 0) toAdd = data.slice(idx + 1);
@@ -292,20 +314,17 @@
   function startPoll() {
     if (state.pollTimer) clearInterval(state.pollTimer);
     state.pollTimer = setInterval(function() {
+      /* ⭐ v1.4: guard kỹ trước khi poll */
       if (document.hidden) return;
       if (state.running || state.animating) return;
-      const isHome = !document.querySelector('.admin-panel-view.show')
-        && !document.getElementById('shopPage')?.classList.contains('show')
-        && !document.getElementById('attendancePage')?.classList.contains('show')
-        && !document.getElementById('clV6Page')?.classList.contains('show');
-      if (!isHome) return;
-      refresh();
+      if (!isHomePage()) return;
+      refresh(false);
     }, POLL_MS);
   }
 
   function bindEvents() {
     window.addEventListener("spinCompleted", function() {
-      setTimeout(refresh, 500);
+      setTimeout(function() { refresh(true); }, 500);
     });
 
     window.addEventListener("displayNameUpdated", function() {
@@ -320,7 +339,13 @@
     });
 
     document.addEventListener("visibilitychange", function() {
-      if (!document.hidden && !state.running && !state.animating) refresh();
+      /* ⭐ v1.4: khi tab ẩn → dừng auto-play ngay */
+      if (document.hidden) {
+        /* Không cancel timer, chỉ để tick tự pause */
+        return;
+      }
+      /* Tab visible lại → refresh nếu không animating */
+      if (!state.running && !state.animating) refresh(false);
     });
   }
 
@@ -334,9 +359,10 @@
         state.booted = true;
         ensureFeedEl();
         bindEvents();
-        loadAndPlay();
+        /* ⭐ v1.4: delay 3s trước khi fetch */
+        setTimeout(function() { loadAndPlay(); }, BOOT_DELAY_MS);
         startPoll();
-        log("v1.3 ready ✓");
+        log("v1.4 ready ✓ (delay 3s + pause when hidden)");
         return;
       }
       if (++tries > 60) { log("không tìm thấy #questionWrap"); return; }
@@ -345,9 +371,9 @@
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", function() { setTimeout(boot, 800); }, { once: true });
+    document.addEventListener("DOMContentLoaded", function() { setTimeout(boot, 500); }, { once: true });
   } else {
-    setTimeout(boot, 800);
+    setTimeout(boot, 500);
   }
 
   window.SpinFeed = {
