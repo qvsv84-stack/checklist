@@ -1,12 +1,19 @@
 /* =========================================================
-   SHOP ADMIN — v1.0
+   SHOP ADMIN — v1.1
    ---------------------------------------------------------
-   Tab "Shop" trong admin panel. Chịu trách nhiệm:
-     - Form tạo item: ảnh (upload như avatar) + tên + giá + phân loại
-     - Combobox phân loại (datalist → gõ tự do + suggest)
-     - Danh sách item: toggle active / sửa / xoá
+   v1.1 FIX:
+   ✅ Wire events NGAY sau DOMContentLoaded
+      (không đợi render() — fix bug "Chọn ảnh không mở file picker")
+   ✅ checkSetup(): ping RPC + storage bucket khi tab Shop mở lần đầu
+      → hiện banner đỏ TO nếu thiếu SQL migration
+   ✅ Log lỗi chi tiết hơn + hiện cả detail error ở status
+   ✅ Tự fallback: nếu render chạy khi events chưa wire → wire tại chỗ
+   v1.0:
+   - Tab "Shop" trong admin panel
+   - Upload ảnh + tên + giá + phân loại
+   - Combobox phân loại
+   - List item + toggle active / sửa / xoá
 
-   Đăng ký callback: SrankCore.callbacks.renderAdminShop
    LOAD ORDER: SAU main.js + admin.js
    ========================================================= */
 (function(){
@@ -25,12 +32,15 @@
   const MAX_SIZE = 5 * 1024 * 1024;
   const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
   const TARGET_SIZE = 400;
+  const BUCKET = "shop-items";
 
   let _items = [];
   let _categories = [];
   let _uploading = false;
   let _uploadedUrl = "";
   let _wired = false;
+  let _setupChecked = false;
+  let _setupOk = null;
 
   function log(...a) { console.log("[ShopAdmin]", ...a); }
   function escapeHtml(s) {
@@ -49,6 +59,107 @@
     el.textContent = m || "";
     el.classList.remove("error", "warn");
     if (isError) el.classList.add("error");
+    console.log("[ShopAdmin status]", isError ? "❌" : "ℹ", m);
+  }
+
+  /* ───── Banner cảnh báo setup ───── */
+  function showSetupBanner(msg) {
+    let banner = $("adminShopSetupBanner");
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.id = "adminShopSetupBanner";
+      banner.style.cssText = [
+        "margin: 0 0 14px",
+        "padding: 12px 14px",
+        "border-radius: 12px",
+        "background: #fef2f2",
+        "border: 1.5px solid #fca5a5",
+        "color: #991b1b",
+        "font-size: 13px",
+        "font-weight: 800",
+        "line-height: 1.5",
+        "white-space: pre-wrap"
+      ].join(";");
+      const view = document.querySelector('[data-admin-view="shop"]');
+      if (view) view.insertBefore(banner, view.firstChild);
+    }
+    banner.textContent = msg;
+    banner.style.display = "";
+  }
+  function hideSetupBanner() {
+    const banner = $("adminShopSetupBanner");
+    if (banner) banner.style.display = "none";
+  }
+
+  /* ═══════════════════════════════════════════════════════
+     CHECK SETUP — RPC + Storage bucket tồn tại chưa
+     ═══════════════════════════════════════════════════════ */
+  async function checkSetup() {
+    if (_setupChecked) return _setupOk;
+    _setupChecked = true;
+
+    const sb = window.__sb;
+    if (!sb) {
+      _setupOk = false;
+      showSetupBanner("❌ Chưa kết nối Supabase");
+      return false;
+    }
+
+    const token = adminToken();
+    if (!token) {
+      _setupOk = false;
+      showSetupBanner("❌ Không có quyền admin — đăng nhập lại");
+      return false;
+    }
+
+    /* Test RPC list items */
+    let rpcOk = false;
+    try {
+      const res = await sb.rpc("rpc_admin_shop_list_items", { p_token: token });
+      if (res.error) {
+        const em = String(res.error.message || res.error).toLowerCase();
+        if (em.includes("does not exist") || em.includes("not found") || em.includes("schema cache")) {
+          _setupOk = false;
+          showSetupBanner(
+            "❌ Chưa chạy SQL migration.\n\n" +
+            "Vào Supabase Dashboard → SQL Editor → paste nội dung file sql/shop_migration.sql → Run.\n\n" +
+            "Chi tiết: " + (res.error.message || "RPC không tồn tại")
+          );
+          return false;
+        }
+      }
+      rpcOk = true;
+    } catch (e) {
+      log("checkSetup RPC error:", e);
+    }
+
+    if (!rpcOk) {
+      _setupOk = false;
+      showSetupBanner("❌ RPC shop chưa sẵn sàng. Kiểm tra đã chạy SQL migration chưa.");
+      return false;
+    }
+
+    /* Test bucket tồn tại bằng cách list 1 file */
+    try {
+      const listRes = await sb.storage.from(BUCKET).list("", { limit: 1 });
+      if (listRes.error) {
+        const em = String(listRes.error.message || listRes.error).toLowerCase();
+        if (em.includes("not found") || em.includes("bucket")) {
+          _setupOk = false;
+          showSetupBanner(
+            "⚠️ RPC OK nhưng Storage bucket '" + BUCKET + "' chưa có.\n\n" +
+            "Chạy lại SQL migration (phần tạo bucket)."
+          );
+          return false;
+        }
+      }
+    } catch (e) {
+      log("checkSetup bucket warn:", e);
+    }
+
+    _setupOk = true;
+    hideSetupBanner();
+    return true;
   }
 
   /* ───── Image upload ───── */
@@ -95,13 +206,19 @@
       ? crypto.randomUUID()
       : (Date.now() + "-" + Math.random().toString(36).slice(2, 10));
     const path = uid + ".jpg";
-    const upRes = await sb.storage.from("shop-items").upload(path, blob, {
+
+    log("uploading →", path);
+    const upRes = await sb.storage.from(BUCKET).upload(path, blob, {
       upsert: false,
       contentType: "image/jpeg",
       cacheControl: "3600"
     });
-    if (upRes.error) throw upRes.error;
-    const urlRes = sb.storage.from("shop-items").getPublicUrl(path);
+    if (upRes.error) {
+      const em = String(upRes.error.message || upRes.error);
+      log("upload error:", em);
+      throw new Error(em);
+    }
+    const urlRes = sb.storage.from(BUCKET).getPublicUrl(path);
     const publicUrl = urlRes && urlRes.data && urlRes.data.publicUrl;
     if (!publicUrl) throw new Error("Không lấy được URL ảnh");
     return publicUrl + "?t=" + Date.now();
@@ -222,6 +339,7 @@
 
     try {
       const sb = window.__sb;
+      log("create →", { name, cost, cat, hasImage: !!_uploadedUrl });
       const res = await sb.rpc("rpc_admin_shop_create_item", {
         p_token: token,
         p_name: name,
@@ -229,7 +347,10 @@
         p_cost: cost,
         p_category: cat || null
       });
-      if (res.error) throw res.error;
+      if (res.error) {
+        log("create error:", res.error);
+        throw new Error(res.error.message || String(res.error));
+      }
       const d = res.data || {};
       if (d.ok !== true) throw new Error(d.error || "Không tạo được");
 
@@ -246,7 +367,9 @@
       renderCategoryList();
       renderItems();
     } catch(e) {
+      log("create fail:", e);
       setStatus("Lỗi: " + (e.message || e), true);
+      try { Toast && Toast.show && Toast.show("Lỗi: " + (e.message || e), { type: "error", duration: 4000 }); } catch(_) {}
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -341,51 +464,89 @@
       setStatus("Đã xoá ✓");
       await loadItems();
       renderItems();
-    } catch-card(e) {
+    } catch(e) {
       setStatus("Lỗi: " + (e.message || e), true);
       btn.disabled = false;
     }
   }
 
-  /* ───── Wire (1 lần) ───── */
+  /* ═══════════════════════════════════════════════════════
+     ✅ v1.1: WIRE EVENTS — gọi ngay khi DOM ready
+     Không đợi render() nữa → fix bug "Chọn ảnh không mở được"
+     ═══════════════════════════════════════════════════════ */
   function wireEvents() {
     if (_wired) return;
-    _wired = true;
     const imgBtn = $("adminShopImageBtn");
     const imgInput = $("adminShopImageInput");
     const createBtn = $("adminShopCreateBtn");
-    if (imgBtn && imgInput) {
-      imgBtn.addEventListener("click", function() {
-        if (!_uploading) imgInput.click();
-      });
-      imgInput.addEventListener("change", async function(e) {
-        const f = e.target.files && e.target.files[0];
-        if (!f) return;
-        _uploading = true;
-        imgBtn.disabled = true;
-        imgBtn.textContent = "⏳";
-        setStatus("Đang upload ảnh…");
-        try {
-          const url = await uploadItemImage(f);
-          _uploadedUrl = url || "";
-          updatePreview();
-          setStatus("Đã upload ảnh ✓");
-        } catch(err) {
-          setStatus("Lỗi upload: " + (err.message || err), true);
-        } finally {
-          _uploading = false;
-          imgBtn.disabled = false;
-          imgBtn.textContent = "Chọn ảnh";
-          try { imgInput.value = ""; } catch(_) {}
-        }
-      });
+
+    // Nếu DOM chưa có → đánh dấu chưa wire để lần sau thử lại
+    if (!imgBtn || !imgInput) {
+      log("wireEvents: DOM chưa sẵn sàng, thử lại sau");
+      return;
     }
-    if (createBtn) createBtn.addEventListener("click", createItem);
+
+    _wired = true;
+
+    imgBtn.addEventListener("click", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (_uploading) return;
+      log("imgBtn click → mở file picker");
+      try { imgInput.click(); }
+      catch(err) { log("imgInput.click error:", err); }
+    });
+
+    imgInput.addEventListener("change", async function(e) {
+      const f = e.target.files && e.target.files[0];
+      if (!f) { log("không có file"); return; }
+      log("file selected:", f.name, f.size, "bytes", f.type);
+
+      _uploading = true;
+      imgBtn.disabled = true;
+      const oldLabel = imgBtn.textContent;
+      imgBtn.textContent = "⏳ Đang upload…";
+      setStatus("Đang xử lý ảnh…");
+
+      try {
+        const url = await uploadItemImage(f);
+        _uploadedUrl = url || "";
+        updatePreview();
+        setStatus("Đã upload ảnh ✓");
+        log("upload OK →", url);
+      } catch(err) {
+        log("upload fail:", err);
+        setStatus("Lỗi upload: " + (err.message || err), true);
+      } finally {
+        _uploading = false;
+        imgBtn.disabled = false;
+        imgBtn.textContent = oldLabel;
+        try { imgInput.value = ""; } catch(_) {}
+      }
+    });
+
+    if (createBtn) {
+      createBtn.addEventListener("click", createItem);
+    }
+
+    log("wireEvents ✓ (imgBtn, imgInput, createBtn)");
   }
 
-  /* ───── Render entry ───── */
+  /* ═══════════════════════════════════════════════════════
+     RENDER entry
+     ═══════════════════════════════════════════════════════ */
   async function render() {
+    // Đảm bảo events đã wire (phòng khi DOMContentLoaded chạy trước)
     if (!_wired) wireEvents();
+
+    // Check setup lần đầu
+    const ok = await checkSetup();
+    if (!ok) {
+      const box = $("adminShopRows");
+      if (box) box.innerHTML = '<div class="admin-list-empty">Chưa setup — xem cảnh báo phía trên</div>';
+      return;
+    }
+
     const box = $("adminShopRows");
     if (box) box.innerHTML = '<div class="admin-list-empty">Đang tải…</div>';
     await loadItems();
@@ -394,9 +555,28 @@
     updatePreview();
   }
 
-  /* ───── Register ───── */
+  /* ═══════════════════════════════════════════════════════
+     Register callback + wire sớm
+     ═══════════════════════════════════════════════════════ */
   if (S.callbacks) S.callbacks.renderAdminShop = render;
 
-  window.ShopAdmin = { render };
-  log("v1.0 ready ✓");
+  window.ShopAdmin = {
+    render,
+    resetSetup: function() { _setupChecked = false; _setupOk = null; hideSetupBanner(); }
+  };
+
+  // ✅ v1.1: Wire events ngay khi DOM ready — KHÔNG đợi render
+  function tryWire() {
+    if (wireEvents) wireEvents();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", tryWire, { once: true });
+  } else {
+    tryWire();
+  }
+  // Fallback: thử lại sau 500ms và 1500ms (phòng DOM render muộn)
+  setTimeout(tryWire, 500);
+  setTimeout(tryWire, 1500);
+
+  log("v1.1 ready ✓");
 })();
