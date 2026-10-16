@@ -1,13 +1,15 @@
 /* =========================================================
-   ADMIN VIEW — v1.0
+   ADMIN VIEW — v1.1
    ---------------------------------------------------------
-   Tách từ main.js (Task 2b).
-   Chịu trách nhiệm toàn bộ admin panel:
-     - 4 tabs: Giờ, Checklist, Stats, Users
-     - Tab Giờ: reset time + lock time
-     - Tab Checklist: search + filter + toggle check
-     - Tab Stats: 3 cards + top3
-     - Tab Users: create + toggle + delete + search
+   v1.1 CHANGES (SHOP):
+   - switchTab() nhận diện tab "shop" → gọi S.callbacks.renderAdminShop
+   v1.0:
+   - Tách từ main.js (Task 2b)
+   - 4 tabs: Giờ, Checklist, Stats, Users
+   - Tab Giờ: reset time + lock time
+   - Tab Checklist: search + filter + toggle check
+   - Tab Stats: 3 cards + top3
+   - Tab Users: create + toggle + delete + search
 
    Không sở hữu state gốc — đọc từ window.SrankCore.
    Đăng ký callbacks vào SrankCore.callbacks.
@@ -185,6 +187,7 @@
     if (tabName === 'checklist') renderAdminChecklistEditor();
     else if (tabName === 'stats') renderAdminStats();
     else if (tabName === 'users') renderAdminUsers();
+    else if (tabName === 'shop') S.callbacks.renderAdminShop?.();
   }
 
   /* =========================================================
@@ -592,6 +595,7 @@
     S.callbacks.renderAdminChecklist = renderAdminChecklistEditor;
     S.callbacks.renderAdminStats = renderAdminStats;
     S.callbacks.renderAdminUsers = renderAdminUsers;
+    // renderAdminShop do shop-admin.js tự đăng ký
   }
 
   /* Wire events on DOM ready */
@@ -601,5 +605,5 @@
     wireEvents();
   }
 
-  console.log('[AdminView] v1.0 ready ✓');
+  console.log('[AdminView] v1.1 ready ✓ (shop-aware)');
 })();
