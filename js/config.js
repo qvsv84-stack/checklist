@@ -182,7 +182,7 @@
          - menu.js    (BOSS_WHITELIST)
          - main.js    (filter user list)
        Đổi admin → chỉ sửa 1 dòng ở đây. */
-    ADMIN_USERNAMES: ['tienloi'],
+    ADMIN_USERNAMES: ['tienloi', 'mydung'],
 
     /* Business config */
     CHECKIN_RESET_TIME: '00:00',
