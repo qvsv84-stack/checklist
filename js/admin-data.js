@@ -1,16 +1,17 @@
+📄 js/admin-data.js (v1.1 — FULL)
+
+```javascript
 /* =========================================================
    ADMIN DATA — Tab TikTok Links
    ---------------------------------------------------------
-   Self-contained:
-   ✅ Auto inject CSS
-   ✅ Auto inject tab button vào #adminPageNav
-   ✅ Auto inject view vào #adminPageContent
-   ✅ Auto ẩn tab nếu không phải tienloi
-   ✅ Wrap AdminView.switchTab để gọi render khi chuyển tab
-   ✅ CRUD link TikTok
-   ✅ Mở TikTok qua universal link (iOS/Android tự mở app)
-   
-   LOAD ORDER: SAU admin.js + admin-data được tự chứa
+   v1.1 FIX (mở link bị tab trắng trên iOS):
+   ✅ Dùng location.href thay window.open
+   ✅ Mở universal link trực tiếp từ tab hiện tại
+   ✅ Đóng app TikTok → quay lại đúng tab Data, giữ nguyên state
+   v1.0:
+   - Self-contained: auto inject CSS, tab, view
+   - Chỉ user tienloi thấy tab
+   - CRUD link TikTok
    ========================================================= */
 (function(){
   "use strict";
@@ -48,21 +49,20 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     OPEN TIKTOK — universal link (iOS/Android tự mở app)
+     OPEN TIKTOK — v1.1 fix tab trắng
      ═══════════════════════════════════════════════════════ */
   function openTikTok(url) {
     let u = String(url || '').trim();
     if (!u) return;
     if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+
+    /* ⭐ v1.1 FIX: không dùng window.open
+       - window.open tạo tab trắng, mất state khi quay lại
+       - location.href mở universal link từ tab hiện tại
+       - Đóng app TikTok → quay lại đúng tab Data */
     try {
-      const w = window.open(u, '_blank', 'noopener');
-      if (!w) {
-        /* Popup bị block → fallback navigate */
-        window.location.href = u;
-      }
-    } catch(_) {
       window.location.href = u;
-    }
+    } catch (_) {}
   }
 
   /* ═══════════════════════════════════════════════════════
@@ -159,15 +159,14 @@
       btn.type = "button";
       btn.className = "admin-tab";
       btn.dataset.adminTab = "data";
-      btn.style.display = "none";  /* Ẩn mặc định */
+      btn.style.display = "none";
       btn.innerHTML = '<span class="admin-tab-icon">🎵</span><span class="admin-tab-label">Data</span>';
       nav.appendChild(btn);
 
       btn.addEventListener("click", function() {
-        try { S.callbacks.openAdmin && window.AdminView?.switchTab?.("data"); } catch(_) {}
+        try { window.AdminView?.switchTab?.("data"); } catch(_) {}
       });
 
-      /* Append vào S.els.adminTabs để admin.js wire click (nếu có) */
       try {
         if (S.els && Array.isArray(S.els.adminTabs)) {
           S.els.adminTabs.push(btn);
@@ -242,7 +241,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     VISIBILITY — ẩn/hiện tab theo owner
+     VISIBILITY
      ═══════════════════════════════════════════════════════ */
   function updateVisibility() {
     const tab = document.querySelector('.admin-tab[data-admin-tab="data"]');
@@ -510,13 +509,12 @@
       }
     }
 
-    /* Đăng ký callback để admin.js có thể gọi (nếu cần) */
     if (S.callbacks) S.callbacks.renderAdminData = render;
 
     wireVisibility();
     updateVisibility();
 
-    log("v1.0 ready ✓");
+    log("v1.1 ready ✓ (fix tab trắng)");
   }
 
   /* Đợi adminPage tồn tại rồi boot */
@@ -538,3 +536,4 @@
 
   window.AdminData = { render, isOwner, openTikTok };
 })();
+```
