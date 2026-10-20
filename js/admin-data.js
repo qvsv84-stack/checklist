@@ -533,4 +533,3 @@
 
   window.AdminData = { render, isOwner, openTikTok };
 })();
-```
