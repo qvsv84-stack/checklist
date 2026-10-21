@@ -89,6 +89,62 @@
 <link rel="stylesheet" href="css/shop.css">
 
 <style id="landingCourtForce">
+
+/* ═══ BIRTHDAY FEED (Y hệt Live Spin) ═══ */
+.birthday-feed-container {
+  display: block !important;
+  margin: 4px auto 16px !important;
+  padding: 0 10px !important;
+  text-align: center !important;
+  font-family: inherit !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: #6a4a20 !important;
+  letter-spacing: 0.01em !important;
+  line-height: 1.45 !important;
+  position: relative !important;
+  min-height: 36px !important;
+  overflow: hidden !important;
+  max-width: 100% !important;
+}
+
+.birthday-feed-item {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  width: 100% !important;
+}
+
+.bd-name {
+  color: #d68f20 !important; /* Màu cam nổi bật cho tên */
+  font-weight: 950 !important;
+}
+
+.bd-wish {
+  color: #4a3520 !important;
+  font-style: italic !important;
+}
+
+/* Hiệu ứng trượt lên mờ dần (copy từ live spin) */
+.spin-feed-item-out {
+  animation: spinFeedUpOut 0.48s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+@keyframes spinFeedUpOut {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-28px) scale(0.92); opacity: 0; }
+}
+
+.spin-feed-item-in {
+  animation: spinFeedUpIn 0.48s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+@keyframes spinFeedUpIn {
+  0% { transform: translateY(28px) scale(0.92); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
 html, body { overflow-y: auto !important; overflow-x: hidden !important; height: auto !important; min-height: 100% !important; }
 html body #space { overflow: visible !important; height: auto !important; min-height: 100vh !important; padding-top: max(28px, env(safe-area-inset-top, 0px)) !important; padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px)) !important; }
 html body #homeStack, html body #questionWrap { overflow: visible !important; height: auto !important; max-height: none !important; }
