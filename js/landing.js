@@ -1,13 +1,8 @@
 /* =========================================================
-   LANDING VIEW — v1.2
+   LANDING VIEW — v1.3 (Birthday)
    ---------------------------------------------------------
-   v1.2 FIX:
-   - Case 1 (build toàn bộ): dùng __getCtaInfo() thay vì
-     hard-code "locked" → user đã check thấy Shop dù locked
-   - Case 2 (update in-place): pointerEvents dựa vào CTA
-     locked (không phải checklist locked)
-   v1.1:
-   - action === 'shop'
+   v1.3: Đổi title thành Happy Birthday Minh Quân
+   v1.2: Shop ưu tiên khi đã check
    ========================================================= */
 (function(){
   "use strict";
@@ -140,7 +135,6 @@
       const _kv = _kr.version;
       els.question.classList.remove('play');
 
-      /* ⭐ v1.2: Luôn dùng __getCtaInfo() — không hard-code locked */
       const _ci = __getCtaRender();
       const _ctaState = _resolveCtaState(_ci);
       const _ctaLocked = _isCtaLocked(_ci, _ctaState);
@@ -148,7 +142,7 @@
 
       els.question.innerHTML =
         `<span class="landing-kicker" data-kicker-version="${_kv}">${_kh}</span>`
-        + `<span class="landing-title">CHECKLIST ĐẢO MÈO</span>`
+        + `<span class="landing-title rainbow-birthday">Happy Birthday<br>Minh Quân</span>`
         + top3HTML
         + `<span class="landing-cta${_ctaLocked ? ' locked' : ''}" data-cta="${_ctaState}" role="button" ${_ctaLocked ? 'aria-disabled="true" tabindex="-1"' : 'tabindex="0"'}>${_ci.text}</span>`
         + (_ctaIsLockedState ? `<span class="landing-lock-note">Sau ${S.checklistLockTime} sẽ khoá Checklist nha mn 🥰</span>` : '');
@@ -191,7 +185,6 @@
       }
     }
 
-    /* ⭐ v1.2: Luôn dùng CTA từ __getCtaInfo() — không dựa vào `locked` */
     const _ci2 = __getCtaRender();
     const _state2 = _resolveCtaState(_ci2);
     const _locked2 = _isCtaLocked(_ci2, _state2);
@@ -211,7 +204,6 @@
       }
     }
 
-    /* Lock note: chỉ hiện khi CTA đang ở trạng thái locked */
     if (_isLockedState) {
       const noteTxt = `Sau ${S.checklistLockTime} sẽ khoá Checklist nha mn 🥰`;
       if (!lockNote) {
@@ -267,5 +259,5 @@
     S.callbacks.resetHome = resetHome;
   }
 
-  console.log('[LandingView] v1.2 ready ✓ (shop ưu tiên)');
+  console.log('[LandingView] v1.3 ready ✓ (Birthday)');
 })();
