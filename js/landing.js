@@ -1,5 +1,5 @@
 /* =========================================================
-   LANDING VIEW — v3.0 (BẢN TEST MODE)
+   LANDING VIEW — v3.1 (FIX: feed không chạy dọc)
    ---------------------------------------------------------
    ⚠️ LƯU Ý: File này đang ép buộc ngày sinh nhật = TRUE.
    ========================================================= */
@@ -32,7 +32,7 @@
   function isBirthdayToday() {
     // ⚠️ TEST MODE: Luôn trả về true để test
     return true;
-    
+
     /* Bản thật:
     try {
       const now = new Date();
@@ -91,12 +91,61 @@
     if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
   }
 
+  /* =========================================================
+     FEED STYLES — inject 1 lần, khoá chiều cao + fade mượt
+     ========================================================= */
+  function _ensureFeedStyles() {
+    if (document.getElementById('birthdayFeedStableStyle')) return;
+    const s = document.createElement('style');
+    s.id = 'birthdayFeedStableStyle';
+    s.textContent = `
+      #birthdayFeed.birthday-feed-container {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 100% !important;
+        height: 62px !important;
+        min-height: 62px !important;
+        max-height: 62px !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+        padding: 0 12px !important;
+        margin: 6px 0 !important;
+        position: relative;
+      }
+      #birthdayFeed .birthday-feed-item {
+        width: 100% !important;
+        line-height: 1.4 !important;
+        font-size: 12.5px !important;
+        text-align: center !important;
+        display: -webkit-box !important;
+        -webkit-line-clamp: 3 !important;
+        -webkit-box-orient: vertical !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        animation: none !important;
+        transform: none !important;
+      }
+      #birthdayFeed .birthday-feed-item.spin-feed-item-out {
+        animation: bdFeedFadeOut .4s ease forwards !important;
+      }
+      #birthdayFeed .birthday-feed-item.spin-feed-item-in {
+        animation: bdFeedFadeIn .4s ease forwards !important;
+      }
+      @keyframes bdFeedFadeOut { from { opacity: 1; } to { opacity: 0; } }
+      @keyframes bdFeedFadeIn  { from { opacity: 0; } to { opacity: 1; } }
+    `;
+    document.head.appendChild(s);
+  }
+
   /* Feed logic */
   let _feedTimer = null;
   let _feedIndex = 0;
   let _feedList = [];
 
   function _getBirthdayFeedHTML() {
+    _ensureFeedStyles();
+
     const currentUser = window.SRank?.Auth?.getCurrentUser?.();
     const un = String(currentUser?.username || '').toLowerCase();
 
@@ -110,10 +159,11 @@
     if (!_feedList.length) return '';
 
     const first = _feedList[0];
+    const nameStr = window.DN ? window.DN(first.username) : first.username;
     return `
       <div class="birthday-feed-container" id="birthdayFeed">
         <div class="birthday-feed-item" id="birthdayFeedItem">
-          <span class="bd-name">${window.DN ? window.DN(first.username) : first.username}</span> chúc mừng Quân: <span class="bd-wish">"${first.wish}"</span>
+          <span class="bd-name">${nameStr}</span>: <span class="bd-wish">"${first.wish}"</span>
         </div>
       </div>
     `;
@@ -125,7 +175,7 @@
     const un = String(currentUser?.username || '').toLowerCase();
     if (un === 'minhquan' || !_feedList.length) return;
     _feedIndex = 0;
-    
+
     _feedTimer = setInterval(function() {
       const el = document.getElementById('birthdayFeedItem');
       if (!el) { _stopBirthdayFeed(); return; }
@@ -137,13 +187,14 @@
         const next = _feedList[_feedIndex];
         const parent = document.getElementById('birthdayFeed');
         if (parent) {
+          const nameStr = window.DN ? window.DN(next.username) : next.username;
           parent.innerHTML = `
             <div class="birthday-feed-item spin-feed-item-in" id="birthdayFeedItem">
-              <span class="bd-name">${window.DN ? window.DN(next.username) : next.username}</span> chúc mừng Quân: <span class="bd-wish">"${next.wish}"</span>
+              <span class="bd-name">${nameStr}</span>: <span class="bd-wish">"${next.wish}"</span>
             </div>
           `;
         }
-      }, 450);
+      }, 400);
     }, 2500);
   }
 
@@ -396,5 +447,5 @@
     S.callbacks.resetHome = resetHome;
   }
   document.addEventListener('visibilitychange', function() { if (!document.hidden) _updateCountdownLive(); });
-  console.log('[LandingView] v3.0 TEST MODE ready ✓ (Birthday Feed Forced)');
+  console.log('[LandingView] v3.1 ready ✓ (Birthday Feed Forced + Stable Layout)');
 })();
