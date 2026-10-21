@@ -98,24 +98,21 @@ html body #question.landing-court-active { max-height: none !important; height: 
 html body #question .landing-kicker { display: block !important; margin: 0 0 14px !important; padding: 0 !important; min-height: 16px !important; line-height: 1.2 !important; }
 
 /* ═══════════════════════════════════════════════════════════
-   ⭐ RAINBOW BIRTHDAY TITLE — v4 FINAL ⭐
-   - Chia 2 dòng thành 2 span riêng (Safari-safe)
-   - Gradient text + fallback color
-   - Không dùng filter/text-shadow
+   ⭐ RAINBOW BIRTHDAY TITLE — v5 (Dịu mắt hơn - Pastel) ⭐
    ═══════════════════════════════════════════════════════════ */
 html body #question .landing-title { margin: 0 0 10px !important; }
 
 html body #question .landing-title.rainbow-birthday {
-  margin: 0 0 16px !important;
+  margin: 0 0 8px !important;
   padding: 0 !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
   justify-content: center !important;
   gap: 2px !important;
-  font-size: 28px !important;
+  font-size: 26px !important;
   line-height: 1.25 !important;
-  font-weight: 950 !important;
+  font-weight: 900 !important; /* Giảm từ 950 xuống 900 cho bớt chói */
   text-transform: none !important;
   letter-spacing: -0.01em !important;
   color: #ff1493 !important;
@@ -134,22 +131,21 @@ html body #question .landing-title.rainbow-birthday .rainbow-line {
   display: block !important;
   width: 100% !important;
   text-align: center !important;
-  font-size: 28px !important;
-  font-weight: 950 !important;
+  font-size: 26px !important;
+  font-weight: 900 !important;
   line-height: 1.25 !important;
   letter-spacing: -0.01em !important;
   text-transform: none !important;
   white-space: nowrap !important;
+  /* ⭐ Gradient màu Pastel dịu mắt */
   background: linear-gradient(
     90deg,
-    #ff0000 0%,
-    #ff7f00 14%,
-    #ffff00 28%,
-    #00ff00 42%,
-    #00bfff 56%,
-    #0000ff 70%,
-    #8a2be2 84%,
-    #ff1493 100%
+    #ff9a9e 0%,
+    #fecfef 20%,
+    #a1c4fd 40%,
+    #c2e9fb 60%,
+    #fbc2eb 80%,
+    #ff9a9e 100%
   ) !important;
   background-size: 200% auto !important;
   -webkit-background-clip: text !important;
@@ -157,7 +153,7 @@ html body #question .landing-title.rainbow-birthday .rainbow-line {
   -webkit-text-fill-color: transparent !important;
   color: transparent !important;
   text-shadow: none !important;
-  animation: rainbowScroll 3s linear infinite !important;
+  animation: rainbowScroll 6s linear infinite !important; /* Chậm lại 6s cho bớt chói */
   padding: 2px 4px !important;
   -webkit-font-smoothing: antialiased !important;
 }
@@ -167,16 +163,60 @@ html body #question .landing-title.rainbow-birthday .rainbow-line {
   100% { background-position: 200% center; }
 }
 
-/* Fallback nếu Safari không hỗ trợ background-clip: text */
 @supports not ((-webkit-background-clip: text) or (background-clip: text)) {
   html body #question .landing-title.rainbow-birthday .rainbow-line {
-    color: #ff1493 !important;
-    -webkit-text-fill-color: #ff1493 !important;
+    color: #ff9a9e !important;
+    -webkit-text-fill-color: #ff9a9e !important;
     background: none !important;
     animation: none !important;
   }
 }
 
+/* ═══════════════════════════════════════════════════════════
+   ⭐ COUNTDOWN SINH NHẬT — v2 (Gọn 1 dòng) ⭐
+   ═══════════════════════════════════════════════════════════ */
+html body #question .birthday-countdown {
+  display: block !important;
+  margin: 0 auto 14px !important; /* Thu gọn margin */
+  padding: 0 !important;
+  text-align: center !important;
+  font-family: inherit !important;
+  font-size: 11px !important; /* Thu nhỏ font */
+  font-weight: 700 !important;
+  color: #6a4a20 !important; /* Màu nâu nhạt */
+  letter-spacing: 0.01em !important;
+  line-height: 1.4 !important;
+  font-variant-numeric: tabular-nums !important;
+  white-space: nowrap !important; /* ⭐ Ép 1 dòng */
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+html body #question .birthday-countdown b {
+  display: inline-block !important;
+  color: #4a3520 !important; /* Số đậm hơn chữ một chút */
+  font-weight: 900 !important;
+  font-size: 12.5px !important;
+  font-variant-numeric: tabular-nums !important;
+  padding: 0 1px !important;
+}
+
+html body #question .birthday-countdown.ended {
+  color: #4fa370 !important; /* Đổi sang màu xanh lá dịu */
+  font-weight: 900 !important;
+  font-size: 13px !important;
+  animation: birthdayPulse 1.5s ease-in-out infinite !important;
+}
+
+@keyframes birthdayPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.85; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LANDING COURT & PODIUM
+   ═══════════════════════════════════════════════════════════ */
 html body #question .landing-top3.landing-court, html body #question .landing-court { display: flex !important; flex-direction: column !important; align-items: stretch !important; justify-content: flex-start !important; flex-wrap: nowrap !important; gap: 8px !important; padding: 0 !important; margin: 0 0 12px !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; height: auto !important; max-height: none !important; overflow: visible !important; position: static !important; background: none !important; border: 0 !important; box-shadow: none !important; box-sizing: border-box !important; }
 html body #question .landing-court::before, html body #question .landing-court::after { display: none !important; content: none !important; }
 html body #question .landing-court > * { flex: 0 0 auto !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; box-sizing: border-box !important; }
