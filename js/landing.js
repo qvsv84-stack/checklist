@@ -1,10 +1,12 @@
 /* =========================================================
-   LANDING VIEW — v3.0 (Birthday Feed)
+   LANDING VIEW — v3.1 (Birthday Feed + Fix chữ chạy dọc)
    ---------------------------------------------------------
+   v3.1:
+   - Fix: feed không còn nhảy/trượt dọc khi đổi wish
+   - Container khoá chiều cao 62px, animation fade thay vì slide
+   - Text clamp 3 dòng, không phá layout
    v3.0:
    - Vào ngày 22/10, đổi countdown thành Live Feed chúc mừng.
-   - Hiệu ứng slide up y hệt Live Spin.
-   - Tự động chạy lời chúc của 12 người.
    - Riêng minhquan thấy banner chúc mừng của chính mình.
    ========================================================= */
 (function(){
@@ -118,6 +120,55 @@
   }
 
   /* ═══════════════════════════════════════════════════════
+     ⭐ FEED STYLES (inject 1 lần)
+     Khoá chiều cao container + đổi animation sang fade
+     → chặn hoàn toàn hiệu ứng "chữ chạy dọc"
+     ═══════════════════════════════════════════════════════ */
+  function _ensureFeedStyles() {
+    if (document.getElementById('birthdayFeedStableStyle')) return;
+    const style = document.createElement('style');
+    style.id = 'birthdayFeedStableStyle';
+    style.textContent = `
+      #birthdayFeed.birthday-feed-container {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 100% !important;
+        height: 62px !important;
+        min-height: 62px !important;
+        max-height: 62px !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+        padding: 0 12px !important;
+        margin: 6px 0 !important;
+        position: relative;
+      }
+      #birthdayFeed .birthday-feed-item {
+        width: 100% !important;
+        line-height: 1.4 !important;
+        font-size: 12.5px !important;
+        text-align: center !important;
+        display: -webkit-box !important;
+        -webkit-line-clamp: 3 !important;
+        -webkit-box-orient: vertical !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        animation: none !important;
+        transform: none !important;
+      }
+      #birthdayFeed .birthday-feed-item.spin-feed-item-out {
+        animation: bdFeedFadeOut 0.4s ease forwards !important;
+      }
+      #birthdayFeed .birthday-feed-item.spin-feed-item-in {
+        animation: bdFeedFadeIn 0.4s ease forwards !important;
+      }
+      @keyframes bdFeedFadeOut { from { opacity: 1; } to { opacity: 0; } }
+      @keyframes bdFeedFadeIn  { from { opacity: 0; } to { opacity: 1; } }
+    `;
+    document.head.appendChild(style);
+  }
+
+  /* ═══════════════════════════════════════════════════════
      ⭐ BIRTHDAY FEED LOGIC (Dành cho đúng ngày 22/10)
      ═══════════════════════════════════════════════════════ */
   let _feedTimer = null;
@@ -125,6 +176,8 @@
   let _feedList = [];
 
   function _getBirthdayFeedHTML() {
+    _ensureFeedStyles();
+
     const currentUser = window.SRank?.Auth?.getCurrentUser?.();
     const un = String(currentUser?.username || '').toLowerCase();
 
@@ -145,10 +198,11 @@
     if (!_feedList.length) return '';
 
     const first = _feedList[0];
+    const nameStr = window.DN ? window.DN(first.username) : first.username;
     return `
       <div class="birthday-feed-container" id="birthdayFeed">
         <div class="birthday-feed-item" id="birthdayFeedItem">
-          <span class="bd-name">${window.DN ? window.DN(first.username) : first.username}</span> chúc mừng Quân: <span class="bd-wish">"${first.wish}"</span>
+          <span class="bd-name">${nameStr}</span> chúc mừng Quân: <span class="bd-wish">"${first.wish}"</span>
         </div>
       </div>
     `;
@@ -163,12 +217,12 @@
 
     _feedIndex = 0;
     
-    // Cứ 2.5 giây đổi lời chúc 1 lần (2.5s đủ để đọc)
+    // Cứ 2.5 giây đổi lời chúc 1 lần
     _feedTimer = setInterval(function() {
       const el = document.getElementById('birthdayFeedItem');
       if (!el) { _stopBirthdayFeed(); return; }
 
-      // Hiệu ứng trượt lên và mờ dần y hệt spin feed
+      // Chỉ fade out (không translate) — CSS đã override
       el.classList.add('spin-feed-item-out');
       
       setTimeout(function() {
@@ -176,17 +230,18 @@
         
         _feedIndex = (_feedIndex + 1) % _feedList.length;
         const next = _feedList[_feedIndex];
+        const nameStr = window.DN ? window.DN(next.username) : next.username;
         
         // Reset class để hiện nội dung mới
         const parent = document.getElementById('birthdayFeed');
         if (parent) {
           parent.innerHTML = `
             <div class="birthday-feed-item spin-feed-item-in" id="birthdayFeedItem">
-              <span class="bd-name">${window.DN ? window.DN(next.username) : next.username}</span> chúc mừng Quân: <span class="bd-wish">"${next.wish}"</span>
+              <span class="bd-name">${nameStr}</span> chúc mừng Quân: <span class="bd-wish">"${next.wish}"</span>
             </div>
           `;
         }
-      }, 450); // Đợi animation trượt lên xong
+      }, 400); // khớp với animation fade 0.4s
     }, 2500);
   }
 
@@ -607,5 +662,5 @@
     if (!document.hidden) _updateCountdownLive();
   });
 
-  console.log('[LandingView] v3.0 ready ✓ (Birthday Feed Active)');
+  console.log('[LandingView] v3.1 ready ✓ (Birthday Feed + Fix chữ dọc)');
 })();
