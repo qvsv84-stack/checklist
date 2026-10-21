@@ -1,5 +1,5 @@
 /* =========================================================
-   LANDING VIEW — v1.9 (Template Literal Safe)
+   LANDING VIEW — v2.0 (Birthday + Countdown)
    ========================================================= */
 (function(){
   "use strict";
@@ -11,8 +11,16 @@
     return;
   }
 
+  /* ═══════════════════════════════════════════════════════
+     ⭐ CONFIG — SỬA NGÀY SINH NHẬT Ở ĐÂY ⭐
+     Format: 'YYYY-MM-DDTHH:mm:ss+07:00' (giờ Việt Nam)
+     ═══════════════════════════════════════════════════════ */
+  const BIRTHDAY_DATE = new Date('2026-10-22T00:00:00+07:00');
+
   let _lastTop3Signature = '';
-  const TITLE_HTML = 'Happy Birthday<br>Minh Quân';
+  let _countdownTimer = null;
+
+  const TITLE_HTML = '<span class="rainbow-line">Happy Birthday</span><span class="rainbow-line">Minh Quân</span>';
 
   function top3Signature(list) {
     return list.map(function(p) {
@@ -61,6 +69,63 @@
       .replace(/'/g, '&#39;');
   }
 
+  /* ═══════════════════════════════════════════════════════
+     ⭐ COUNTDOWN ⭐
+     ═══════════════════════════════════════════════════════ */
+  function _pad2(n) {
+    return String(n).padStart(2, '0');
+  }
+
+  function _buildCountdownInner(diffMs) {
+    const totalSec = Math.max(0, Math.floor(diffMs / 1000));
+    const hours = Math.floor(totalSec / 3600);
+    const minutes = Math.floor((totalSec % 3600) / 60);
+    const seconds = totalSec % 60;
+    const hh = _pad2(hours);
+    const mm = _pad2(minutes);
+    const ss = _pad2(seconds);
+    return `Còn <b>${hh}</b> Giờ : <b>${mm}</b> Phút : <b>${ss}</b> Giây nữa là đến sinh nhật`;
+  }
+
+  function _getCountdownHTML() {
+    const diff = BIRTHDAY_DATE.getTime() - Date.now();
+    if (diff <= 0) {
+      return '<span class="birthday-countdown ended">🎉 Chúc mừng sinh nhật Minh Quân! 🎂</span>';
+    }
+    return `<span class="birthday-countdown">${_buildCountdownInner(diff)}</span>`;
+  }
+
+  function _updateCountdownLive() {
+    const el = document.querySelector('.birthday-countdown');
+    if (!el) { _stopCountdownTimer(); return; }
+    if (el.classList.contains('ended')) { _stopCountdownTimer(); return; }
+
+    const diff = BIRTHDAY_DATE.getTime() - Date.now();
+    if (diff <= 0) {
+      el.classList.add('ended');
+      el.innerHTML = '🎉 Chúc mừng sinh nhật Minh Quân! 🎂';
+      _stopCountdownTimer();
+      return;
+    }
+    el.innerHTML = _buildCountdownInner(diff);
+  }
+
+  function _startCountdownTimer() {
+    if (_countdownTimer) return;
+    _updateCountdownLive(); // update ngay 1 lần
+    _countdownTimer = setInterval(_updateCountdownLive, 1000);
+  }
+
+  function _stopCountdownTimer() {
+    if (_countdownTimer) {
+      clearInterval(_countdownTimer);
+      _countdownTimer = null;
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════
+     FALLBACK
+     ═══════════════════════════════════════════════════════ */
   function _fallbackRender() {
     const els = S.els;
     if (!els || !els.question) return;
@@ -68,22 +133,27 @@
       const ci = __getCtaRender();
       const stateName = _resolveCtaState(ci);
       const ctaLocked = _isCtaLocked(ci, stateName);
-      
+
       els.question.innerHTML = `
         <span class="landing-kicker">🐱 DAILY TEAM HUB</span>
         <span class="landing-title rainbow-birthday">${TITLE_HTML}</span>
+        ${_getCountdownHTML()}
         <span class="landing-cta${ctaLocked ? ' locked' : ''}" data-cta="${stateName}" role="button">${_esc(ci.text)}</span>
       `;
       els.question.classList.add('play');
       els.question.style.opacity = '1';
       els.question.style.transform = 'scale(1)';
       els.question.style.pointerEvents = ctaLocked ? 'none' : 'auto';
+      _startCountdownTimer();
       console.warn('[LandingView] FALLBACK RENDERED');
     } catch (e) {
       console.error('[LandingView] Fallback crash:', e);
     }
   }
 
+  /* ═══════════════════════════════════════════════════════
+     TOP 3
+     ═══════════════════════════════════════════════════════ */
   function buildTop3HTML(top3) {
     if (!top3.length) {
       return '<div class="landing-top3-empty">Chưa có ai check hôm nay — hãy là người đầu tiên! 🐱</div>';
@@ -93,7 +163,6 @@
       const u = S.getAvatarUrl(p.name);
       const su = u ? u.replace(/"/g, '&quot;') : '';
       const ini = String((window.DN ? window.DN(p.name) : p.name) || '?').trim().slice(0, 1).toUpperCase();
-      
       if (u) {
         return `<img src="${su}" alt="" loading="eager" decoding="async" onerror="this.style.display='none';this.nextElementSibling.classList.add('show');"><span class="${cls}-fallback">${ini}</span>`;
       }
@@ -101,8 +170,7 @@
     }
 
     function makeName(p) {
-      let nameStr = String((window.DN ? window.DN(p.name) : p.name) || '');
-      return _esc(nameStr);
+      return _esc(String((window.DN ? window.DN(p.name) : p.name) || ''));
     }
 
     const t1 = top3[0], t2 = top3[1], t3 = top3[2];
@@ -111,8 +179,7 @@
     const courtR = court.filter((_, i) => i % 2 === 1);
 
     let podiumHtml = '<div class="court-podium">';
-    
-    // Slot 2 (Trái)
+
     podiumHtml += '<div class="podium-slot podium-slot-2">';
     if (t2) {
       podiumHtml += `
@@ -126,7 +193,6 @@
     }
     podiumHtml += '</div>';
 
-    // Slot 1 (Giữa)
     podiumHtml += '<div class="podium-slot podium-slot-1">';
     if (t1) {
       podiumHtml += `
@@ -140,7 +206,6 @@
     }
     podiumHtml += '</div>';
 
-    // Slot 3 (Phải)
     podiumHtml += '<div class="podium-slot podium-slot-3">';
     if (t3) {
       podiumHtml += `
@@ -153,10 +218,9 @@
       `;
     }
     podiumHtml += '</div>';
-    
-    podiumHtml += '</div>'; // End court-podium
 
-    // Courtiers
+    podiumHtml += '</div>';
+
     let courtiersHtml = '';
     if (court.length > 0) {
       let myRawName = '';
@@ -189,6 +253,9 @@
     return `<div class="landing-top3 landing-court">${podiumHtml}${courtiersHtml}</div>`;
   }
 
+  /* ═══════════════════════════════════════════════════════
+     RENDER MAIN
+     ═══════════════════════════════════════════════════════ */
   function renderLandingState(forceFullReplay) {
     forceFullReplay = !!forceFullReplay;
     try {
@@ -219,6 +286,7 @@
       const titleEl = els.question.querySelector('.landing-title');
       const hasStructure = !!titleEl && !forceFullReplay;
 
+      /* ═══════ CASE 1: BUILD ═══════ */
       if (!hasStructure) {
         const kr = __getKickerRender();
         const kh = kr.html || kr.text;
@@ -232,6 +300,7 @@
         els.question.innerHTML = `
           <span class="landing-kicker" data-kicker-version="${kv}">${kh}</span>
           <span class="landing-title rainbow-birthday">${TITLE_HTML}</span>
+          ${_getCountdownHTML()}
           ${top3HTML}
           <span class="landing-cta${ctaLocked ? ' locked' : ''}" data-cta="${ctaState}" role="button" ${ctaLocked ? 'aria-disabled="true" tabindex="-1"' : 'tabindex="0"'}>${_esc(ci.text)}</span>
           ${ctaIsLockedState ? `<span class="landing-lock-note">Sau ${S.checklistLockTime} sẽ khoá Checklist nha mn 🥰</span>` : ''}
@@ -244,18 +313,31 @@
         els.question.style.opacity = '1';
         els.question.style.transform = 'scale(1)';
         els.question.style.pointerEvents = ctaLocked ? 'none' : 'auto';
+
+        _startCountdownTimer();
         return;
       }
 
-      // CASE 2: In-place update
+      /* ═══════ CASE 2: UPDATE ═══════ */
+
+      /* 2a. Force title */
       if (titleEl) {
-        const needFix = !titleEl.classList.contains('rainbow-birthday') || !titleEl.innerHTML.includes('Happy Birthday');
+        const needFix = !titleEl.classList.contains('rainbow-birthday') || !titleEl.querySelector('.rainbow-line');
         if (needFix) {
           titleEl.className = 'landing-title rainbow-birthday';
           titleEl.innerHTML = TITLE_HTML;
         }
       }
 
+      /* 2b. Ensure countdown tồn tại */
+      if (!els.question.querySelector('.birthday-countdown')) {
+        const titleAfter = els.question.querySelector('.landing-title');
+        if (titleAfter) {
+          titleAfter.insertAdjacentHTML('afterend', _getCountdownHTML());
+        }
+      }
+
+      /* 2c. Update top3 */
       if (top3Changed) {
         els.question.querySelector('.landing-top3-label')?.remove();
         els.question.querySelector('.landing-top3')?.remove();
@@ -271,6 +353,7 @@
         }
       }
 
+      /* 2d. Update kicker */
       const kickerEl = els.question.querySelector('.landing-kicker');
       if (kickerEl) {
         const kr = __getKickerRender();
@@ -281,6 +364,7 @@
         }
       }
 
+      /* 2e. Update CTA */
       const cta = els.question.querySelector('.landing-cta');
       const lockNote = els.question.querySelector('.landing-lock-note');
 
@@ -325,6 +409,8 @@
       els.question.style.transform = 'scale(1)';
       els.question.style.pointerEvents = locked2 ? 'none' : 'auto';
 
+      _startCountdownTimer();
+
     } catch (e) {
       console.error('[LandingView] CRASH:', e);
       _fallbackRender();
@@ -366,5 +452,10 @@
     S.callbacks.resetHome = resetHome;
   }
 
-  console.log('[LandingView] v1.9 ready ✓ (Template Literal Safe)');
+  /* Update countdown khi tab visible lại (chống throttle của Safari) */
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) _updateCountdownLive();
+  });
+
+  console.log('[LandingView] v2.0 ready ✓ (birthday countdown)');
 })();
