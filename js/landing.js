@@ -1,12 +1,5 @@
 /* =========================================================
-   LANDING VIEW — v1.6 (Force Title Fix)
-   ---------------------------------------------------------
-   v1.6 FIX:
-   - Ép kiểm tra và cập nhật .landing-title ở CẢ Case 2
-     (Trước đây Case 2 bỏ quên, khiến chữ Happy Birthday
-      không hiện nếu landing update in-place).
-   v1.5:
-   - Rainbow title
+   LANDING VIEW — v1.8 (Syntax-safe, no nested templates)
    ========================================================= */
 (function(){
   "use strict";
@@ -14,14 +7,18 @@
 
   const S = window.SrankCore;
   if (!S) {
-    console.error('[LandingView] window.SrankCore chưa load');
+    console.error('[LandingView] thiếu SrankCore');
     return;
   }
 
   let _lastTop3Signature = '';
+  const TITLE_HTML = 'Happy Birthday<br>Minh Quân';
 
-  const top3Signature = list =>
-    list.map(p => `${p.name}|${p.time}|${S.getAvatarUrl(p.name)}`).join('::');
+  function top3Signature(list) {
+    return list.map(function(p) {
+      return p.name + '|' + p.time + '|' + S.getAvatarUrl(p.name);
+    }).join('::');
+  }
 
   function __getCtaRender() {
     try {
@@ -57,218 +54,320 @@
     return !!(ci && ci.locked);
   }
 
-  function renderLandingState(forceFullReplay = false) {
+  function _esc(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function _fallbackRender() {
     const els = S.els;
-    if (!els.question) return;
-
-    const names = S.names;
-    const checked = S.checked;
-    const times = S.times;
-
-    const locked = S.isChecklistLocked();
-    els.question.classList.toggle('checklist-locked-home', locked);
-
-    const checkedList = names.map((name, i) => ({
-      name: String(name || '').trim(),
-      time: String(times[i] || '').trim(),
-      checked: !!checked[i]
-    })).filter(p => p.checked && p.time && p.name)
-      .sort((a, b) => a.time.localeCompare(b.time));
-
-    const top3 = checkedList.slice(0, 20);
-    const newSig = top3Signature(top3);
-    const top3Changed = newSig !== _lastTop3Signature;
-
-    let top3HTML = '';
-    if (top3.length === 0) {
-      top3HTML = '<div class="landing-top3-empty">Chưa có ai check hôm nay — hãy là người đầu tiên! 🐱</div>';
-    } else {
-      const _av = (p, cls) => {
-        const u = S.getAvatarUrl(p.name);
-        const su = u ? u.replace(/"/g, '&quot;') : '';
-        const ini = String((window.DN ? window.DN(p.name) : p.name) || '?').trim().slice(0, 1).toUpperCase();
-        return u
-          ? `<img src="${su}" alt="" loading="eager" decoding="async" onerror="this.style.display='none';this.nextElementSibling.classList.add('show');"><span class="${cls}-fallback">${ini}</span>`
-          : `<span class="${cls}-fallback show">${ini}</span><>`;
-      };
-      const _nm = p => String((window.DN ? window.DN(p.name) : p.name) || '')
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-
-      const _t1 = top3[div0], _t2 = top class3[1], _t3 = top3="[2];
-      constadvisor _court = top3.slice-time(3);
-      const _L = _court.filter((_, i) => i % 2 === 0);
-      const _R = _court.filter((_, i) => i % 2 === 1);
-
-      const _podium = `<div class="court-podium">`
-        + `<div class="podium-slot podium-slot-2">${_t2 ? `<div class="advisor rank-2" data-name="${S.escapeHtml(_t2.name)}"><div class="advisor-crown">☀️</div><div class="advisor-avatar">${_av(_t2, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t2)}">${_nm(_t2)}</div">${_t2.time}</div></div>` : ''}</div>`
-        + `<div class="podium-slot podium-slot-1">${_t1 ? `<div class="court-throne" data-name="${S.escapeHtml(_t1.name)}"><div class="throne-crown">👑</div><div class="throne-avatar">${_av(_t1, 'throne-avatar')}</div><div class="throne-name" title="${_nm(_t1)}">${_nm(_t1)}</div><div class="throne-time">${_t1.time}</div></div>` : ''}</div>`
-        + `<div class="podium-slot podium-slot-3">${_t3 ? `<div class="advisor rank-3" data-name="${S.escapeHtml(_t3.name)}"><div class="advisor-crown">🌙</div><div class="advisor-avatar">${_av(_t3, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t3)}">${_nm(_t3)}</div><div class="advisor-time">${_t3.time}</div></div>` : ''}</div>`
-        + `</div>`;
-
-      const _myRawName = (() => {
-        try {
-          const u = window.SRank?.Auth?.getCurrentUser?.();
-          return u && u.displayName ? String(u.displayName).trim() : '';
-        } catch (_) { return ''; }
-      })();
-
-      const _cHTML = p => {
-        const isMe = _myRawName && p.name === _myRawName;
-        const meStyle = isMe
-          ? ' style="color:#8B4513;background:rgba(200,150,80,.15);border-radius:6px;padding:2px 6px;margin:-2px -6px"'
-          : '';
-        return `<div class="courtier" data-name="${S.escapeHtml(p.name)}"><div class="courtier-avatar">${_av(p, 'courtier-avatar')}</div><div class="courtier-info"><div class="courtier-name"${meStyle} title="${_nm(p)}">${_nm(p)}</div><div class="courtier-time">${p.time}</div></div></div>`;
-      };
-      const _ct = _court.length
-        ? `<div class="court-courtiers-label"><span>✦ QUẦN THẦN ✦</span></div><div class="court-courtiers"><div class="courtiers-col">${_L.map(_cHTML).join('')}</div><div class="courtiers-col">${_R.map(_cHTML).join('')}</div></div>`
-        : '';
-
-      top3HTML = `<div class="landing-top3 landing-court">${_podium}${_ct}</div>`;
-    }
-
-    els.question.classList.toggle('landing-court-active', top3.length > 3);
-
-    const titleEl = els.question.querySelector('.landing-title');
-    const hasStructure = !!titleEl && !forceFullReplay;
-
-    /* ───── Case 1: Dựng toàn bộ ───── */
-    if (!hasStructure) {
-      const _kr = __getKickerRender();
-      const _kh = _kr.html || _kr.text;
-      const _kv = _kr.version;
-      els.question.classList.remove('play');
-
-      const _ci = __getCtaRender();
-      const _ctaState = _resolveCtaState(_ci);
-      const _ctaLocked = _isCtaLocked(_ci, _ctaState);
-      const _ctaIsLockedState = (_ctaState === 'locked');
-
-      els.question.innerHTML =
-        `<span class="landing-kicker" data-kicker-version="${_kv}">${_kh}</span>`
-        + `<span class="landing-title rainbow-birthday">Happy Birthday<br>Minh Quân</span>`
-        + top3HTML
-        + `<span class="landing-cta${_ctaLocked ? ' locked' : ''}" data-cta="${_ctaState}" role="button" ${_ctaLocked ? 'aria-disabled="true" tabindex="-1"' : 'tabindex="0"'}>${_ci.text}</span>`
-        + (_ctaIsLockedState ? `<span class="landing-lock-note">Sau ${S.checklistLockTime} sẽ khoá Checklist nha mn 🥰</span>` : '');
-
-      _lastTop3Signature = newSig;
-      els.question.style.removeProperty('--top3-base');
-      void els.question.offsetWidth;
+    if (!els || !els.question) return;
+    try {
+      const ci = __getCtaRender();
+      const stateName = _resolveCtaState(ci);
+      const ctaLocked = _isCtaLocked(ci, stateName);
+      
+      let html = '<span class="landing-kicker">🐱 DAILY TEAM HUB</span>';
+      html += '<span class="landing-title rainbow-birthday">' + TITLE_HTML + '</span>';
+      html += '<span class="landing-cta' + (ctaLocked ? ' locked' : '') + '" data-cta="' + stateName + '" role="button">' + _esc(ci.text) + '</span>';
+      
+      els.question.innerHTML = html;
       els.question.classList.add('play');
       els.question.style.opacity = '1';
       els.question.style.transform = 'scale(1)';
-      els.question.style.pointerEvents = _ctaLocked ? 'none' : 'auto';
-      return;
+      els.question.style.pointerEvents = ctaLocked ? 'none' : 'auto';
+      console.warn('[LandingView] FALLBACK RENDERED');
+    } catch (e) {
+      console.error('[LandingView] Fallback crash:', e);
+    }
+  }
+
+  function buildTop3HTML(top3) {
+    if (!top3.length) {
+      return '<div class="landing-top3-empty">Chưa có ai check hôm nay — hãy là người đầu tiên! 🐱</div>';
     }
 
-    /* ───── Case 2: Cập nhật In-place ───── */
+    function makeAvatarHtml(p, cls) {
+      const u = S.getAvatarUrl(p.name);
+      const su = u ? u.replace(/"/g, '&quot;') : '';
+      const ini = String((window.DN ? window.DN(p.name) : p.name) || '?').trim().slice(0, 1).toUpperCase();
+      if (u) {
+        return '<img src="' + su + '" alt="" loading="eager" decoding="async" onerror="this.style.display=\'none\';this.nextElementSibling.classList.add(\'show\');"><span class="' + cls + '-fallback">' + ini + '</span>';
+      }
+      return '<span class="' + cls + '-fallback show">' + ini + '</span>';
+    }
+
+    function makeName(p) {
+      let nameStr = String((window.DN ? window.DN(p.name) : p.name) || '');
+      return _esc(nameStr);
+    }
+
+    const t1 = top3[0];
+    const t2 = top3[1];
+    const t3 = top3[2];
+    const court = top3.slice(3);
+    const courtL = court.filter(function(_, i) { return i % 2 === 0; });
+    const courtR = court.filter(function(_, i) { return i % 2 === 1; });
+
+    let podiumHtml = '<div class="court-podium">';
     
-    /* ⭐ FIX: Ép buộc title phải là Happy Birthday */
-    if (titleEl && (!titleEl.classList.contains('rainbow-birthday') || !titleEl.innerHTML.includes('Happy Birthday'))) {
-      titleEl.className = 'landing-title rainbow-birthday';
-      titleEl.innerHTML = 'Happy Birthday<br>Minh Quân';
+    // Slot 2 (Trái)
+    podiumHtml += '<div class="podium-slot podium-slot-2">';
+    if (t2) {
+      podiumHtml += '<div class="advisor rank-2" data-name="' + _esc(t2.name) + '">';
+      podiumHtml += '<div class="advisor-crown">☀️</div>';
+      podiumHtml += '<div class="advisor-avatar">' + makeAvatarHtml(t2, 'advisor-avatar') + '</div>';
+      podiumHtml += '<div class="advisor-name" title="' + makeName(t2) + '">' + makeName(t2) + '</div>';
+      podiumHtml += '<div class="advisor-time">' + t2.time + '</div>';
+      podiumHtml += '</div>';
+    }
+    podiumHtml += '</div>';
+
+    // Slot 1 (Giữa)
+    podiumHtml += '<div class="podium-slot podium-slot-1">';
+    if (t1) {
+      podiumHtml += '<div class="court-throne" data-name="' + _esc(t1.name) + '">';
+      podiumHtml += '<div class="throne-crown">👑</div>';
+      podiumHtml += '<div class="throne-avatar">' + makeAvatarHtml(t1, 'throne-avatar') + '</div>';
+      podiumHtml += '<div class="throne-name" title="' + makeName(t1) + '">' + makeName(t1) + '</div>';
+      podiumHtml += '<div class="throne-time">' + t1.time + '</div>';
+      podiumHtml += '</div>';
+    }
+    podiumHtml += '</div>';
+
+    // Slot 3 (Phải)
+    podiumHtml += '<div class="podium-slot podium-slot-3">';
+    if (t3) {
+      podiumHtml += '<div class="advisor rank-3" data-name="' + _esc(t3.name) + '">';
+      podiumHtml += '<div class="advisor-crown">🌙</div>';
+      podiumHtml += '<div class="advisor-avatar">' + makeAvatarHtml(t3, 'advisor-avatar') + '</div>';
+      podiumHtml += '<div class="advisor-name" title="' + makeName(t3) + '">' + makeName(t3) + '</div>';
+      podiumHtml += '<div class="advisor-time">' + t3.time + '</div>';
+      podiumHtml += '</div>';
+    }
+    podiumHtml += '</div>';
+    
+    podiumHtml += '</div>'; // End court-podium
+
+    // Courtiers
+    let courtiersHtml = '';
+    if (court.length > 0) {
+      let myRawName = '';
+      try {
+        const u = window.SRank && window.SRank.Auth && window.SRank.Auth.getCurrentUser ? window.SRank.Auth.getCurrentUser() : null;
+        myRawName = u && u.displayName ? String(u.displayName).trim() : '';
+      } catch(_){}
+
+      function makeCourtier(p) {
+        const isMe = myRawName && p.name === myRawName;
+        const meStyle = isMe ? ' style="color:#8B4513;background:rgba(200,150,80,.15);border-radius:6px;padding:2px 6px;margin:-2px -6px"' : '';
+        let h = '<div class="courtier" data-name="' + _esc(p.name) + '">';
+        h += '<div class="courtier-avatar">' + makeAvatarHtml(p, 'courtier-avatar') + '</div>';
+        h += '<div class="courtier-info">';
+        h += '<div class="courtier-name"' + meStyle + ' title="' + makeName(p) + '">' + makeName(p) + '</div>';
+        h += '<div class="courtier-time">' + p.time + '</div>';
+        h += '</div></div>';
+        return h;
+      }
+
+      courtiersHtml += '<div class="court-courtiers-label"><span>✦ QUẦN THẦN ✦</span></div>';
+      courtiersHtml += '<div class="court-courtiers">';
+      courtiersHtml += '<div class="courtiers-col">' + courtL.map(makeCourtier).join('') + '</div>';
+      courtiersHtml += '<div class="courtiers-col">' + courtR.map(makeCourtier).join('') + '</div>';
+      courtiersHtml += '</div>';
     }
 
-    if (top3Changed) {
-      els.question.querySelector('.landing-top3-label')?.remove();
-      els.question.querySelector('.landing-top3')?.remove();
-      els.question.querySelector('.landing-top3-empty')?.remove();
-      const ctaBefore = els.question.querySelector('.landing-cta');
-      if (ctaBefore && top3HTML) {
-        ctaBefore.insertAdjacentHTML('beforebegin', top3HTML);
+    return '<div class="landing-top3 landing-court">' + podiumHtml + courtiersHtml + '</div>';
+  }
+
+  function renderLandingState(forceFullReplay) {
+    forceFullReplay = !!forceFullReplay;
+    try {
+      const els = S.els;
+      if (!els || !els.question) return;
+
+      const names = S.names || [];
+      const checked = S.checked || [];
+      const times = S.times || [];
+
+      const locked = S.isChecklistLocked();
+      els.question.classList.toggle('checklist-locked-home', locked);
+
+      const checkedList = names.map(function(name, i) {
+        return {
+          name: String(name || '').trim(),
+          time: String(times[i] || '').trim(),
+          checked: !!checked[i]
+        };
+      }).filter(function(p) {
+        return p.checked && p.time && p.name;
+      }).sort(function(a, b) {
+        return a.time.localeCompare(b.time);
+      });
+
+      const top3 = checkedList.slice(0, 20);
+      const newSig = top3Signature(top3);
+      const top3Changed = newSig !== _lastTop3Signature;
+
+      const top3HTML = buildTop3HTML(top3);
+      els.question.classList.toggle('landing-court-active', top3.length > 3);
+
+      const titleEl = els.question.querySelector('.landing-title');
+      const hasStructure = !!titleEl && !forceFullReplay;
+
+      if (!hasStructure) {
+        const kr = __getKickerRender();
+        const kh = kr.html || kr.text;
+        const kv = kr.version;
+
+        const ci = __getCtaRender();
+        const ctaState = _resolveCtaState(ci);
+        const ctaLocked = _isCtaLocked(ci, ctaState);
+        const ctaIsLockedState = (ctaState === 'locked');
+
+        let html = '<span class="landing-kicker" data-kicker-version="' + kv + '">' + kh + '</span>';
+        html += '<span class="landing-title rainbow-birthday">' + TITLE_HTML + '</span>';
+        html += top3HTML;
+        html += '<span class="landing-cta' + (ctaLocked ? ' locked' : '') + '" data-cta="' + ctaState + '" role="button" ' + (ctaLocked ? 'aria-disabled="true" tabindex="-1"' : 'tabindex="0"') + '>' + _esc(ci.text) + '</span>';
+        if (ctaIsLockedState) {
+          html += '<span class="landing-lock-note">Sau ' + S.checklistLockTime + ' sẽ khoá Checklist nha mn 🥰</span>';
+        }
+
+        els.question.innerHTML = html;
         _lastTop3Signature = newSig;
-        els.question.classList.remove('top3-replay');
+        els.question.style.removeProperty('--top3-base');
         void els.question.offsetWidth;
-        els.question.classList.add('top3-replay');
-      } else return;
-    }
-
-    const cta = els.question.querySelector('.landing-cta');
-    const lockNote = els.question.querySelector('.landing-lock-note');
-    const kickerEl = els.question.querySelector('.landing-kicker');
-
-    if (kickerEl) {
-      const _kr = __getKickerRender();
-      if (kickerEl.dataset.kickerVersion !== _kr.version) {
-        if (_kr.html) kickerEl.innerHTML = _kr.html;
-        else kickerEl.textContent = _kr.text;
-        kickerEl.dataset.kickerVersion = _kr.version;
+        els.question.classList.add('play');
+        els.question.style.opacity = '1';
+        els.question.style.transform = 'scale(1)';
+        els.question.style.pointerEvents = ctaLocked ? 'none' : 'auto';
+        return;
       }
-    }
 
-    const _ci2 = __getCtaRender();
-    const _state2 = _resolveCtaState(_ci2);
-    const _locked2 = _isCtaLocked(_ci2, _state2);
-    const _isLockedState = (_state2 === 'locked');
-
-    if (_locked2) {
-      if (cta && !cta.classList.contains('locked')) {
-        cta.classList.add('locked');
-        cta.setAttribute('aria-disabled', 'true');
-        cta.setAttribute('tabindex', '-1');
+      // CASE 2: In-place update
+      if (titleEl) {
+        const needFix = !titleEl.classList.contains('rainbow-birthday') || !titleEl.innerHTML.includes('Happy Birthday');
+        if (need.callFix) {
+          titleEl.className = 'landing-title rainbow-birthday';
+          titleEl.innerHTML = TITLE_HTML;
+        }
       }
-    } else {
-      if (cta && cta.classList.contains('locked')) {
-        cta.classList.remove('locked');
-        cta.removeAttribute('aria-disabled');
-        cta.setAttribute('tabindex', '0');
+
+      if (top3Changed) {
+        const oldLabel = els.question.querySelector('.landing-top3-label');
+        if (oldLabel) oldLabel.remove();
+        const oldTop3 = els.question.querySelector('.landing-top3');
+        if (oldTop3) oldTop3.remove();
+        const oldEmpty = els.question.querySelector('.landing-top3-empty');
+        if (oldEmpty) oldEmpty.remove();
+
+        const ctaBefore = els.question.querySelector('.landing-cta');
+        if (ctaBefore && top3HTML) {
+          ctaBefore.insertAdjacentHTML('beforebegin', top3HTML);
+          _lastTop3Signature = newSig;
+          els.question.classList.remove('top3-replay');
+          void els.question.offsetWidth;
+          els.question.classList.add('top3-replay');
+        }
       }
-    }
 
-    if (_isLockedState) {
-      const noteTxt = `Sau ${S.checklistLockTime} sẽ khoá Checklist nha mn 🥰`;
-      if (!lockNote) {
-        const n = document.createElement('span');
-        n.className = 'landing-lock-note';
-        n.textContent = noteTxt;
-        els.question.appendChild(n);
-      } else if (lockNote.textContent !== noteTxt) {
-        lockNote.textContent = noteTxt;
+      const kickerEl = els.question.querySelectorbacks('.landing-kicker.reset');
+      if (kickerEl)Home {
+        const kr = __getKickerRender();
+        if (kickerEl.dataset.kickerVersion !== kr.version) {
+          if (kr.html) kickerEl.innerHTML = kr.html;
+          else kickerEl.textContent = kr.text;
+          kickerEl.dataset.kickerVersion = kr.version;
+        }
       }
-    } else {
-      lockNote?.remove();
-    }
 
-    if (cta) {
-      if (cta.textContent !== _ci2.text) cta.textContent = _ci2.text;
-      if (cta.dataset.cta !== _state2) cta.dataset.cta = _state2;
-    }
+      const cta = els.question.querySelector('.landing-cta');
+      const lockNote = els.question.querySelector('.landing-lock-note');
 
-    els.question.style.opacity = '1';
-    els.question.style.transform = 'scale(1)';
-    els.question.style.pointerEvents = _locked2 ? 'none' : 'auto';
+      const ci2 = __getCtaRender();
+      const state2 = _resolveCtaState(ci2);
+      const locked2 = _isCtaLocked(ci2, state2);
+      const isLockedState = (state2 === 'locked');
+
+      if (cta) {
+        if (locked2) {
+          if (!cta.classList.contains('locked')) {
+            cta.classList.add('locked');
+            cta.setAttribute('aria-disabled', 'true');
+            cta.setAttribute('tabindex', '-1');
+          }
+        } else {
+          if (cta.classList.contains('locked')) {
+            cta.classList.remove('locked');
+            cta.removeAttribute('aria-disabled');
+            cta.setAttribute('tabindex', '0');
+          }
+        }
+        if (cta.textContent !== ci2.text) cta.textContent = ci2.text;
+        if (cta.dataset.cta !== state2) cta.dataset.cta = state2;
+      }
+
+      if (isLockedState) {
+        const noteTxt = 'Sau ' + S.checklistLockTime + ' sẽ khoá Checklist nha mn 🥰';
+        if (!lockNote) {
+          const n = document.createElement('span');
+          n.className = 'landing-lock-note';
+          n.textContent = noteTxt;
+          els.question.appendChild(n);
+        } else if (lockNote.textContent !== noteTxt) {
+          lockNote.textContent = noteTxt;
+        }
+      } else {
+        if (lockNote) lockNote.remove();
+      }
+
+      els.question.style.opacity = '1';
+      els.question.style.transform = 'scale(1)';
+      els.question.style.pointerEvents = locked2 ? 'none' : 'auto';
+
+    } catch (e) {
+      console.error('[LandingView] CRASH:', e);
+      _fallbackRender();
+    }
   }
 
   function maybeRenderLanding() {
-    if (S.els.checklistPanel?.classList.contains('show')) return;
+    if (S.els.checklistPanel && S.els.checklistPanel.classList.contains('show')) return;
     renderLandingState();
-    S.onAfterRenderLanding?.();
+    if (S.onAfterRenderLanding) S.onAfterRenderLanding();
   }
 
   function resetHome() {
-    document.getElementById('q2answers')?.remove();
-    window.__clV6?.close?.();
-    S.onResetHome?.();
-    _lastTop3Signature = '';
-    renderLandingState(true);
-    if (S.els.hint) {
-      S.els.hint.textContent = S.isChecklistLocked() ? '' : (S.names.length ? 'Chạm vào câu hỏi' : 'Đang tải dữ liệu…');
+    try {
+      const q2 = document.getElementById('q2answers');
+      if (q2) q2.remove();
+      if (window.__clV6) window.__clV6.close();
+      if (S.onResetHome) S.onResetHome();
+      _lastTop3Signature = '';
+      renderLandingState(true);
+      if (S.els.hint) {
+        S.els.hint.textContent = S.isChecklistLocked() ? '' : (S.names.length ? 'Chạm vào câu hỏi' : 'Đang tải dữ liệu…');
+      }
+    } catch (e) {
+      console.error('[LandingView] resetHome crash:', e);
     }
   }
 
   window.LandingView = {
     render: renderLandingState,
     maybe: maybeRenderLanding,
-    resetHome,
-    _getSignature: () => _lastTop3Signature,
-    _resetSignature: () => { _lastTop3Signature = ''; }
+    resetHome: resetHome,
+    _getSignature: function() { return _lastTop3Signature; },
+    _resetSignature: function() { _lastTop3Signature = ''; }
   };
 
   if (S.callbacks) {
     S.callbacks.renderLanding = renderLandingState;
     S.callbacks.maybeRenderLanding = maybeRenderLanding;
-    S.callbacks.resetHome = resetHome;
+    S = resetHome;
   }
 
-  console.log('[LandingView] v1.6 ready ✓ (title force fixed)');
+  console.log('[LandingView] v1.8 ready ✓ (Safe Syntax)');
 })();
