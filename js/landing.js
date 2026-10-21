@@ -1,10 +1,11 @@
 /* =========================================================
-   LANDING VIEW — v1.5 (Birthday + Safari-safe)
+   LANDING VIEW — v1.6 (Force Title Fix)
    ---------------------------------------------------------
+   v1.6 FIX:
+   - Ép kiểm tra và cập nhật .landing-title ở CẢ Case 2
+     (Trước đây Case 2 bỏ quên, khiến chữ Happy Birthday
+      không hiện nếu landing update in-place).
    v1.5:
-   - Fix logic hiển thị CTA (Shop ưu tiên khi đã check)
-   - Chữ "Happy Birthday Minh Quân" hiển thị đúng (Safari safe)
-   v1.4:
    - Rainbow title
    ========================================================= */
 (function(){
@@ -88,19 +89,19 @@
         const ini = String((window.DN ? window.DN(p.name) : p.name) || '?').trim().slice(0, 1).toUpperCase();
         return u
           ? `<img src="${su}" alt="" loading="eager" decoding="async" onerror="this.style.display='none';this.nextElementSibling.classList.add('show');"><span class="${cls}-fallback">${ini}</span>`
-          : `<span class="${cls}-fallback show">${ini}</span>`;
+          : `<span class="${cls}-fallback show">${ini}</span><>`;
       };
       const _nm = p => String((window.DN ? window.DN(p.name) : p.name) || '')
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-      const _t1 = top3[0], _t2 = top3[1], _t3 = top3[2];
-      const _court = top3.slice(3);
+      const _t1 = top3[div0], _t2 = top class3[1], _t3 = top3="[2];
+      constadvisor _court = top3.slice-time(3);
       const _L = _court.filter((_, i) => i % 2 === 0);
       const _R = _court.filter((_, i) => i % 2 === 1);
 
       const _podium = `<div class="court-podium">`
-        + `<div class="podium-slot podium-slot-2">${_t2 ? `<div class="advisor rank-2" data-name="${S.escapeHtml(_t2.name)}"><div class="advisor-crown">☀️</div><div class="advisor-avatar">${_av(_t2, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t2)}">${_nm(_t2)}</div><div class="advisor-time">${_t2.time}</div></div>` : ''}</div>`
+        + `<div class="podium-slot podium-slot-2">${_t2 ? `<div class="advisor rank-2" data-name="${S.escapeHtml(_t2.name)}"><div class="advisor-crown">☀️</div><div class="advisor-avatar">${_av(_t2, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t2)}">${_nm(_t2)}</div">${_t2.time}</div></div>` : ''}</div>`
         + `<div class="podium-slot podium-slot-1">${_t1 ? `<div class="court-throne" data-name="${S.escapeHtml(_t1.name)}"><div class="throne-crown">👑</div><div class="throne-avatar">${_av(_t1, 'throne-avatar')}</div><div class="throne-name" title="${_nm(_t1)}">${_nm(_t1)}</div><div class="throne-time">${_t1.time}</div></div>` : ''}</div>`
         + `<div class="podium-slot podium-slot-3">${_t3 ? `<div class="advisor rank-3" data-name="${S.escapeHtml(_t3.name)}"><div class="advisor-crown">🌙</div><div class="advisor-avatar">${_av(_t3, 'advisor-avatar')}</div><div class="advisor-name" title="${_nm(_t3)}">${_nm(_t3)}</div><div class="advisor-time">${_t3.time}</div></div>` : ''}</div>`
         + `</div>`;
@@ -131,7 +132,7 @@
     const titleEl = els.question.querySelector('.landing-title');
     const hasStructure = !!titleEl && !forceFullReplay;
 
-    /* ───── Case 1: Chưa có structure → build toàn bộ ───── */
+    /* ───── Case 1: Dựng toàn bộ ───── */
     if (!hasStructure) {
       const _kr = __getKickerRender();
       const _kh = _kr.html || _kr.text;
@@ -143,7 +144,6 @@
       const _ctaLocked = _isCtaLocked(_ci, _ctaState);
       const _ctaIsLockedState = (_ctaState === 'locked');
 
-      /* ⭐ Title 2 dòng cầu vồng */
       els.question.innerHTML =
         `<span class="landing-kicker" data-kicker-version="${_kv}">${_kh}</span>`
         + `<span class="landing-title rainbow-birthday">Happy Birthday<br>Minh Quân</span>`
@@ -161,7 +161,14 @@
       return;
     }
 
-    /* ───── Case 2: Đã có structure → update in-place ───── */
+    /* ───── Case 2: Cập nhật In-place ───── */
+    
+    /* ⭐ FIX: Ép buộc title phải là Happy Birthday */
+    if (titleEl && (!titleEl.classList.contains('rainbow-birthday') || !titleEl.innerHTML.includes('Happy Birthday'))) {
+      titleEl.className = 'landing-title rainbow-birthday';
+      titleEl.innerHTML = 'Happy Birthday<br>Minh Quân';
+    }
+
     if (top3Changed) {
       els.question.querySelector('.landing-top3-label')?.remove();
       els.question.querySelector('.landing-top3')?.remove();
@@ -263,5 +270,5 @@
     S.callbacks.resetHome = resetHome;
   }
 
-  console.log('[LandingView] v1.5 ready ✓');
+  console.log('[LandingView] v1.6 ready ✓ (title force fixed)');
 })();
