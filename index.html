@@ -97,34 +97,84 @@ html body #question::before, html body #question::after { display: none !importa
 html body #question.landing-court-active { max-height: none !important; height: auto !important; overflow: visible !important; }
 html body #question .landing-kicker { display: block !important; margin: 0 0 14px !important; padding: 0 !important; min-height: 16px !important; line-height: 1.2 !important; }
 
-/* ⭐ RAINBOW BIRTHDAY TITLE — v3 (Safari 100% safe) ⭐ */
+/* ═══════════════════════════════════════════════════════════
+   ⭐ RAINBOW BIRTHDAY TITLE — v4 FINAL ⭐
+   - Chia 2 dòng thành 2 span riêng (Safari-safe)
+   - Gradient text + fallback color
+   - Không dùng filter/text-shadow
+   ═══════════════════════════════════════════════════════════ */
 html body #question .landing-title { margin: 0 0 10px !important; }
+
 html body #question .landing-title.rainbow-birthday {
-  margin: 0 0 14px !important;
-  font-size: 26px !important;
-  line-height: 1.35 !important;
+  margin: 0 0 16px !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  font-size: 28px !important;
+  line-height: 1.25 !important;
   font-weight: 950 !important;
   text-transform: none !important;
-  display: inline-block !important;
-  color: #ff00ff !important;
-  -webkit-text-fill-color: #ff00ff !important;
+  letter-spacing: -0.01em !important;
+  color: #ff1493 !important;
   background: none !important;
-  -webkit-background-clip: initial !important;
+  -webkit-text-fill-color: initial !important;
   background-clip: initial !important;
-  text-shadow:
-    0 0 20px rgba(255, 0, 255, 0.5),
-    0 0 40px rgba(255, 0, 128, 0.3) !important;
-  animation: rainbowHue 4s linear infinite !important;
+  -webkit-background-clip: initial !important;
+  text-shadow: none !important;
+  filter: none !important;
+  animation: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
 }
-html body #question .landing-title.rainbow-birthday br {
+
+html body #question .landing-title.rainbow-birthday .rainbow-line {
   display: block !important;
-  content: "" !important;
-  margin: 4px 0 !important;
-  line-height: 0 !important;
+  width: 100% !important;
+  text-align: center !important;
+  font-size: 28px !important;
+  font-weight: 950 !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.01em !important;
+  text-transform: none !important;
+  white-space: nowrap !important;
+  background: linear-gradient(
+    90deg,
+    #ff0000 0%,
+    #ff7f00 14%,
+    #ffff00 28%,
+    #00ff00 42%,
+    #00bfff 56%,
+    #0000ff 70%,
+    #8a2be2 84%,
+    #ff1493 100%
+  ) !important;
+  background-size: 200% auto !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  color: transparent !important;
+  text-shadow: none !important;
+  animation: rainbowScroll 3s linear infinite !important;
+  padding: 2px 4px !important;
+  -webkit-font-smoothing: antialiased !important;
 }
-@keyframes rainbowHue {
-  0%   { filter: hue-rotate(0deg); }
-  100% { filter: hue-rotate(360deg); }
+
+@keyframes rainbowScroll {
+  0%   { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+/* Fallback nếu Safari không hỗ trợ background-clip: text */
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  html body #question .landing-title.rainbow-birthday .rainbow-line {
+    color: #ff1493 !important;
+    -webkit-text-fill-color: #ff1493 !important;
+    background: none !important;
+    animation: none !important;
+  }
 }
 
 html body #question .landing-top3.landing-court, html body #question .landing-court { display: flex !important; flex-direction: column !important; align-items: stretch !important; justify-content: flex-start !important; flex-wrap: nowrap !important; gap: 8px !important; padding: 0 !important; margin: 0 0 12px !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; height: auto !important; max-height: none !important; overflow: visible !important; position: static !important; background: none !important; border: 0 !important; box-shadow: none !important; box-sizing: border-box !important; }
