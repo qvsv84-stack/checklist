@@ -1,8 +1,11 @@
 /* =========================================================
-   LANDING VIEW — v1.3 (Birthday)
+   LANDING VIEW — v1.5 (Birthday + Safari-safe)
    ---------------------------------------------------------
-   v1.3: Đổi title thành Happy Birthday Minh Quân
-   v1.2: Shop ưu tiên khi đã check
+   v1.5:
+   - Fix logic hiển thị CTA (Shop ưu tiên khi đã check)
+   - Chữ "Happy Birthday Minh Quân" hiển thị đúng (Safari safe)
+   v1.4:
+   - Rainbow title
    ========================================================= */
 (function(){
   "use strict";
@@ -140,6 +143,7 @@
       const _ctaLocked = _isCtaLocked(_ci, _ctaState);
       const _ctaIsLockedState = (_ctaState === 'locked');
 
+      /* ⭐ Title 2 dòng cầu vồng */
       els.question.innerHTML =
         `<span class="landing-kicker" data-kicker-version="${_kv}">${_kh}</span>`
         + `<span class="landing-title rainbow-birthday">Happy Birthday<br>Minh Quân</span>`
@@ -259,5 +263,5 @@
     S.callbacks.resetHome = resetHome;
   }
 
-  console.log('[LandingView] v1.3 ready ✓ (Birthday)');
+  console.log('[LandingView] v1.5 ready ✓');
 })();
