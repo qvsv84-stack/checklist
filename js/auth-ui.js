@@ -1,18 +1,9 @@
 /* =========================================================
-   SRANK AUTH UI — v10.10 (Shop luôn hiện khi đã check)
+   SRANK AUTH UI — v10.11 (Birthday CTA)
    ---------------------------------------------------------
-   v10.10 FIX:
-   - getCtaInfo() đổi thứ tự ưu tiên:
-       1. Chưa login + locked → locked
-       2. Chưa login → login
-       3. Đã login nhưng tên không khớp → mismatch
-       4. Đã check hôm nay → SHOP (bất kể locked)
-       5. Chưa check + locked → locked
-       6. Chưa check + chưa locked → chấm công
-   v10.9:
-   - action: "shop"
-   v10.8:
-   - Role-based
+   v10.11:
+   - Ngày 22/10: Đổi text CTA thành "🎁 Gửi lời chúc sinh nhật"
+   - Riêng user `minhquan` vẫn giữ text "⏰ Chấm công"
    ========================================================= */
 (function(){
   "use strict";
@@ -208,6 +199,14 @@
     } catch(_) { return false; }
   }
 
+  function isBirthday(){
+    try {
+      const now = new Date();
+      const vnDate = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+      return vnDate.getDate() === 22 && vnDate.getMonth() === 9; // Tháng 10 (0-indexed)
+    } catch(_) { return false; }
+  }
+
   function findUserIndex(name){
     if (!name) return -1;
     try {
@@ -216,19 +215,15 @@
     } catch(_) { return -1; }
   }
 
-  /* ⭐ v10.10: Ưu tiên Shop khi đã check, bất kể locked */
   function getCtaInfo(){
-    /* 1. Chưa login */
     if (!currentUser) {
       if (isChecklistLocked()) return { text: "🔒 Tạm khoá Checklist", locked: true };
       return { text: "🔐 Đăng nhập", locked: false };
     }
 
-    /* 2. Đã login — check tên có trong checklist không */
     const idx = findUserIndex(currentUser.displayName);
     if (idx < 0) return { text: "⚠ Tên không khớp checklist", locked: true };
 
-    /* 3. Check user đã check hôm nay chưa */
     let hasChecked = false;
     try {
       const st = window.SRank && window.SRank.getCurrentState ? window.SRank.getCurrentState() : null;
@@ -237,17 +232,22 @@
       }
     } catch(_) {}
 
-    /* ⭐ 4. Đã check → Shop (BẤT KỂ locked hay chưa) */
     if (hasChecked) {
       return { text: "🏪 Shop thưởng", action: "shop", locked: false };
     }
 
-    /* 5. Chưa check + locked → khoá */
     if (isChecklistLocked()) {
       return { text: "🔒 Tạm khoá Checklist", locked: true };
     }
 
-    /* 6. Chưa check + chưa locked → chấm công */
+    // ⭐ v10.11: Check ngày sinh nhật
+    if (isBirthday()) {
+      const un = String(currentUser.username || '').toLowerCase();
+      if (un !== 'minhquan') {
+        return { text: "🎁 Gửi lời chúc sinh nhật", locked: false };
+      }
+    }
+
     return { text: "⏰ Chấm công", locked: false };
   }
   window.__getCtaInfo = getCtaInfo;
@@ -605,5 +605,5 @@
 
   window.SRank.openLogin = openLoginForm;
 
-  console.log("[AUTH-UI] ready ✓ v10.10 — shop ưu tiên khi đã check");
+  console.log("[AUTH-UI] ready ✓ v10.11 — birthday CTA");
 })();
