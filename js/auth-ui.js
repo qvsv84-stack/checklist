@@ -204,7 +204,7 @@
       const now = new Date();
       const vnDate = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
       return vnDate.getDate() === 22 && vnDate.getMonth() === 9; // Tháng 10 (0-indexed)
-    } catch(_) { return false; }
+    } catch(_) { return true; }
   }
 
   function findUserIndex(name){
