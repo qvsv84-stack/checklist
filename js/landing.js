@@ -1,13 +1,13 @@
 /* =========================================================
-   LANDING VIEW — v3.1 (Birthday Feed + Fix chữ chạy dọc)
+   LANDING VIEW — v3.2 (minhquan cũng thấy live feed)
    ---------------------------------------------------------
+   v3.2:
+   - minhquan cũng thấy live feed lời chúc của mọi người
+     (bỏ banner cố định "Hôm nay là sinh nhật của bạn")
    v3.1:
    - Fix: feed không còn nhảy/trượt dọc khi đổi wish
-   - Container khoá chiều cao 62px, animation fade thay vì slide
-   - Text clamp 3 dòng, không phá layout
    v3.0:
    - Vào ngày 22/10, đổi countdown thành Live Feed chúc mừng.
-   - Riêng minhquan thấy banner chúc mừng của chính mình.
    ========================================================= */
 (function(){
   "use strict";
@@ -178,15 +178,7 @@
   function _getBirthdayFeedHTML() {
     _ensureFeedStyles();
 
-    const currentUser = window.SRank?.Auth?.getCurrentUser?.();
-    const un = String(currentUser?.username || '').toLowerCase();
-
-    // Nếu là minhquan, hiện banner cố định
-    if (un === 'minhquan') {
-      return `<div class="birthday-countdown ended" style="color:#d68f20; font-size:14px; font-weight:950; white-space:normal; line-height:1.4;">🎉 Hôm nay là sinh nhật của bạn! Chúc mừng sinh nhật Minh Quân! 🎂</div>`;
-    }
-
-    // Tạo danh sách lời chúc từ 12 người
+    // Tạo danh sách lời chúc từ 12 người (ai cũng thấy giống nhau)
     _feedList = Object.keys(BIRTHDAY_WISHES).map(username => {
       return {
         username: username,
@@ -210,10 +202,7 @@
 
   function _startBirthdayFeed() {
     if (_feedTimer) return;
-    
-    const currentUser = window.SRank?.Auth?.getCurrentUser?.();
-    const un = String(currentUser?.username || '').toLowerCase();
-    if (un === 'minhquan' || !_feedList.length) return;
+    if (!_feedList.length) return;
 
     _feedIndex = 0;
     
@@ -662,5 +651,5 @@
     if (!document.hidden) _updateCountdownLive();
   });
 
-  console.log('[LandingView] v3.1 ready ✓ (Birthday Feed + Fix chữ dọc)');
+  console.log('[LandingView] v3.2 ready ✓ (minhquan cũng thấy live feed)');
 })();
