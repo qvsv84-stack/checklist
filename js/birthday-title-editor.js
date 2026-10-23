@@ -1,14 +1,3 @@
-/* =========================================================
-   SITE CONTENT EDITOR v1.6 (title + lyrics + music)
-   ---------------------------------------------------------
-   v1.6: Fix iOS khong nhan MP3
-     - accept them extension .mp3 .m4a .mp4 .mov...
-     - validation nhan audio/* + video/* + extension
-     - max size: 8MB audio, 15MB video
-     - log file info de debug
-   v1.5: fix SyntaxError
-   v1.4: music upload
-   ========================================================= */
 (function () {
   "use strict";
   if (window.__bdTitle) return;
