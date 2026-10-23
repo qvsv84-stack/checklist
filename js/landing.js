@@ -1,15 +1,16 @@
 /* =========================================================
-   LANDING VIEW — v3.3 (admin long-press sửa tiêu đề)
+   LANDING VIEW — v3.4 (countdown → giờ khoá Checklist)
    ---------------------------------------------------------
+   v3.4:
+   - Countdown đếm ngược đến GIỜ KHOÁ CHECKLIST
+     · Chưa khoá: "Còn X Giờ : Y Phút : Z Giây nữa là khoá Checklist"
+     · Đã khoá:   "🔒 Đã khoá · Mở lại sau X Giờ : Y Phút : Z Giây"
+   - Feed sinh nhật (22/10) vẫn hiển thị song song phía trên countdown
+   - Countdown LUÔN hiển thị (cả ngày thường và ngày sinh nhật)
    v3.3:
-   - Tiêu đề sinh nhật lấy động từ window.__bdTitle
-   - Admin long-press sửa → đồng bộ toàn bộ user qua server
+   - Admin long-press sửa tiêu đề (qua __bdTitle)
    v3.2:
    - minhquan cũng thấy live feed lời chúc của mọi người
-   v3.1:
-   - Fix: feed không còn nhảy/trượt dọc khi đổi wish
-   v3.0:
-   - Vào ngày 22/10, đổi countdown thành Live Feed chúc mừng.
    ========================================================= */
 (function(){
   "use strict";
@@ -41,7 +42,7 @@
   const DEFAULT_WISH = 'Chúc mừng sinh nhật Quân! Chúc cậu tuổi mới ngập tràn niềm vui, hạnh phúc và thành công!';
 
   /* ═══════════════════════════════════════════════════════
-     ⭐ TITLE — lấy động từ __bdTitle (admin có thể sửa)
+     ⭐ TITLE — lấy động từ __bdTitle
      ═══════════════════════════════════════════════════════ */
   const TITLE_HTML_FALLBACK =
     '<span class="rainbow-line">Happy Birthday</span>' +
@@ -68,27 +69,71 @@
     } catch(_) { return false; }
   }
 
-  function getNextBirthday() {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    let target = new Date(`${currentYear}-10-22T00:00:00+07:00`);
-    if (now.getTime() > target.getTime() + 24 * 60 * 60 * 1000 - 1) {
-      target = new Date(`${currentYear + 1}-10-22T00:00:00+07:00`);
-    }
-    return target;
-  }
-
   /* ═══════════════════════════════════════════════════════
-     ⭐ COUNTDOWN LOGIC
+     ⭐ COUNTDOWN KHOÁ CHECKLIST — v2
      ═══════════════════════════════════════════════════════ */
-  const BIRTHDAY_DATE = getNextBirthday();
   let _countdownTimer = null;
 
-  function _pad2(n) {
-    return String(n).padStart(2, '0');
+  function _pad2(n) { return String(n).padStart(2, '0'); }
+
+  function _getLockTimeHM() {
+    let str = '21:00';
+    try {
+      if (S && S.checklistLockTime) str = String(S.checklistLockTime);
+      else if (typeof localStorage !== 'undefined') {
+        str = localStorage.getItem('srank_checklist_lock_time_v1') || '21:00';
+      }
+    } catch (_) {}
+    const parts = str.split(':');
+    const hh = Math.max(0, Math.min(23, parseInt(parts[0], 10) || 21));
+    const mm = Math.max(0, Math.min(59, parseInt(parts[1], 10) || 0));
+    return { hh, mm };
   }
 
-  function _buildCountdownInner(diffMs) {
+  function _getVNNowParts() {
+    try {
+      const fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+      });
+      const p = {};
+      fmt.formatToParts(new Date()).forEach(function (x) { p[x.type] = x.value; });
+      return {
+        year: parseInt(p.year, 10),
+        month: parseInt(p.month, 10) - 1,
+        day: parseInt(p.day, 10),
+        hour: parseInt(p.hour, 10),
+        minute: parseInt(p.minute, 10),
+        second: parseInt(p.second, 10)
+      };
+    } catch (_) {
+      const n = new Date();
+      return {
+        year: n.getFullYear(), month: n.getMonth(), day: n.getDate(),
+        hour: n.getHours(), minute: n.getMinutes(), second: n.getSeconds()
+      };
+    }
+  }
+
+  function _getLockState() {
+    const hm = _getLockTimeHM();
+    const p = _getVNNowParts();
+
+    // Giờ khoá hôm nay (epoch UTC): VN hh:mm = UTC (hh-7):mm
+    const lockTodayEpoch = Date.UTC(p.year, p.month, p.day, hm.hh - 7, hm.mm, 0, 0);
+    const nowEpoch = Date.now();
+
+    if (nowEpoch >= lockTodayEpoch) {
+      // Đã khoá → đếm đến 00:00 ngày mai (VN) = giờ mở lại
+      const nextMidnightEpoch = Date.UTC(p.year, p.month, p.day + 1, -7, 0, 0, 0);
+      return { targetEpoch: nextMidnightEpoch, isLocked: true };
+    }
+    return { targetEpoch: lockTodayEpoch, isLocked: false };
+  }
+
+  function _buildCountdownInner(diffMs, isLocked) {
     const totalSec = Math.max(0, Math.floor(diffMs / 1000));
     const hours = Math.floor(totalSec / 3600);
     const minutes = Math.floor((totalSec % 3600) / 60);
@@ -96,30 +141,30 @@
     const hh = _pad2(hours);
     const mm = _pad2(minutes);
     const ss = _pad2(seconds);
-    return `Còn <b>${hh}</b> Giờ : <b>${mm}</b> Phút : <b>${ss}</b> Giây nữa là đến sinh nhật`;
+
+    if (isLocked) {
+      return `🔒 Đã khoá · Mở lại sau <b>${hh}</b> Giờ : <b>${mm}</b> Phút : <b>${ss}</b> Giây`;
+    }
+    return `Còn <b>${hh}</b> Giờ : <b>${mm}</b> Phút : <b>${ss}</b> Giây nữa là khoá Checklist`;
   }
 
   function _getCountdownHTML() {
-    const diff = BIRTHDAY_DATE.getTime() - Date.now();
-    if (diff <= 0) {
-      return '<span class="birthday-countdown ended">🎉 Chúc mừng sinh nhật Minh Quân! 🎂</span>';
-    }
-    return `<span class="birthday-countdown">${_buildCountdownInner(diff)}</span>`;
+    const st = _getLockState();
+    const diff = st.targetEpoch - Date.now();
+    const cls = st.isLocked ? 'birthday-countdown ended' : 'birthday-countdown';
+    return `<span class="${cls}">${_buildCountdownInner(diff, st.isLocked)}</span>`;
   }
 
   function _updateCountdownLive() {
     const el = document.querySelector('.birthday-countdown');
     if (!el) { _stopCountdownTimer(); return; }
-    if (el.classList.contains('ended')) { _stopCountdownTimer(); return; }
 
-    const diff = BIRTHDAY_DATE.getTime() - Date.now();
-    if (diff <= 0) {
-      el.classList.add('ended');
-      el.innerHTML = '🎉 Chúc mừng sinh nhật Minh Quân! 🎂';
-      _stopCountdownTimer();
-      return;
-    }
-    el.innerHTML = _buildCountdownInner(diff);
+    const st = _getLockState();
+    const diff = st.targetEpoch - Date.now();
+    const isEnded = el.classList.contains('ended');
+    if (st.isLocked && !isEnded) el.classList.add('ended');
+    if (!st.isLocked && isEnded) el.classList.remove('ended');
+    el.innerHTML = _buildCountdownInner(Math.max(0, diff), st.isLocked);
   }
 
   function _startCountdownTimer() {
@@ -262,7 +307,8 @@
       els.question.innerHTML = `
         <span class="landing-kicker">🐱 DAILY TEAM HUB</span>
         <span class="landing-title rainbow-birthday">${_getTitleHTML()}</span>
-        ${isBirthdayToday() ? _getBirthdayFeedHTML() : _getCountdownHTML()}
+        ${isBirthdayToday() ? _getBirthdayFeedHTML() : ''}
+        ${_getCountdownHTML()}
         <span class="landing-cta${ctaLocked ? ' locked' : ''}" data-cta="${stateName}" role="button">${_esc(ci.text)}</span>
       `;
       els.question.classList.add('play');
@@ -271,7 +317,7 @@
       els.question.style.pointerEvents = ctaLocked ? 'none' : 'auto';
 
       if (isBirthdayToday()) _startBirthdayFeed();
-      else _startCountdownTimer();
+      _startCountdownTimer();
 
       console.warn('[LandingView] FALLBACK RENDERED');
     } catch (e) {
@@ -465,7 +511,6 @@
       const hasStructure = !!titleEl && !forceFullReplay;
 
       const isBday = isBirthdayToday();
-      const dynamicHtml = isBday ? _getBirthdayFeedHTML() : _getCountdownHTML();
 
       /* ═══════ CASE 1: BUILD ═══════ */
       if (!hasStructure) {
@@ -481,7 +526,8 @@
         els.question.innerHTML = `
           <span class="landing-kicker" data-kicker-version="${kv}">${kh}</span>
           <span class="landing-title rainbow-birthday">${_getTitleHTML()}</span>
-          ${dynamicHtml}
+          ${isBday ? _getBirthdayFeedHTML() : ''}
+          ${_getCountdownHTML()}
           ${top3HTML}
           <span class="landing-cta${ctaLocked ? ' locked' : ''}" data-cta="${ctaState}" role="button" ${ctaLocked ? 'aria-disabled="true" tabindex="-1"' : 'tabindex="0"'}>${_esc(ci.text)}</span>
           ${ctaIsLockedState ? `<span class="landing-lock-note">Sau ${S.checklistLockTime} sẽ khoá Checklist nha mn 🥰</span>` : ''}
@@ -496,7 +542,7 @@
         els.question.style.pointerEvents = ctaLocked ? 'none' : 'auto';
 
         if (isBday) _startBirthdayFeed();
-        else _startCountdownTimer();
+        _startCountdownTimer();
 
         return;
       }
@@ -512,26 +558,27 @@
         }
       }
 
-      /* 2b. Ensure dynamic element tồn tại và đúng loại */
+      /* 2b. Feed (chỉ bday) + Countdown (luôn có) */
       const hasCountdown = !!els.question.querySelector('.birthday-countdown');
       const hasFeed = !!els.question.querySelector('.birthday-feed-container');
 
+      // Feed
       if (isBday && !hasFeed) {
-        els.question.querySelector('.birthday-countdown')?.remove();
-        const titleAfter = els.question.querySelector('.landing-title');
-        if (titleAfter) titleAfter.insertAdjacentHTML('afterend', dynamicHtml);
-        _stopCountdownTimer();
+        if (titleEl) titleEl.insertAdjacentHTML('afterend', _getBirthdayFeedHTML());
         _startBirthdayFeed();
-      } else if (!isBday && !hasCountdown) {
+      } else if (!isBday && hasFeed) {
         els.question.querySelector('.birthday-feed-container')?.remove();
-        const titleAfter = els.question.querySelector('.landing-title');
-        if (titleAfter) titleAfter.insertAdjacentHTML('afterend', dynamicHtml);
         _stopBirthdayFeed();
-        _startCountdownTimer();
-      } else {
-        if (isBday) _startBirthdayFeed();
-        else _startCountdownTimer();
+      } else if (isBday && hasFeed) {
+        _startBirthdayFeed();
       }
+
+      // Countdown — luôn tồn tại
+      if (!hasCountdown) {
+        const anchor = els.question.querySelector('.birthday-feed-container') || titleEl;
+        if (anchor) anchor.insertAdjacentHTML('afterend', _getCountdownHTML());
+      }
+      _startCountdownTimer();
 
       /* 2c. Update top3 */
       if (top3Changed) {
@@ -646,16 +693,16 @@
     S.callbacks.resetHome = resetHome;
   }
 
-  /* Update countdown khi tab visible lại (chống throttle của Safari) */
+  /* Update countdown khi tab visible lại */
   document.addEventListener('visibilitychange', function() {
     if (!document.hidden) _updateCountdownLive();
   });
 
-  /* ⭐ v3.3: Re-render khi admin đổi tiêu đề → áp dụng ngay */
+  /* v3.3: Re-render khi admin đổi tiêu đề */
   window.addEventListener('bdTitleChanged', function () {
     try { renderLandingState(true); }
     catch (e) { console.error('[LandingView] bdTitle re-render:', e); }
   });
 
-  console.log('[LandingView] v3.3 ready ✓ (admin long-press title editor)');
+  console.log('[LandingView] v3.4 ready ✓ (countdown → giờ khoá Checklist)');
 })();
