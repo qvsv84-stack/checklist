@@ -1,9 +1,11 @@
 /* =========================================================
-   SRANK AUTH UI — v10.11 (Birthday CTA)
+   SRANK AUTH UI — v10.12 (cleanup birthday)
    ---------------------------------------------------------
+   v10.12:
+   - Xoá CTA "🎁 Gửi lời chúc sinh nhật" (đã hết ngày 22/10)
+   - Xoá hàm isBirthday() không còn dùng
    v10.11:
-   - Ngày 22/10: Đổi text CTA thành "🎁 Gửi lời chúc sinh nhật"
-   - Riêng user `minhquan` vẫn giữ text "⏰ Chấm công"
+   - Ngày 22/10: đổi CTA sinh nhật (đã bỏ)
    ========================================================= */
 (function(){
   "use strict";
@@ -199,14 +201,6 @@
     } catch(_) { return false; }
   }
 
-  function isBirthday(){
-    try {
-      const now = new Date();
-      const vnDate = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
-      return vnDate.getDate() === 22 && vnDate.getMonth() === 9; // Tháng 10 (0-indexed)
-    } catch(_) { return false; }
-  }
-
   function findUserIndex(name){
     if (!name) return -1;
     try {
@@ -238,14 +232,6 @@
 
     if (isChecklistLocked()) {
       return { text: "🔒 Tạm khoá Checklist", locked: true };
-    }
-
-    // ⭐ v10.11: Check ngày sinh nhật
-    if (isBirthday()) {
-      const un = String(currentUser.username || '').toLowerCase();
-      if (un !== 'minhquan') {
-        return { text: "🎁 Gửi lời chúc sinh nhật", locked: false };
-      }
     }
 
     return { text: "⏰ Chấm công", locked: false };
@@ -605,5 +591,5 @@
 
   window.SRank.openLogin = openLoginForm;
 
-  console.log("[AUTH-UI] ready ✓ v10.11 — birthday CTA");
+  console.log("[AUTH-UI] ready ✓ v10.12 — birthday CTA removed");
 })();
