@@ -1,21 +1,20 @@
 /* =========================================================
-   CONTENT EDITOR - v2.0
+   CONTENT EDITOR - v2.1
    ---------------------------------------------------------
-   Pure ES5 + ASCII-safe (no unicode outside string literals)
-   - Title (admin long-press)
-   - Lyrics (split by '.', admin long-press)
-   - Music (upload mp3/m4a/mp4, magic-byte sniffing)
-   - Retry + timeout + optimistic UI
+   v2.1:
+   - Upload bang XHR (co progress %)
+   - Timeout 120s cho upload (truoc do 20s qua ngan)
+   - Chi retry khi network error, khong retry khi timeout
+   - Hien thi MB/%/speed
+   v2.0: ultra-safe ES5
    ========================================================= */
 (function () {
   "use strict";
   if (window.__bdTitle) return;
 
-  // ---- BUILD CANARY (verify which version is actually loaded) ----
-  window.__bdTitleBuild = "v2.0.0";
+  window.__bdTitleBuild = "v2.1.0";
   console.log("[bdTitle] BUILD=" + window.__bdTitleBuild);
 
-  // ---- CONSTANTS ----
   var CACHE_TITLE = "srank_ct_v3";
   var CACHE_LYR   = "srank_cl_v3";
   var CACHE_MUSIC = "srank_cm_v3";
@@ -30,20 +29,19 @@
   var RPC_GET     = "rpc_get_site_setting";
   var RPC_SET     = "rpc_set_site_setting";
 
-  var LONG_PRESS_MS = 650;
-  var MAX_AUDIO   = 8  * 1024 * 1024;
-  var MAX_VIDEO   = 15 * 1024 * 1024;
-  var FETCH_TIMEOUT = 20000;
-  var RPC_TIMEOUT   = 15000;
+  var LONG_PRESS_MS   = 650;
+  var MAX_AUDIO       = 8  * 1024 * 1024;
+  var MAX_VIDEO       = 15 * 1024 * 1024;
+  var RPC_TIMEOUT     = 15000;
+  var UPLOAD_TIMEOUT  = 120000;  // 120s cho upload mobile
+  var DELETE_TIMEOUT  = 20000;
 
-  // ---- STATE ----
   var state = {
     title:  { line1: "", line2: "" },
     lyrics: { raw: "" },
     music:  { url: "", volume: 0.4, updatedAt: 0 }
   };
 
-  // ---- SAFE HELPERS ----
   function esc(s) {
     return String(s == null ? "" : s)
       .replace(/&/g, "&amp;")
@@ -77,24 +75,7 @@
     });
   }
 
-  function withRetry(fn, maxAttempts, label) {
-    return new Promise(function (resolve, reject) {
-      function attempt(n) {
-        fn().then(resolve, function (err) {
-          if (n >= maxAttempts) {
-            reject(err);
-            return;
-          }
-          var delay = Math.min(4000, 500 * Math.pow(2, n));
-          console.warn("[bdTitle] retry " + (label || "") + " " + n + "/" + maxAttempts + " sau " + delay + "ms");
-          setTimeout(function () { attempt(n + 1); }, delay);
-        });
-      }
-      attempt(1);
-    });
-  }
-
-  // ---- TITLE API ----
+  // ---- TITLE ----
   function getTitleHTML() {
     var h = "";
     var l1 = String(state.title.line1 || "").trim();
@@ -115,8 +96,7 @@
   function saveTitleCache() {
     try {
       localStorage.setItem(CACHE_TITLE, JSON.stringify({
-        line1: state.title.line1,
-        line2: state.title.line2
+        line1: state.title.line1, line2: state.title.line2
       }));
     } catch (e) {}
   }
@@ -141,13 +121,12 @@
     }));
   }
 
-  // ---- LYRICS API ----
+  // ---- LYRICS ----
   function getLyricsRaw() { return String(state.lyrics.raw || ""); }
 
   function getLyricsPhrases() {
     var raw = String(state.lyrics.raw || "").trim();
     if (!raw) return [];
-    // Split by period or fullwidth ideographic full stop U+3002
     var parts = raw.split(/[.\u3002]/);
     var out = [];
     for (var i = 0; i < parts.length; i++) {
@@ -184,7 +163,7 @@
     return rpcSave(KEY_LYR, JSON.stringify({ raw: String(state.lyrics.raw || "").trim() }));
   }
 
-  // ---- MUSIC API ----
+  // ---- MUSIC ----
   function getMusic() {
     return {
       url: String(state.music.url || ""),
@@ -205,9 +184,7 @@
   function saveMusicCache() {
     try {
       localStorage.setItem(CACHE_MUSIC, JSON.stringify({
-        url: state.music.url,
-        volume: state.music.volume,
-        updatedAt: state.music.updatedAt
+        url: state.music.url, volume: state.music.volume, updatedAt: state.music.updatedAt
       }));
     } catch (e) {}
   }
@@ -229,13 +206,11 @@
 
   function saveMusicToServer() {
     return rpcSave(KEY_MUSIC, JSON.stringify({
-      url: state.music.url,
-      volume: state.music.volume,
-      updatedAt: state.music.updatedAt
+      url: state.music.url, volume: state.music.volume, updatedAt: state.music.updatedAt
     }));
   }
 
-  // ---- SUPABASE BASICS ----
+  // ---- SUPABASE ----
   function getBaseUrl() {
     var sb = window.__sb;
     if (sb && sb.supabaseUrl) return String(sb.supabaseUrl).replace(/\/+$/, "");
@@ -247,7 +222,7 @@
     return new Promise(function (resolve) {
       var sb = window.__sb;
       if (!sb || !sb.auth || typeof sb.auth.getSession !== "function") return resolve("");
-      withTimeout(sb.auth.getSession(), 5000, "auth.getSession")
+      withTimeout(sb.auth.getSession(), 5000, "auth")
         .then(function (r) {
           resolve((r && r.data && r.data.session && r.data.session.access_token) || "");
         })
@@ -261,19 +236,13 @@
     if (!sb || typeof sb.rpc !== "function") return Promise.resolve(false);
     return withTimeout(sb.rpc(RPC_GET, { p_key: key }), RPC_TIMEOUT, "rpc_get:" + key)
       .then(function (res) {
-        if (!res || res.error) {
-          console.warn("[bdTitle] rpc_get " + key + " failed:", res && res.error && (res.error.message || res.error));
-          return false;
-        }
+        if (!res || res.error) return false;
         if (!res.data) return false;
         var o = typeof res.data === "string" ? safeParse(res.data, null) : res.data;
         if (!o) return false;
         return applyFn(o);
       })
-      .catch(function (e) {
-        console.warn("[bdTitle] rpc_get " + key + " error:", e.message || e);
-        return false;
-      });
+      .catch(function () { return false; });
   }
 
   function rpcSave(key, value) {
@@ -290,7 +259,7 @@
       });
   }
 
-  // ---- FILE TYPE SNIFFING (magic bytes) ----
+  // ---- FILE SNIFF ----
   function sniffFileType(file) {
     return new Promise(function (resolve) {
       try {
@@ -298,26 +267,18 @@
         var reader = new FileReader();
         reader.onload = function (e) {
           try {
-            var buf = e.target.result;
-            var u = new Uint8Array(buf);
-            // MP3: ID3 tag ("ID3")
+            var u = new Uint8Array(e.target.result);
             if (u[0] === 0x49 && u[1] === 0x44 && u[2] === 0x33) return resolve("audio/mpeg");
-            // MP3: MPEG frame sync (0xFF 0xE0..)
             if (u[0] === 0xFF && (u[1] & 0xE0) === 0xE0) return resolve("audio/mpeg");
-            // MP4/M4A: "ftyp" at byte 4
             if (u[4] === 0x66 && u[5] === 0x74 && u[6] === 0x79 && u[7] === 0x70) {
-              var brand = String.fromCharCode(u[8], u[9], u[10], u[11]);
-              if (brand.indexOf("M4A") === 0 || brand.indexOf("M4B") === 0) return resolve("audio/mp4");
-              if (brand.indexOf("mp42") === 0 || brand.indexOf("isom") === 0 || brand.indexOf("mp41") === 0) return resolve("video/mp4");
+              var b = String.fromCharCode(u[8], u[9], u[10], u[11]);
+              if (b.indexOf("M4A") === 0 || b.indexOf("M4B") === 0) return resolve("audio/mp4");
+              if (b.indexOf("mp42") === 0 || b.indexOf("isom") === 0 || b.indexOf("mp41") === 0) return resolve("video/mp4");
               return resolve("audio/mp4");
             }
-            // OGG: "OggS"
             if (u[0] === 0x4F && u[1] === 0x67 && u[2] === 0x67 && u[3] === 0x53) return resolve("audio/ogg");
-            // WAV: "RIFF"
             if (u[0] === 0x52 && u[1] === 0x49 && u[2] === 0x46 && u[3] === 0x46) return resolve("audio/wav");
-            // FLAC: "fLaC"
             if (u[0] === 0x66 && u[1] === 0x4C && u[2] === 0x61 && u[3] === 0x43) return resolve("audio/flac");
-            // WEBM/MKV: 0x1A45DFA3
             if (u[0] === 0x1A && u[1] === 0x45 && u[2] === 0xDF && u[3] === 0xA3) return resolve("video/webm");
             return resolve(null);
           } catch (err) { resolve(null); }
@@ -335,7 +296,6 @@
 
     return sniffFileType(file).then(function (sniffed) {
       var mime = sniffed || String(file.type || "").toLowerCase();
-      // Normalize
       if (!mime) {
         if (ext === "mp3") mime = "audio/mpeg";
         else if (ext === "m4a") mime = "audio/mp4";
@@ -346,11 +306,10 @@
         else if (ext === "wav") mime = "audio/wav";
         else if (ext === "flac") mime = "audio/flac";
       }
-      // Preferred extension for storage
       var saveExt = ext;
       if (!saveExt) {
         if (mime.indexOf("audio/mpeg") === 0) saveExt = "mp3";
-        else if (mime.indexOf("audio/mp4") === 0 || mime.indexOf("audio/m4a") === 0) saveExt = "m4a";
+        else if (mime.indexOf("audio/mp4") === 0) saveExt = "m4a";
         else if (mime.indexOf("video/mp4") === 0) saveExt = "mp4";
         else if (mime.indexOf("video/quicktime") === 0) saveExt = "mov";
         else if (mime.indexOf("video/webm") === 0) saveExt = "webm";
@@ -368,8 +327,104 @@
     });
   }
 
-  // ---- UPLOAD ----
-  function uploadMusic(file) {
+  // ---- UPLOAD VIA XHR (co progress) ----
+  function xhrUpload(url, file, token, mime, onProgress) {
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      var startTime = Date.now();
+      var lastLoaded = 0;
+      var lastTime = startTime;
+
+      xhr.open("POST", url, true);
+      xhr.setRequestHeader("Authorization", "Bearer " + token);
+      xhr.setRequestHeader("x-upsert", "true");
+      xhr.setRequestHeader("Content-Type", mime);
+      xhr.setRequestHeader("Cache-Control", "3600");
+      xhr.timeout = UPLOAD_TIMEOUT;
+
+      if (xhr.upload && typeof onProgress === "function") {
+        xhr.upload.onprogress = function (e) {
+          if (!e.lengthComputable) return;
+          var now = Date.now();
+          var dt = (now - lastTime) / 1000;
+          var speed = dt > 0 ? (e.loaded - lastLoaded) / dt : 0;
+          lastLoaded = e.loaded;
+          lastTime = now;
+
+          var pct = Math.round((e.loaded / e.total) * 100);
+          var elapsed = (now - startTime) / 1000;
+          var avgSpeed = elapsed > 0 ? e.loaded / elapsed : 0;
+          var remain = e.total > e.loaded
+            ? ((e.total - e.loaded) / (avgSpeed || 1))
+            : 0;
+
+          onProgress({
+            loaded: e.loaded,
+            total: e.total,
+            percent: pct,
+            speed: speed,
+            avgSpeed: avgSpeed,
+            remaining: remain,
+            elapsed: elapsed
+          });
+        };
+      }
+
+      xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve({ ok: true, status: xhr.status, responseText: xhr.responseText });
+        } else {
+          var msg = "Upload loi " + xhr.status;
+          if (xhr.responseText) msg += ": " + xhr.responseText.slice(0, 200);
+          var err = new Error(msg);
+          err.status = xhr.status;
+          err.retryable = (xhr.status >= 500 || xhr.status === 0);
+          reject(err);
+        }
+      };
+
+      xhr.onerror = function () {
+        var err = new Error("Loi mang - kiem tra ket noi internet");
+        err.retryable = true;
+        reject(err);
+      };
+
+      xhr.ontimeout = function () {
+        var err = new Error("Upload qua " + (UPLOAD_TIMEOUT / 1000) + "s - file qua lon hoac mang cham");
+        err.retryable = false;  // KHONG retry khi timeout (tranh upload trung)
+        reject(err);
+      };
+
+      xhr.onabort = function () {
+        var err = new Error("Upload bi huy");
+        err.retryable = false;
+        reject(err);
+      };
+
+      xhr.send(file);
+    });
+  }
+
+  function formatBytes(b) {
+    if (b < 1024) return b + "B";
+    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + "KB";
+    return (b / 1024 / 1024).toFixed(2) + "MB";
+  }
+
+  function formatSpeed(bps) {
+    if (bps < 1024) return bps.toFixed(0) + "B/s";
+    if (bps < 1024 * 1024) return (bps / 1024).toFixed(0) + "KB/s";
+    return (bps / 1024 / 1024).toFixed(2) + "MB/s";
+  }
+
+  function formatTime(s) {
+    if (s < 1) return "...";
+    if (s < 60) return Math.ceil(s) + "s";
+    return Math.ceil(s / 60) + "m";
+  }
+
+  // ---- UPLOAD MAIN ----
+  function uploadMusic(file, onProgress) {
     if (!file) return Promise.reject(new Error("Chua chon file"));
 
     return resolveFileInfo(file).then(function (info) {
@@ -386,7 +441,7 @@
 
       var limit = info.isVideo ? MAX_VIDEO : MAX_AUDIO;
       if (info.size > limit) {
-        throw new Error("File qua lon (" + Math.round(info.size / 1024 / 1024) + "MB > " + Math.round(limit / 1024 / 1024) + "MB)");
+        throw new Error("File qua lon (" + formatBytes(info.size) + " > " + formatBytes(limit) + ")");
       }
 
       var path = "bgm." + info.ext;
@@ -395,53 +450,42 @@
         if (!token) throw new Error("Chua dang nhap");
 
         var url = getBaseUrl() + "/storage/v1/object/site-audio/" + path;
-        return withTimeout(
-          fetch(url, {
-            method: "POST",
-            headers: {
-              "Authorization": "Bearer " + token,
-              "x-upsert": "true",
-              "Content-Type": info.mime,
-              "Cache-Control": "3600"
-            },
-            body: file
-          }),
-          FETCH_TIMEOUT,
-          "upload"
-        ).then(function (res) {
-          if (res.ok) return true;
-          return res.text().then(function (t) {
-            throw new Error("Upload loi " + res.status + (t ? ": " + t.slice(0, 150) : ""));
+
+        return xhrUpload(url, file, token, info.mime, onProgress)
+          .then(function () {
+            var ts = Date.now();
+            var publicUrl = getBaseUrl() + "/storage/v1/object/public/site-audio/" + path + "?t=" + ts;
+            state.music.url = publicUrl;
+            state.music.updatedAt = ts;
+            return saveMusicToServer();
+          })
+          .then(function () {
+            saveMusicCache();
+            emit("bdMusicChanged");
+            return state.music.url;
           });
-        }).then(function () {
-          var ts = Date.now();
-          var publicUrl = getBaseUrl() + "/storage/v1/object/public/site-audio/" + path + "?t=" + ts;
-          state.music.url = publicUrl;
-          state.music.updatedAt = ts;
-          return saveMusicToServer();
-        }).then(function () {
-          saveMusicCache();
-          emit("bdMusicChanged");
-          return state.music.url;
-        });
       });
     });
   }
 
   function deleteMusic() {
     return getAccessToken().then(function (token) {
-      if (token && state.music.url) {
-        var m = state.music.url.match(/site-audio\/([^?]+)/);
-        var path = m ? m[1] : "bgm.mp3";
-        return withTimeout(
-          fetch(getBaseUrl() + "/storage/v1/object/site-audio/" + path, {
-            method: "DELETE",
-            headers: { "Authorization": "Bearer " + token }
-          }),
-          10000,
-          "delete"
-        ).catch(function () {});
-      }
+      if (!token || !state.music.url) return null;
+
+      var m = state.music.url.match(/site-audio\/([^?]+)/);
+      var path = m ? m[1] : "bgm.mp3";
+      var url = getBaseUrl() + "/storage/v1/object/site-audio/" + path;
+
+      return new Promise(function (resolve) {
+        var xhr = new XMLHttpRequest();
+        xhr.open("DELETE", url, true);
+        xhr.setRequestHeader("Authorization", "Bearer " + token);
+        xhr.timeout = DELETE_TIMEOUT;
+        xhr.onload = function () { resolve(true); };
+        xhr.onerror = function () { resolve(false); };
+        xhr.ontimeout = function () { resolve(false); };
+        xhr.send();
+      });
     }).then(function () {
       state.music.url = "";
       state.music.updatedAt = Date.now();
@@ -476,13 +520,12 @@
     } catch (e) { return false; }
   }
 
-  // ---- CLOSE OVERLAY ----
   function closeOverlay(id) {
     var el = document.getElementById(id);
     if (el) el.remove();
   }
 
-  // ---- CONTENT EDITOR DIALOG ----
+  // ---- CONTENT DIALOG ----
   function openContentEditor() {
     if (!isAdmin()) return;
     closeOverlay("bdContentEditorOverlay");
@@ -509,12 +552,24 @@
       '<div id="bdLyricsPreview" style="font-size:11px;color:#8a6a3a;margin-bottom:14px;min-height:14px;"></div>' +
 
       '<div style="font-size:12px;font-weight:800;color:#4a3520;margin-bottom:6px;">Nhac nen</div>' +
-      '<div style="font-size:11px;color:#888;margin-bottom:6px;">Ho tro MP3, M4A, MP4, MOV, OGG, WAV... Toi da 8MB (audio) / 15MB (video)</div>' +
+      '<div style="font-size:11px;color:#888;margin-bottom:6px;">MP3, M4A, MP4, MOV, OGG, WAV... Toi da 8MB (audio) / 15MB (video)</div>' +
       '<div id="bdMusicStatus" style="font-size:11px;color:#666;margin-bottom:8px;padding:8px 10px;' +
       'background:#f5f7fa;border-radius:6px;word-break:break-all;"></div>' +
+
+      // Progress bar (an mac dinh)
+      '<div id="bdMusicProgress" style="display:none;margin-bottom:10px;">' +
+      '<div style="height:8px;background:#e0e0e0;border-radius:4px;overflow:hidden;">' +
+      '<div id="bdMusicProgressBar" style="height:100%;width:0%;' +
+      'background:linear-gradient(90deg,#4fa370,#3d8b5f);transition:width .2s;"></div>' +
+      '</div>' +
+      '<div id="bdMusicProgressText" style="font-size:11px;color:#666;margin-top:4px;text-align:center;"></div>' +
+      '</div>' +
+
       '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
       '<button id="bdMusicPickBtn" type="button" style="flex:1;padding:10px;border:2px dashed #b0d0c0;' +
       'background:#f0f9f4;border-radius:8px;font-weight:800;font-size:13px;color:#4fa370;cursor:pointer;">Chon file nhac</button>' +
+      '<button id="bdMusicCancelBtn" type="button" style="display:none;padding:10px 14px;border:2px solid #e67e22;' +
+      'background:#fff;border-radius:8px;font-weight:800;font-size:13px;color:#e67e22;cursor:pointer;">Huy</button>' +
       '<button id="bdMusicDeleteBtn" type="button" style="padding:10px 14px;border:2px solid #e74c3c;' +
       'background:#fff;border-radius:8px;font-weight:800;font-size:13px;color:#e74c3c;cursor:pointer;">Xoa</button>' +
       '</div>' +
@@ -540,17 +595,23 @@
 
     document.body.appendChild(ov);
 
-    var ta        = ov.querySelector("#bdLyricsRaw");
-    var prev      = ov.querySelector("#bdLyricsPreview");
-    var msg       = ov.querySelector("#bdContentMsg");
-    var btnSave   = ov.querySelector("#bdContentSave");
-    var btnCancel = ov.querySelector("#bdContentCancel");
-    var statusEl  = ov.querySelector("#bdMusicStatus");
-    var pickBtn   = ov.querySelector("#bdMusicPickBtn");
-    var deleteBtn = ov.querySelector("#bdMusicDeleteBtn");
-    var fileInput = ov.querySelector("#bdMusicFileInput");
-    var volInput  = ov.querySelector("#bdMusicVolume");
-    var volLabel  = ov.querySelector("#bdMusicVolLabel");
+    var ta          = ov.querySelector("#bdLyricsRaw");
+    var prev        = ov.querySelector("#bdLyricsPreview");
+    var msg         = ov.querySelector("#bdContentMsg");
+    var btnSave     = ov.querySelector("#bdContentSave");
+    var btnCancel   = ov.querySelector("#bdContentCancel");
+    var statusEl    = ov.querySelector("#bdMusicStatus");
+    var pickBtn     = ov.querySelector("#bdMusicPickBtn");
+    var deleteBtn   = ov.querySelector("#bdMusicDeleteBtn");
+    var cancelBtn   = ov.querySelector("#bdMusicCancelBtn");
+    var fileInput   = ov.querySelector("#bdMusicFileInput");
+    var volInput    = ov.querySelector("#bdMusicVolume");
+    var volLabel    = ov.querySelector("#bdMusicVolLabel");
+    var progressBox = ov.querySelector("#bdMusicProgress");
+    var progressBar = ov.querySelector("#bdMusicProgressBar");
+    var progressTxt = ov.querySelector("#bdMusicProgressText");
+
+    var currentXHR = null;   // de co the abort
 
     ta.value = state.lyrics.raw || "";
     volInput.value = Math.round((state.music.volume || 0.4) * 100);
@@ -599,27 +660,53 @@
 
     pickBtn.onclick = function () { fileInput.click(); };
 
+    cancelBtn.onclick = function () {
+      if (currentXHR && currentXHR.abort) currentXHR.abort();
+    };
+
+    function setUploading(on) {
+      pickBtn.style.display = on ? "none" : "";
+      deleteBtn.style.display = on ? "none" : "";
+      cancelBtn.style.display = on ? "" : "none";
+      progressBox.style.display = on ? "block" : "none";
+      if (!on) {
+        progressBar.style.width = "0%";
+        progressTxt.textContent = "";
+      }
+    }
+
     fileInput.onchange = function () {
       var f = fileInput.files && fileInput.files[0];
       if (!f) return;
-      pickBtn.disabled = true;
-      pickBtn.textContent = "Dang upload...";
+
+      setUploading(true);
       msg.textContent = "";
       msg.style.color = "#666";
 
-      withRetry(function () { return uploadMusic(f); }, 2, "upload")
+      // Override XHR for cancel support
+      var origXhrUpload = xhrUpload;
+      // Just run uploadMusic, XHR timeout 120s
+      uploadMusic(f, function (p) {
+        progressBar.style.width = p.percent + "%";
+        progressTxt.textContent =
+          p.percent + "% · " +
+          formatBytes(p.loaded) + " / " + formatBytes(p.total) +
+          " · " + formatSpeed(p.avgSpeed) +
+          " · con " + formatTime(p.remaining);
+      })
         .then(function () {
           updateMusicStatus();
           msg.textContent = "Upload nhac thanh cong";
           msg.style.color = "#4fa370";
         })
         .catch(function (e) {
-          msg.textContent = "Loi: " + (e && e.message ? e.message : "Upload loi");
+          var errMsg = e && e.message ? e.message : "Upload loi";
+          if (e && e.retryable) errMsg += " (co the thu lai)";
+          msg.textContent = errMsg;
           msg.style.color = "#e74c3c";
         })
         .then(function () {
-          pickBtn.disabled = false;
-          pickBtn.textContent = "Chon file nhac";
+          setUploading(false);
           fileInput.value = "";
         });
     };
@@ -629,7 +716,6 @@
       deleteBtn.disabled = true;
       deleteBtn.textContent = "...";
       msg.textContent = "";
-
       deleteMusic()
         .then(function () {
           updateMusicStatus();
@@ -687,7 +773,7 @@
     };
   }
 
-  // ---- TITLE EDITOR DIALOG ----
+  // ---- TITLE DIALOG ----
   function openTitleEditor() {
     if (!isAdmin()) return;
     closeOverlay("bdTitleEditorOverlay");
@@ -835,7 +921,6 @@
     console.log("lyrics:", getLyricsPhrases().length, "cau");
     console.log("music:", state.music);
     console.log("sb.rpc:", typeof (window.__sb && window.__sb.rpc));
-    console.log("sb.auth:", typeof (window.__sb && window.__sb.auth));
     console.log("=== END ===");
   };
 
@@ -846,7 +931,6 @@
     loadMusicCache();
     bindAllLongPress();
 
-    // Fetch in background (stale-while-revalidate)
     Promise.all([
       loadTitleFromServer(),
       loadLyricsFromServer(),
@@ -873,7 +957,6 @@
     });
   }
 
-  // ---- PUBLIC API ----
   window.__bdTitle = {
     getHTML: getTitleHTML,
     getLines: function () {
