@@ -1,11 +1,11 @@
 /* =========================================================
-   LANDING VIEW — v4.1 (title editable + countdown khoá)
+   LANDING VIEW — v5.0 (lyrics thay countdown)
    ---------------------------------------------------------
-   v4.1:
-   - Giữ title editable (admin long-press qua __bdTitle)
-   - Bỏ hoàn toàn feed sinh nhật + title "Happy Birthday"
-   - Title mặc định trống → admin thấy placeholder để long-press
-   - Countdown đếm ngược đến giờ khoá Checklist
+   v5.0:
+   - Nếu admin đã đặt lyrics (site_lyrics) → hiện LYRICS bay lên
+   - Nếu chưa có lyrics → fallback countdown khoá Checklist
+   - Mỗi câu lyric ~3.5s: fade in → giữ → fade out bay lên
+   - Admin long-press (lyric HOẶC countdown) → mở editor lyrics
    ========================================================= */
 (function(){
   "use strict";
@@ -43,7 +43,6 @@
     if (bd && typeof bd.getHTML === 'function') {
       try { html = bd.getHTML() || ''; } catch (_) {}
     }
-
     if (!html) {
       if (!_isAdmin()) return '';
       return '<span class="landing-title rainbow-birthday" ' +
@@ -51,12 +50,123 @@
         'user-select:none;-webkit-user-select:none;" ' +
         'data-placeholder="1">✏️ Nhấn giữ để thêm tiêu đề</span>';
     }
-
     return '<span class="landing-title rainbow-birthday">' + html + '</span>';
   }
 
   /* ═══════════════════════════════════════════════════════
-     ⭐ COUNTDOWN KHOÁ CHECKLIST
+     ⭐ LYRICS — player bay lên
+     ═══════════════════════════════════════════════════════ */
+  const PHRASE_MS = 3500;
+  let _lyricTimer = null;
+  let _lyricIndex = 0;
+  let _lyricPhrases = [];
+
+  function _ensureLyricStyles() {
+    if (document.getElementById('landingLyricStyle')) return;
+    const s = document.createElement('style');
+    s.id = 'landingLyricStyle';
+    s.textContent = `
+      @keyframes lyricFlyUp {
+        0%   { opacity: 0; transform: translateY(20px); }
+        15%  { opacity: 1; transform: translateY(0); }
+        80%  { opacity: 1; transform: translateY(0); }
+        100% { opacity: 0; transform: translateY(-32px); }
+      }
+
+      .landing-lyric {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 100% !important;
+        height: 36px !important;
+        min-height: 36px !important;
+        max-height: 36px !important;
+        overflow: hidden !important;
+        position: relative !important;
+        margin: 0 auto 14px !important;
+        padding: 0 12px !important;
+        box-sizing: border-box !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+      }
+
+      .landing-lyric-inner {
+        display: block !important;
+        text-align: center !important;
+        font-family: inherit !important;
+        font-size: 13px !important;
+        font-weight: 800 !important;
+        color: #6a4a20 !important;
+        letter-spacing: 0.01em !important;
+        line-height: 1.4 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        max-width: 100% !important;
+        animation: lyricFlyUp ${PHRASE_MS}ms ease-in-out infinite !important;
+        will-change: transform, opacity !important;
+      }
+    `;
+    document.head.appendChild(s);
+  }
+
+  function _getLyricPhrases() {
+    const bd = window.__bdTitle;
+    if (bd && typeof bd.getLyricsPhrases === 'function') {
+      try {
+        const p = bd.getLyricsPhrases();
+        if (Array.isArray(p)) return p;
+      } catch (_) {}
+    }
+    return [];
+  }
+
+  function _renderLyricPhrase() {
+    const el = document.getElementById('landingLyricInner');
+    if (!el) return;
+    if (!_lyricPhrases.length) { el.textContent = ''; return; }
+    const phrase = _lyricPhrases[_lyricIndex % _lyricPhrases.length];
+    el.style.animation = 'none';
+    void el.offsetWidth; // force reflow → restart animation
+    el.style.animation = '';
+    el.textContent = phrase;
+  }
+
+  function _nextLyric() {
+    if (document.hidden) return;
+    if (!_lyricPhrases.length) return;
+    _lyricIndex = (_lyricIndex + 1) % _lyricPhrases.length;
+    _renderLyricPhrase();
+  }
+
+  function _startLyricPlayer() {
+    _lyricPhrases = _getLyricPhrases();
+    if (!_lyricPhrases.length) { _stopLyricPlayer(); return false; }
+    if (_lyricTimer) return true;
+    _lyricIndex = 0;
+    _renderLyricPhrase();
+    _lyricTimer = setInterval(_nextLyric, PHRASE_MS);
+    return true;
+  }
+
+  function _stopLyricPlayer() {
+    if (_lyricTimer) {
+      clearInterval(_lyricTimer);
+      _lyricTimer = null;
+    }
+  }
+
+  function _getLyricHTML() {
+    _ensureLyricStyles();
+    const phrases = _getLyricPhrases();
+    const firstTxt = phrases[0] ? _esc(phrases[0]) : '';
+    return '<span class="landing-lyric" id="landingLyric" ' +
+      'aria-label="Lời bài hát"><span class="landing-lyric-inner" ' +
+      'id="landingLyricInner">' + firstTxt + '</span></span>';
+  }
+
+  /* ═══════════════════════════════════════════════════════
+     ⭐ COUNTDOWN KHOÁ CHECKLIST — fallback khi không có lyrics
      ═══════════════════════════════════════════════════════ */
   let _countdownTimer = null;
 
@@ -71,9 +181,10 @@
       }
     } catch (_) {}
     const parts = str.split(':');
-    const hh = Math.max(0, Math.min(23, parseInt(parts[0], 10) || 21));
-    const mm = Math.max(0, Math.min(59, parseInt(parts[1], 10) || 0));
-    return { hh, mm };
+    return {
+      hh: Math.max(0, Math.min(23, parseInt(parts[0], 10) || 21)),
+      mm: Math.max(0, Math.min(59, parseInt(parts[1], 10) || 0))
+    };
   }
 
   function _getVNNowParts() {
@@ -87,12 +198,9 @@
       const p = {};
       fmt.formatToParts(new Date()).forEach(function (x) { p[x.type] = x.value; });
       return {
-        year: parseInt(p.year, 10),
-        month: parseInt(p.month, 10) - 1,
-        day: parseInt(p.day, 10),
-        hour: parseInt(p.hour, 10),
-        minute: parseInt(p.minute, 10),
-        second: parseInt(p.second, 10)
+        year: parseInt(p.year, 10), month: parseInt(p.month, 10) - 1,
+        day: parseInt(p.day, 10), hour: parseInt(p.hour, 10),
+        minute: parseInt(p.minute, 10), second: parseInt(p.second, 10)
       };
     } catch (_) {
       const n = new Date();
@@ -106,26 +214,19 @@
   function _getLockState() {
     const hm = _getLockTimeHM();
     const p = _getVNNowParts();
-
-    const lockTodayEpoch = Date.UTC(p.year, p.month, p.day, hm.hh - 7, hm.mm, 0, 0);
-    const nowEpoch = Date.now();
-
-    if (nowEpoch >= lockTodayEpoch) {
-      const nextMidnightEpoch = Date.UTC(p.year, p.month, p.day + 1, -7, 0, 0, 0);
-      return { targetEpoch: nextMidnightEpoch, isLocked: true };
+    const lockToday = Date.UTC(p.year, p.month, p.day, hm.hh - 7, hm.mm, 0, 0);
+    const now = Date.now();
+    if (now >= lockToday) {
+      return { targetEpoch: Date.UTC(p.year, p.month, p.day + 1, -7, 0, 0, 0), isLocked: true };
     }
-    return { targetEpoch: lockTodayEpoch, isLocked: false };
+    return { targetEpoch: lockToday, isLocked: false };
   }
 
   function _buildCountdownInner(diffMs, isLocked) {
-    const totalSec = Math.max(0, Math.floor(diffMs / 1000));
-    const hours = Math.floor(totalSec / 3600);
-    const minutes = Math.floor((totalSec % 3600) / 60);
-    const seconds = totalSec % 60;
-    const hh = _pad2(hours);
-    const mm = _pad2(minutes);
-    const ss = _pad2(seconds);
-
+    const t = Math.max(0, Math.floor(diffMs / 1000));
+    const hh = _pad2(Math.floor(t / 3600));
+    const mm = _pad2(Math.floor((t % 3600) / 60));
+    const ss = _pad2(t % 60);
     if (isLocked) {
       return `🔒 Đã khoá · Mở lại sau <b>${hh}</b> Giờ : <b>${mm}</b> Phút : <b>${ss}</b> Giây`;
     }
@@ -142,7 +243,6 @@
   function _updateCountdownLive() {
     const el = document.querySelector('.birthday-countdown');
     if (!el) { _stopCountdownTimer(); return; }
-
     const st = _getLockState();
     const diff = st.targetEpoch - Date.now();
     const isEnded = el.classList.contains('ended');
@@ -165,6 +265,23 @@
   }
 
   /* ═══════════════════════════════════════════════════════
+     DYNAMIC AREA — lyrics ưu tiên, countdown fallback
+     ═══════════════════════════════════════════════════════ */
+  function _getDynamicHTML() {
+    if (_getLyricPhrases().length) return _getLyricHTML();
+    return _getCountdownHTML();
+  }
+
+  function _startDynamic() {
+    if (_startLyricPlayer()) {
+      _stopCountdownTimer();
+    } else {
+      _stopLyricPlayer();
+      _startCountdownTimer();
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════
      FALLBACK
      ═══════════════════════════════════════════════════════ */
   let _lastTop3Signature = '';
@@ -180,7 +297,7 @@
       els.question.innerHTML = `
         <span class="landing-kicker">🐱 DAILY TEAM HUB</span>
         ${_renderTitleArea()}
-        ${_getCountdownHTML()}
+        ${_getDynamicHTML()}
         <span class="landing-cta${ctaLocked ? ' locked' : ''}" data-cta="${stateName}" role="button">${_esc(ci.text)}</span>
       `;
       els.question.classList.add('play');
@@ -188,7 +305,7 @@
       els.question.style.transform = 'scale(1)';
       els.question.style.pointerEvents = ctaLocked ? 'none' : 'auto';
 
-      _startCountdownTimer();
+      _startDynamic();
       console.warn('[LandingView] FALLBACK RENDERED');
     } catch (e) {
       console.error('[LandingView] Fallback crash:', e);
@@ -377,8 +494,11 @@
       const top3HTML = buildTop3HTML(top3);
       els.question.classList.toggle('landing-court-active', top3.length > 3);
 
-      const hasCountdown = !!els.question.querySelector('.birthday-countdown');
-      const hasStructure = hasCountdown && !forceFullReplay;
+      // "Có structure" = đã có lyric hoặc countdown
+      const hasDynamic =
+        !!els.question.querySelector('.landing-lyric') ||
+        !!els.question.querySelector('.birthday-countdown');
+      const hasStructure = hasDynamic && !forceFullReplay;
 
       /* ═══════ CASE 1: BUILD ═══════ */
       if (!hasStructure) {
@@ -394,7 +514,7 @@
         els.question.innerHTML = `
           <span class="landing-kicker" data-kicker-version="${kv}">${kh}</span>
           ${_renderTitleArea()}
-          ${_getCountdownHTML()}
+          ${_getDynamicHTML()}
           ${top3HTML}
           <span class="landing-cta${ctaLocked ? ' locked' : ''}" data-cta="${ctaState}" role="button" ${ctaLocked ? 'aria-disabled="true" tabindex="-1"' : 'tabindex="0"'}>${_esc(ci.text)}</span>
           ${ctaIsLockedState ? `<span class="landing-lock-note">Sau ${S.checklistLockTime} sẽ khoá Checklist nha mn 🥰</span>` : ''}
@@ -408,14 +528,33 @@
         els.question.style.transform = 'scale(1)';
         els.question.style.pointerEvents = ctaLocked ? 'none' : 'auto';
 
-        _startCountdownTimer();
+        _startDynamic();
         return;
       }
 
       /* ═══════ CASE 2: UPDATE ═══════ */
 
-      /* 2a. Countdown — luôn có */
-      _startCountdownTimer();
+      /* 2a. Dynamic — swap lyric ↔ countdown nếu cần */
+      const wantsLyric = _getLyricPhrases().length > 0;
+      const hasLyricEl = !!els.question.querySelector('.landing-lyric');
+      const hasCountdownEl = !!els.question.querySelector('.birthday-countdown');
+
+      if (wantsLyric && !hasLyricEl) {
+        if (hasCountdownEl) els.question.querySelector('.birthday-countdown')?.remove();
+        const anchor = els.question.querySelector('.landing-title') || els.question.querySelector('.landing-kicker');
+        if (anchor) anchor.insertAdjacentHTML('afterend', _getLyricHTML());
+        _stopCountdownTimer();
+        _startLyricPlayer();
+      } else if (!wantsLyric && !hasCountdownEl) {
+        if (hasLyricEl) els.question.querySelector('.landing-lyric')?.remove();
+        const anchor = els.question.querySelector('.landing-title') || els.question.querySelector('.landing-kicker');
+        if (anchor) anchor.insertAdjacentHTML('afterend', _getCountdownHTML());
+        _stopLyricPlayer();
+        _startCountdownTimer();
+      } else {
+        // Cùng loại → đảm bảo timer chạy
+        _startDynamic();
+      }
 
       /* 2b. Update top3 */
       if (top3Changed) {
@@ -534,10 +673,15 @@
     if (!document.hidden) _updateCountdownLive();
   });
 
+  /* Re-render khi admin đổi title hoặc lyrics */
   window.addEventListener('bdTitleChanged', function () {
     try { renderLandingState(true); }
     catch (e) { console.error('[LandingView] bdTitle re-render:', e); }
   });
+  window.addEventListener('bdLyricsChanged', function () {
+    try { _stopLyricPlayer(); renderLandingState(true); }
+    catch (e) { console.error('[LandingView] bdLyrics re-render:', e); }
+  });
 
-  console.log('[LandingView] v4.1 ready ✓ (title editable + countdown khoá)');
+  console.log('[LandingView] v5.0 ready ✓ (lyrics > countdown)');
 })();
