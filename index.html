@@ -16,74 +16,21 @@
 <meta name="application-name" content="Đảo Mèo">
 <meta name="description" content="Đảo Mèo — Daily Mission, Checklist & Chấm công">
 
-<script>
-(function(){
-  "use strict";
-  var LS_KEY = '__srank_ver';
-  function getStored(){ try { return localStorage.getItem(LS_KEY) || ''; } catch(_){ return ''; } }
-  function setStored(v){ try { localStorage.setItem(LS_KEY, v); } catch(_){} }
-  async function fetchVersion(){
-    try {
-      var res = await fetch('/version.json?_=' + Date.now(), { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
-      if (!res.ok) return null;
-      var data = await res.json();
-      return data && data.v ? String(data.v) : null;
-    } catch(_){ return null; }
-  }
-  async function clearAll(){
-    var tasks = [];
-    if ('serviceWorker' in navigator){
-      tasks.push(navigator.serviceWorker.getRegistrations()
-        .then(function(regs){ return Promise.all(regs.map(function(r){ return r.unregister(); })); })
-        .catch(function(){}));
-    }
-    if ('caches' in window){
-      tasks.push(caches.keys()
-        .then(function(keys){ return Promise.all(keys.map(function(k){ return caches.delete(k); })); })
-        .catch(function(){}));
-    }
-    await Promise.all(tasks);
-  }
-  function hardReload(){
-    var url = new URL(location.href);
-    url.searchParams.set('_v', Date.now());
-    location.replace(url.toString());
-  }
-  (async function(){
-    var stored = getStored();
-    var remote = await fetchVersion();
-    if (!remote) return;
-    if (!stored){ setStored(remote); return; }
-    if (stored === remote) return;
-    await clearAll();
-    setStored(remote);
-    hardReload();
-  })();
-  setInterval(async function(){
-    if (document.hidden) return;
-    var remote = await fetchVersion();
-    if (!remote) return;
-    var stored = getStored();
-    if (stored && stored !== remote){ await clearAll(); setStored(remote); hardReload(); }
-  }, 5 * 60 * 1000);
-  document.addEventListener('visibilitychange', async function(){
-    if (document.hidden) return;
-    var remote = await fetchVersion();
-    if (!remote) return;
-    var stored = getStored();
-    if (stored && stored !== remote){ await clearAll(); setStored(remote); hardReload(); }
-  });
-})();
-</script>
-
+<!-- ═══ TỐI ƯU: Preconnect sớm cho mọi origin quan trọng ═══ -->
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
 <link rel="preconnect" href="https://tumjcsaexddioecwjolp.supabase.co" crossorigin>
 <link rel="dns-prefetch" href="https://tumjcsaexddioecwjolp.supabase.co">
+<link rel="dns-prefetch" href="https://tikwm.com">
 
 <title>S Rank — Daily Mission</title>
-<link rel="preload" href="css/main.css" as="style">
-<link rel="preload" href="js/main.js" as="script">
+
+<!-- ═══ TỐI ƯU: Preload file quan trọng nhất ═══ -->
+<!-- main.css = critical, cần fetch priority cao -->
+<link rel="preload" href="css/main.css" as="style" fetchpriority="high">
+<!-- supabase CDN = file nặng nhất, boot app cần ngay -->
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" as="script" crossorigin>
+
 <link rel="stylesheet" href="css/main.css">
 <link rel="stylesheet" href="css/menu.css">
 <link rel="stylesheet" href="css/shop.css">
@@ -119,7 +66,7 @@
 }
 
 .bd-name {
-  color: #d68f20 !important; /* Màu cam nổi bật cho tên */
+  color: #d68f20 !important;
   font-weight: 950 !important;
 }
 
@@ -128,7 +75,6 @@
   font-style: italic !important;
 }
 
-/* Hiệu ứng trượt lên mờ dần (copy từ live spin) */
 .spin-feed-item-out {
   animation: spinFeedUpOut 0.48s cubic-bezier(0.4, 0, 0.6, 1) forwards;
 }
@@ -168,7 +114,7 @@ html body #question .landing-title.rainbow-birthday {
   gap: 2px !important;
   font-size: 26px !important;
   line-height: 1.25 !important;
-  font-weight: 900 !important; /* Giảm từ 950 xuống 900 cho bớt chói */
+  font-weight: 900 !important;
   text-transform: none !important;
   letter-spacing: -0.01em !important;
   color: #ff1493 !important;
@@ -193,7 +139,6 @@ html body #question .landing-title.rainbow-birthday .rainbow-line {
   letter-spacing: -0.01em !important;
   text-transform: none !important;
   white-space: nowrap !important;
-  /* ⭐ Gradient màu Pastel dịu mắt */
   background: linear-gradient(
     90deg,
     #ff9a9e 0%,
@@ -209,7 +154,7 @@ html body #question .landing-title.rainbow-birthday .rainbow-line {
   -webkit-text-fill-color: transparent !important;
   color: transparent !important;
   text-shadow: none !important;
-  animation: rainbowScroll 6s linear infinite !important; /* Chậm lại 6s cho bớt chói */
+  animation: rainbowScroll 6s linear infinite !important;
   padding: 2px 4px !important;
   -webkit-font-smoothing: antialiased !important;
 }
@@ -233,17 +178,17 @@ html body #question .landing-title.rainbow-birthday .rainbow-line {
    ═══════════════════════════════════════════════════════════ */
 html body #question .birthday-countdown {
   display: block !important;
-  margin: 0 auto 14px !important; /* Thu gọn margin */
+  margin: 0 auto 14px !important;
   padding: 0 !important;
   text-align: center !important;
   font-family: inherit !important;
-  font-size: 11px !important; /* Thu nhỏ font */
+  font-size: 11px !important;
   font-weight: 700 !important;
-  color: #6a4a20 !important; /* Màu nâu nhạt */
+  color: #6a4a20 !important;
   letter-spacing: 0.01em !important;
   line-height: 1.4 !important;
   font-variant-numeric: tabular-nums !important;
-  white-space: nowrap !important; /* ⭐ Ép 1 dòng */
+  white-space: nowrap !important;
   max-width: 100% !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
@@ -251,7 +196,7 @@ html body #question .birthday-countdown {
 
 html body #question .birthday-countdown b {
   display: inline-block !important;
-  color: #4a3520 !important; /* Số đậm hơn chữ một chút */
+  color: #4a3520 !important;
   font-weight: 900 !important;
   font-size: 12.5px !important;
   font-variant-numeric: tabular-nums !important;
@@ -259,7 +204,7 @@ html body #question .birthday-countdown b {
 }
 
 html body #question .birthday-countdown.ended {
-  color: #4fa370 !important; /* Đổi sang màu xanh lá dịu */
+  color: #4fa370 !important;
   font-weight: 900 !important;
   font-size: 13px !important;
   animation: birthdayPulse 1.5s ease-in-out infinite !important;
@@ -750,39 +695,45 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
   <button class="att-multi-action clear" data-multi-status="" type="button">Xóa</button>
 </div>
 
-<script src="js/config.js"></script>
-<script src="js/debug-menu.js"></script>
-<script src="js/role.js" defer></script>
-<script src="js/toast.js" defer></script>
-<script src="js/admin-session.js" defer></script>
-<script src="js/store.js" defer></script>
-<script src="js/scheduler.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/supabase-adapter.js" defer></script>
-<script src="js/display-name.js" defer></script>
-<script src="js/auth.js" defer></script>
-<script src="js/main.js" defer></script>
-<script src="js/content-editor.js" defer></script>
-<script src="js/landing.js" defer></script>
-<script src="js/admin.js" defer></script>
-<script src="js/checklist-view.js" defer></script>
-<script src="js/cta-morph.js" defer></script>
-<script src="js/auth-ui.js" defer></script>
-<script src="js/avatar-upload.js" defer></script>
-<script src="js/checklist-ui.js?v=6.3" defer></script>
-<script src="js/checklist-bridge.js" defer></script>
-<script src="js/wheel-fallback.js" defer></script>
-<script src="js/attendance.js" defer></script>
-<script src="js/attendance-top3.js" defer></script>
-<script src="js/realtime.js" defer></script>
-<script src="js/menu.js" defer></script>
-<script src="js/avatar-effect.js" defer></script>
-<script src="js/shop.js" defer></script>
-<script src="js/shop-admin.js" defer></script>
-<script src="js/shop-requests.js" defer></script>
-<script src="js/spin-feed.js" defer></script>
-<script src="js/admin-data.js" defer></script>
+<!-- ══════════════════════════════════════════════════════════
+     ⚡ TỐI ƯU: TẤT CẢ script đều có defer — tải song song
+     ══════════════════════════════════════════════════════════ -->
+<script defer src="js/config.js"></script>
+<script defer src="js/role.js"></script>
+<script defer src="js/toast.js"></script>
+<script defer src="js/admin-session.js"></script>
+<script defer src="js/store.js"></script>
+<script defer src="js/scheduler.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script defer src="js/supabase-adapter.js"></script>
+<script defer src="js/display-name.js"></script>
+<script defer src="js/auth.js"></script>
+<script defer src="js/main.js"></script>
+<script defer src="js/content-editor.js"></script>
+<script defer src="js/landing.js"></script>
+<script defer src="js/admin.js"></script>
+<script defer src="js/checklist-view.js"></script>
+<script defer src="js/cta-morph.js"></script>
+<script defer src="js/auth-ui.js"></script>
+<script defer src="js/avatar-upload.js"></script>
+<script defer src="js/checklist-ui.js?v=6.3"></script>
+<script defer src="js/checklist-bridge.js"></script>
+<script defer src="js/wheel-fallback.js"></script>
+<script defer src="js/attendance.js"></script>
+<script defer src="js/attendance-top3.js"></script>
+<script defer src="js/realtime.js"></script>
+<script defer src="js/menu.js"></script>
+<script defer src="js/avatar-effect.js"></script>
+<script defer src="js/shop.js"></script>
+<script defer src="js/shop-admin.js"></script>
+<script defer src="js/shop-requests.js"></script>
+<script defer src="js/spin-feed.js"></script>
+<script defer src="js/admin-data.js"></script>
+<script defer src="js/debug-menu.js"></script>
 
+<!-- ══════════════════════════════════════════════════════════
+     TỐI ƯU: scroll-top chạy sau load, không block
+     ══════════════════════════════════════════════════════════ -->
 <script>
 (function(){
   "use strict";
@@ -797,6 +748,76 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
     setTimeout(scrollTopOnce, 600);
     setTimeout(scrollTopOnce, 1500);
   });
+})();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     TỐI ƯU LỚN: Version check chuyển xuống cuối body
+     - Trước: chạy ngay đầu <head> → fetch version.json chiếm
+       bandwidth của CSS/JS quan trọng
+     - Sau: chờ load xong mới check (trễ < 1s, không ai thấy)
+     - Logic giữ nguyên 100%
+     ══════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  "use strict";
+  var LS_KEY = '__srank_ver';
+  function getStored(){ try { return localStorage.getItem(LS_KEY) || ''; } catch(_){ return ''; } }
+  function setStored(v){ try { localStorage.setItem(LS_KEY, v); } catch(_){} }
+  async function fetchVersion(){
+    try {
+      var res = await fetch('/version.json?_=' + Date.now(), { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
+      if (!res.ok) return null;
+      var data = await res.json();
+      return data && data.v ? String(data.v) : null;
+    } catch(_){ return null; }
+  }
+  async function clearAll(){
+    var tasks = [];
+    if ('serviceWorker' in navigator){
+      tasks.push(navigator.serviceWorker.getRegistrations()
+        .then(function(regs){ return Promise.all(regs.map(function(r){ return r.unregister(); })); })
+        .catch(function(){}));
+    }
+    if ('caches' in window){
+      tasks.push(caches.keys()
+        .then(function(keys){ return Promise.all(keys.map(function(k){ return caches.delete(k); })); })
+        .catch(function(){}));
+    }
+    await Promise.all(tasks);
+  }
+  function hardReload(){
+    var url = new URL(location.href);
+    url.searchParams.set('_v', Date.now());
+    location.replace(url.toString());
+  }
+  async function checkVersion(){
+    var stored = getStored();
+    var remote = await fetchVersion();
+    if (!remote) return;
+    if (!stored){ setStored(remote); return; }
+    if (stored === remote) return;
+    await clearAll();
+    setStored(remote);
+    hardReload();
+  }
+  function startWatchers(){
+    checkVersion();
+    setInterval(async function(){
+      if (document.hidden) return;
+      checkVersion();
+    }, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', function(){
+      if (document.hidden) return;
+      checkVersion();
+    });
+  }
+  // Chờ load xong mới check — không tranh bandwidth với CSS/JS
+  if (document.readyState === 'complete') {
+    startWatchers();
+  } else {
+    window.addEventListener('load', startWatchers, { once: true });
+  }
 })();
 </script>
 
