@@ -1,18 +1,19 @@
 /* =========================================================
-   CONTENT EDITOR - v2.1
+   CONTENT EDITOR - v2.2
    ---------------------------------------------------------
-   v2.1:
-   - Upload bang XHR (co progress %)
-   - Timeout 120s cho upload (truoc do 20s qua ngan)
-   - Chi retry khi network error, khong retry khi timeout
-   - Hien thi MB/%/speed
+   v2.2:
+   - BO upload file, chuyen sang nhap LINK nhac
+   - Ho tro YouTube, TikTok (auto extract qua cobalt.tools)
+   - Ho tro link MP3 truc tiep
+   - Luu ca sourceUrl (link goc) va url (link phat truc tiep)
+   v2.1: Upload XHR (da bo)
    v2.0: ultra-safe ES5
    ========================================================= */
 (function () {
   "use strict";
   if (window.__bdTitle) return;
 
-  window.__bdTitleBuild = "v2.1.0";
+  window.__bdTitleBuild = "v2.2.0";
   console.log("[bdTitle] BUILD=" + window.__bdTitleBuild);
 
   var CACHE_TITLE = "srank_ct_v3";
@@ -30,16 +31,13 @@
   var RPC_SET     = "rpc_set_site_setting";
 
   var LONG_PRESS_MS   = 650;
-  var MAX_AUDIO       = 8  * 1024 * 1024;
-  var MAX_VIDEO       = 15 * 1024 * 1024;
   var RPC_TIMEOUT     = 15000;
-  var UPLOAD_TIMEOUT  = 120000;  // 120s cho upload mobile
-  var DELETE_TIMEOUT  = 20000;
+  var EXTRACT_TIMEOUT = 30000;
 
   var state = {
     title:  { line1: "", line2: "" },
     lyrics: { raw: "" },
-    music:  { url: "", volume: 0.4, updatedAt: 0 }
+    music:  { url: "", sourceUrl: "", volume: 0.4, updatedAt: 0 }
   };
 
   function esc(s) {
@@ -73,6 +71,18 @@
         function (e) { clearTimeout(timer); reject(e); }
       );
     });
+  }
+
+  function shortUrl(u) {
+    var s = String(u || "");
+    try {
+      var url = new URL(s);
+      var p = url.pathname.split("/").filter(Boolean).pop() || "";
+      p = p.length > 24 ? p.slice(0, 24) + "..." : p;
+      return url.hostname + (p ? "/" + p : "");
+    } catch (e) {
+      return s.length > 50 ? s.slice(0, 50) + "..." : s;
+    }
   }
 
   // ---- TITLE ----
@@ -167,6 +177,7 @@
   function getMusic() {
     return {
       url: String(state.music.url || ""),
+      sourceUrl: String(state.music.sourceUrl || ""),
       volume: Number(state.music.volume) || 0.4,
       updatedAt: Number(state.music.updatedAt) || 0
     };
@@ -176,6 +187,7 @@
     var o = safeParse(localStorage.getItem(CACHE_MUSIC), null);
     if (!o || typeof o.url !== "string") return false;
     state.music.url = o.url;
+    state.music.sourceUrl = typeof o.sourceUrl === "string" ? o.sourceUrl : "";
     state.music.volume = Number(o.volume) || 0.4;
     state.music.updatedAt = Number(o.updatedAt) || 0;
     return true;
@@ -184,7 +196,10 @@
   function saveMusicCache() {
     try {
       localStorage.setItem(CACHE_MUSIC, JSON.stringify({
-        url: state.music.url, volume: state.music.volume, updatedAt: state.music.updatedAt
+        url: state.music.url,
+        sourceUrl: state.music.sourceUrl,
+        volume: state.music.volume,
+        updatedAt: state.music.updatedAt
       }));
     } catch (e) {}
   }
@@ -193,10 +208,13 @@
     return rpcLoad(KEY_MUSIC, function (o) {
       if (!o || typeof o.url !== "string") return false;
       var nu = o.url;
+      var ns = typeof o.sourceUrl === "string" ? o.sourceUrl : "";
       var nv = Number(o.volume) || 0.4;
       var nt = Number(o.updatedAt) || 0;
-      var changed = (nu !== state.music.url) || (nv !== state.music.volume) || (nt !== state.music.updatedAt);
+      var changed = (nu !== state.music.url) || (ns !== state.music.sourceUrl) ||
+                    (nv !== state.music.volume) || (nt !== state.music.updatedAt);
       state.music.url = nu;
+      state.music.sourceUrl = ns;
       state.music.volume = nv;
       state.music.updatedAt = nt;
       saveMusicCache();
@@ -206,8 +224,75 @@
 
   function saveMusicToServer() {
     return rpcSave(KEY_MUSIC, JSON.stringify({
-      url: state.music.url, volume: state.music.volume, updatedAt: state.music.updatedAt
+      url: state.music.url,
+      sourceUrl: state.music.sourceUrl,
+      volume: state.music.volume,
+      updatedAt: state.music.updatedAt
     }));
+  }
+
+  // ---- MUSIC URL HELPERS ----
+  function isYouTubeUrl(u) {
+    return /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/|m\.youtube\.com\/watch\?v=)/.test(u);
+  }
+
+  function isTikTokUrl(u) {
+    return /tiktok\.com\//.test(u);
+  }
+
+  /**
+   * Tra ve { directUrl, sourceUrl }.
+   * - Link truc tiep (mp3, m4a...) -> giu nguyen
+   * - YT/TikTok -> extract qua cobalt.tools (link mp3 tam thoi)
+   * Note: link extract co the het han sau vai gio. Admin mo editor luu lai la xong.
+   */
+  function extractMusicUrl(inputUrl) {
+    var url = String(inputUrl || "").trim();
+    if (!url) return Promise.resolve({ directUrl: "", sourceUrl: "" });
+
+    if (!isYouTubeUrl(url) && !isTikTokUrl(url)) {
+      return Promise.resolve({ directUrl: url, sourceUrl: "" });
+    }
+
+    return withTimeout(
+      new Promise(function (resolve, reject) {
+        var body = {
+          url: url,
+          isAudioOnly: true,
+          aFormat: "mp3",
+          filenameStyle: "basic"
+        };
+        fetch("https://api.cobalt.tools/api/json", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          },
+          body: JSON.stringify(body)
+        })
+          .then(function (r) {
+            if (!r.ok) {
+              throw new Error("Khong the lay nhac tu link (HTTP " + r.status + ")");
+            }
+            return r.json();
+          })
+          .then(function (data) {
+            if (!data) throw new Error("Phan hoi rong tu server extract");
+            if (data.status === "error") {
+              var code = (data.error && data.error.code) || "unknown";
+              throw new Error("Khong ho tro link nay (" + code + ")");
+            }
+            if ((data.status === "tunnel" || data.status === "redirect" || data.status === "stream") && data.url) {
+              resolve({ directUrl: data.url, sourceUrl: url });
+            } else {
+              throw new Error("Khong the lay nhac tu link nay");
+            }
+          })
+          .catch(reject);
+      }),
+      EXTRACT_TIMEOUT,
+      "extract_music"
+    );
   }
 
   // ---- SUPABASE ----
@@ -257,243 +342,6 @@
         }
         return true;
       });
-  }
-
-  // ---- FILE SNIFF ----
-  function sniffFileType(file) {
-    return new Promise(function (resolve) {
-      try {
-        var blob = file.slice(0, 12);
-        var reader = new FileReader();
-        reader.onload = function (e) {
-          try {
-            var u = new Uint8Array(e.target.result);
-            if (u[0] === 0x49 && u[1] === 0x44 && u[2] === 0x33) return resolve("audio/mpeg");
-            if (u[0] === 0xFF && (u[1] & 0xE0) === 0xE0) return resolve("audio/mpeg");
-            if (u[4] === 0x66 && u[5] === 0x74 && u[6] === 0x79 && u[7] === 0x70) {
-              var b = String.fromCharCode(u[8], u[9], u[10], u[11]);
-              if (b.indexOf("M4A") === 0 || b.indexOf("M4B") === 0) return resolve("audio/mp4");
-              if (b.indexOf("mp42") === 0 || b.indexOf("isom") === 0 || b.indexOf("mp41") === 0) return resolve("video/mp4");
-              return resolve("audio/mp4");
-            }
-            if (u[0] === 0x4F && u[1] === 0x67 && u[2] === 0x67 && u[3] === 0x53) return resolve("audio/ogg");
-            if (u[0] === 0x52 && u[1] === 0x49 && u[2] === 0x46 && u[3] === 0x46) return resolve("audio/wav");
-            if (u[0] === 0x66 && u[1] === 0x4C && u[2] === 0x61 && u[3] === 0x43) return resolve("audio/flac");
-            if (u[0] === 0x1A && u[1] === 0x45 && u[2] === 0xDF && u[3] === 0xA3) return resolve("video/webm");
-            return resolve(null);
-          } catch (err) { resolve(null); }
-        };
-        reader.onerror = function () { resolve(null); };
-        reader.readAsArrayBuffer(blob);
-      } catch (e) { resolve(null); }
-    });
-  }
-
-  function resolveFileInfo(file) {
-    var name = String(file.name || "").toLowerCase();
-    var extMatch = name.match(/\.(mp3|m4a|aac|ogg|wav|flac|opus|mp4|mov|webm|mkv|m4v)$/);
-    var ext = extMatch ? extMatch[1] : "";
-
-    return sniffFileType(file).then(function (sniffed) {
-      var mime = sniffed || String(file.type || "").toLowerCase();
-      if (!mime) {
-        if (ext === "mp3") mime = "audio/mpeg";
-        else if (ext === "m4a") mime = "audio/mp4";
-        else if (ext === "mp4" || ext === "m4v") mime = "video/mp4";
-        else if (ext === "mov") mime = "video/quicktime";
-        else if (ext === "webm") mime = "video/webm";
-        else if (ext === "ogg" || ext === "opus") mime = "audio/ogg";
-        else if (ext === "wav") mime = "audio/wav";
-        else if (ext === "flac") mime = "audio/flac";
-      }
-      var saveExt = ext;
-      if (!saveExt) {
-        if (mime.indexOf("audio/mpeg") === 0) saveExt = "mp3";
-        else if (mime.indexOf("audio/mp4") === 0) saveExt = "m4a";
-        else if (mime.indexOf("video/mp4") === 0) saveExt = "mp4";
-        else if (mime.indexOf("video/quicktime") === 0) saveExt = "mov";
-        else if (mime.indexOf("video/webm") === 0) saveExt = "webm";
-        else if (mime.indexOf("audio/ogg") === 0) saveExt = "ogg";
-        else if (mime.indexOf("audio/wav") === 0) saveExt = "wav";
-        else if (mime.indexOf("audio/flac") === 0) saveExt = "flac";
-        else saveExt = "bin";
-      }
-      return {
-        mime: mime,
-        ext: saveExt,
-        isVideo: mime.indexOf("video/") === 0,
-        size: file.size
-      };
-    });
-  }
-
-  // ---- UPLOAD VIA XHR (co progress) ----
-  function xhrUpload(url, file, token, mime, onProgress) {
-    return new Promise(function (resolve, reject) {
-      var xhr = new XMLHttpRequest();
-      var startTime = Date.now();
-      var lastLoaded = 0;
-      var lastTime = startTime;
-
-      xhr.open("POST", url, true);
-      xhr.setRequestHeader("Authorization", "Bearer " + token);
-      xhr.setRequestHeader("x-upsert", "true");
-      xhr.setRequestHeader("Content-Type", mime);
-      xhr.setRequestHeader("Cache-Control", "3600");
-      xhr.timeout = UPLOAD_TIMEOUT;
-
-      if (xhr.upload && typeof onProgress === "function") {
-        xhr.upload.onprogress = function (e) {
-          if (!e.lengthComputable) return;
-          var now = Date.now();
-          var dt = (now - lastTime) / 1000;
-          var speed = dt > 0 ? (e.loaded - lastLoaded) / dt : 0;
-          lastLoaded = e.loaded;
-          lastTime = now;
-
-          var pct = Math.round((e.loaded / e.total) * 100);
-          var elapsed = (now - startTime) / 1000;
-          var avgSpeed = elapsed > 0 ? e.loaded / elapsed : 0;
-          var remain = e.total > e.loaded
-            ? ((e.total - e.loaded) / (avgSpeed || 1))
-            : 0;
-
-          onProgress({
-            loaded: e.loaded,
-            total: e.total,
-            percent: pct,
-            speed: speed,
-            avgSpeed: avgSpeed,
-            remaining: remain,
-            elapsed: elapsed
-          });
-        };
-      }
-
-      xhr.onload = function () {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve({ ok: true, status: xhr.status, responseText: xhr.responseText });
-        } else {
-          var msg = "Upload loi " + xhr.status;
-          if (xhr.responseText) msg += ": " + xhr.responseText.slice(0, 200);
-          var err = new Error(msg);
-          err.status = xhr.status;
-          err.retryable = (xhr.status >= 500 || xhr.status === 0);
-          reject(err);
-        }
-      };
-
-      xhr.onerror = function () {
-        var err = new Error("Loi mang - kiem tra ket noi internet");
-        err.retryable = true;
-        reject(err);
-      };
-
-      xhr.ontimeout = function () {
-        var err = new Error("Upload qua " + (UPLOAD_TIMEOUT / 1000) + "s - file qua lon hoac mang cham");
-        err.retryable = false;  // KHONG retry khi timeout (tranh upload trung)
-        reject(err);
-      };
-
-      xhr.onabort = function () {
-        var err = new Error("Upload bi huy");
-        err.retryable = false;
-        reject(err);
-      };
-
-      xhr.send(file);
-    });
-  }
-
-  function formatBytes(b) {
-    if (b < 1024) return b + "B";
-    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + "KB";
-    return (b / 1024 / 1024).toFixed(2) + "MB";
-  }
-
-  function formatSpeed(bps) {
-    if (bps < 1024) return bps.toFixed(0) + "B/s";
-    if (bps < 1024 * 1024) return (bps / 1024).toFixed(0) + "KB/s";
-    return (bps / 1024 / 1024).toFixed(2) + "MB/s";
-  }
-
-  function formatTime(s) {
-    if (s < 1) return "...";
-    if (s < 60) return Math.ceil(s) + "s";
-    return Math.ceil(s / 60) + "m";
-  }
-
-  // ---- UPLOAD MAIN ----
-  function uploadMusic(file, onProgress) {
-    if (!file) return Promise.reject(new Error("Chua chon file"));
-
-    return resolveFileInfo(file).then(function (info) {
-      console.log("[bdTitle] file info:", {
-        name: file.name, mimeOriginal: file.type, mimeSniffed: info.mime,
-        ext: info.ext, size: info.size, isVideo: info.isVideo
-      });
-
-      var isAudio = info.mime.indexOf("audio/") === 0;
-      var isVideo = info.mime.indexOf("video/") === 0;
-      if (!isAudio && !isVideo) {
-        throw new Error("File khong phai audio/video hop le");
-      }
-
-      var limit = info.isVideo ? MAX_VIDEO : MAX_AUDIO;
-      if (info.size > limit) {
-        throw new Error("File qua lon (" + formatBytes(info.size) + " > " + formatBytes(limit) + ")");
-      }
-
-      var path = "bgm." + info.ext;
-
-      return getAccessToken().then(function (token) {
-        if (!token) throw new Error("Chua dang nhap");
-
-        var url = getBaseUrl() + "/storage/v1/object/site-audio/" + path;
-
-        return xhrUpload(url, file, token, info.mime, onProgress)
-          .then(function () {
-            var ts = Date.now();
-            var publicUrl = getBaseUrl() + "/storage/v1/object/public/site-audio/" + path + "?t=" + ts;
-            state.music.url = publicUrl;
-            state.music.updatedAt = ts;
-            return saveMusicToServer();
-          })
-          .then(function () {
-            saveMusicCache();
-            emit("bdMusicChanged");
-            return state.music.url;
-          });
-      });
-    });
-  }
-
-  function deleteMusic() {
-    return getAccessToken().then(function (token) {
-      if (!token || !state.music.url) return null;
-
-      var m = state.music.url.match(/site-audio\/([^?]+)/);
-      var path = m ? m[1] : "bgm.mp3";
-      var url = getBaseUrl() + "/storage/v1/object/site-audio/" + path;
-
-      return new Promise(function (resolve) {
-        var xhr = new XMLHttpRequest();
-        xhr.open("DELETE", url, true);
-        xhr.setRequestHeader("Authorization", "Bearer " + token);
-        xhr.timeout = DELETE_TIMEOUT;
-        xhr.onload = function () { resolve(true); };
-        xhr.onerror = function () { resolve(false); };
-        xhr.ontimeout = function () { resolve(false); };
-        xhr.send();
-      });
-    }).then(function () {
-      state.music.url = "";
-      state.music.updatedAt = Date.now();
-      return saveMusicToServer();
-    }).then(function () {
-      saveMusicCache();
-      emit("bdMusicChanged");
-    });
   }
 
   // ---- ADMIN ----
@@ -552,29 +400,22 @@
       '<div id="bdLyricsPreview" style="font-size:11px;color:#8a6a3a;margin-bottom:14px;min-height:14px;"></div>' +
 
       '<div style="font-size:12px;font-weight:800;color:#4a3520;margin-bottom:6px;">Nhac nen</div>' +
-      '<div style="font-size:11px;color:#888;margin-bottom:6px;">MP3, M4A, MP4, MOV, OGG, WAV... Toi da 8MB (audio) / 15MB (video)</div>' +
+      '<div style="font-size:11px;color:#888;margin-bottom:6px;">Dan link YouTube / TikTok / MP3 truc tiep (.mp3, .m4a...)</div>' +
+
       '<div id="bdMusicStatus" style="font-size:11px;color:#666;margin-bottom:8px;padding:8px 10px;' +
       'background:#f5f7fa;border-radius:6px;word-break:break-all;"></div>' +
 
-      // Progress bar (an mac dinh)
-      '<div id="bdMusicProgress" style="display:none;margin-bottom:10px;">' +
-      '<div style="height:8px;background:#e0e0e0;border-radius:4px;overflow:hidden;">' +
-      '<div id="bdMusicProgressBar" style="height:100%;width:0%;' +
-      'background:linear-gradient(90deg,#4fa370,#3d8b5f);transition:width .2s;"></div>' +
-      '</div>' +
-      '<div id="bdMusicProgressText" style="font-size:11px;color:#666;margin-top:4px;text-align:center;"></div>' +
-      '</div>' +
+      '<input id="bdMusicUrlInput" type="text" placeholder="https://www.youtube.com/watch?v=... hoac https://.../music.mp3" ' +
+      'style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:13px;' +
+      'font-weight:600;margin-bottom:8px;box-sizing:border-box;font-family:inherit;">' +
 
       '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
-      '<button id="bdMusicPickBtn" type="button" style="flex:1;padding:10px;border:2px dashed #b0d0c0;' +
-      'background:#f0f9f4;border-radius:8px;font-weight:800;font-size:13px;color:#4fa370;cursor:pointer;">Chon file nhac</button>' +
-      '<button id="bdMusicCancelBtn" type="button" style="display:none;padding:10px 14px;border:2px solid #e67e22;' +
-      'background:#fff;border-radius:8px;font-weight:800;font-size:13px;color:#e67e22;cursor:pointer;">Huy</button>' +
-      '<button id="bdMusicDeleteBtn" type="button" style="padding:10px 14px;border:2px solid #e74c3c;' +
-      'background:#fff;border-radius:8px;font-weight:800;font-size:13px;color:#e74c3c;cursor:pointer;">Xoa</button>' +
+      '<button id="bdMusicClearBtn" type="button" style="padding:10px 14px;border:2px solid #e74c3c;' +
+      'background:#fff;border-radius:8px;font-weight:800;font-size:12px;color:#e74c3c;cursor:pointer;">Xoa nhac</button>' +
+      '<div style="flex:.value =1;font-size:10px;color:#999 state;display:flex;align-items:center;line-height:1.3;">' +
+      'YT/TikTok co the het han sau vai gio. Neu nhac tat, mo editor luu lai.' +
       '</div>' +
-      '<input type="file" id="bdMusicFileInput" ' +
-      'accept=".mp3,.m4a,.aac,.ogg,.wav,.flac,.opus,.mp4,.mov,.webm,.mkv,.m4v,audio/*,video/*" hidden>' +
+      '</div>' +
 
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">' +
       '<span style="font-size:11px;font-weight:800;color:#666;min-width:56px;">Am luong</span>' +
@@ -595,25 +436,19 @@
 
     document.body.appendChild(ov);
 
-    var ta          = ov.querySelector("#bdLyricsRaw");
-    var prev        = ov.querySelector("#bdLyricsPreview");
-    var msg         = ov.querySelector("#bdContentMsg");
-    var btnSave     = ov.querySelector("#bdContentSave");
-    var btnCancel   = ov.querySelector("#bdContentCancel");
-    var statusEl    = ov.querySelector("#bdMusicStatus");
-    var pickBtn     = ov.querySelector("#bdMusicPickBtn");
-    var deleteBtn   = ov.querySelector("#bdMusicDeleteBtn");
-    var cancelBtn   = ov.querySelector("#bdMusicCancelBtn");
-    var fileInput   = ov.querySelector("#bdMusicFileInput");
-    var volInput    = ov.querySelector("#bdMusicVolume");
-    var volLabel    = ov.querySelector("#bdMusicVolLabel");
-    var progressBox = ov.querySelector("#bdMusicProgress");
-    var progressBar = ov.querySelector("#bdMusicProgressBar");
-    var progressTxt = ov.querySelector("#bdMusicProgressText");
+    var ta        = ov.querySelector("#bdLyricsRaw");
+    var prev      = ov.querySelector("#bdLyricsPreview");
+    var msg       = ov.querySelector("#bdContentMsg");
+    var btnSave   = ov.querySelector("#bdContentSave");
+    var btnCancel = ov.querySelector("#bdContentCancel");
+    var statusEl  = ov.querySelector("#bdMusicStatus");
+    var urlInput  = ov.querySelector("#bdMusicUrlInput");
+    var clearBtn  = ov.querySelector("#bdMusicClearBtn");
+    var volInput  = ov.querySelector("#bdMusicVolume");
+    var volLabel  = ov.querySelector("#bdMusicVolLabel");
 
-    var currentXHR = null;   // de co the abort
-
-    ta.value = state.lyrics.raw || "";
+    ta.lyrics.raw || "";
+    urlInput.value = state.music.sourceUrl || state.music.url || "";
     volInput.value = Math.round((state.music.volume || 0.4) * 100);
     volLabel.textContent = volInput.value + "%";
 
@@ -629,24 +464,23 @@
         var t = parts[i].trim();
         if (t.length > 0) arr.push(t);
       }
-      if (arr.length === 0) {
-        prev.textContent = "- Trong -";
-        return;
-      }
+      if (arr.length === 0) { prev.textContent = "- Trong -"; return; }
       var sample = arr[0];
-      prev.textContent = arr.length + " cau - VD: \"" + sample.slice(0, 40) + (sample.length > 40 ? "..." : "") + "\"";
+      prev.textContent = arr.length + ' cau - VD: "' + sample.slice(0, 40) + (sample.length > 40 ? "..." : "") + '"';
     }
+
     function updateMusicStatus() {
-      if (state.music.url) {
-        var m = state.music.url.match(/site-audio\/([^?]+)/);
-        var n = m ? m[1] : "bgm";
-        statusEl.innerHTML = "Dang dung: <b>" + esc(n) + "</b>";
+      if (state.music.sourceUrl && state.music.url && state.music.sourceUrl !== state.music.url) {
+        statusEl.innerHTML =
+          "Dang dung: <b>" + esc(shortUrl(state.music.sourceUrl)) + "</b><br>" +
+          "<span style='font-size:10px;color:#999;'>-> " + esc(shortUrl(state.music.url)) + "</span>";
         statusEl.style.color = "#4fa370";
-        deleteBtn.disabled = false;
+      } else if (state.music.url) {
+        statusEl.innerHTML = "Dang dung: <b>" + esc(shortUrl(state.music.url)) + "</b>";
+        statusEl.style.color = "#4fa370";
       } else {
         statusEl.textContent = "- Chua co nhac -";
         statusEl.style.color = "#888";
-        deleteBtn.disabled = true;
       }
     }
 
@@ -658,78 +492,9 @@
       volLabel.textContent = volInput.value + "%";
     });
 
-    pickBtn.onclick = function () { fileInput.click(); };
-
-    cancelBtn.onclick = function () {
-      if (currentXHR && currentXHR.abort) currentXHR.abort();
-    };
-
-    function setUploading(on) {
-      pickBtn.style.display = on ? "none" : "";
-      deleteBtn.style.display = on ? "none" : "";
-      cancelBtn.style.display = on ? "" : "none";
-      progressBox.style.display = on ? "block" : "none";
-      if (!on) {
-        progressBar.style.width = "0%";
-        progressTxt.textContent = "";
-      }
-    }
-
-    fileInput.onchange = function () {
-      var f = fileInput.files && fileInput.files[0];
-      if (!f) return;
-
-      setUploading(true);
-      msg.textContent = "";
-      msg.style.color = "#666";
-
-      // Override XHR for cancel support
-      var origXhrUpload = xhrUpload;
-      // Just run uploadMusic, XHR timeout 120s
-      uploadMusic(f, function (p) {
-        progressBar.style.width = p.percent + "%";
-        progressTxt.textContent =
-          p.percent + "% · " +
-          formatBytes(p.loaded) + " / " + formatBytes(p.total) +
-          " · " + formatSpeed(p.avgSpeed) +
-          " · con " + formatTime(p.remaining);
-      })
-        .then(function () {
-          updateMusicStatus();
-          msg.textContent = "Upload nhac thanh cong";
-          msg.style.color = "#4fa370";
-        })
-        .catch(function (e) {
-          var errMsg = e && e.message ? e.message : "Upload loi";
-          if (e && e.retryable) errMsg += " (co the thu lai)";
-          msg.textContent = errMsg;
-          msg.style.color = "#e74c3c";
-        })
-        .then(function () {
-          setUploading(false);
-          fileInput.value = "";
-        });
-    };
-
-    deleteBtn.onclick = function () {
-      if (!confirm("Xoa nhac nen?")) return;
-      deleteBtn.disabled = true;
-      deleteBtn.textContent = "...";
-      msg.textContent = "";
-      deleteMusic()
-        .then(function () {
-          updateMusicStatus();
-          msg.textContent = "Da xoa nhac";
-          msg.style.color = "#4fa370";
-        })
-        .catch(function (e) {
-          msg.textContent = "Loi: " + (e && e.message ? e.message : "Loi xoa");
-          msg.style.color = "#e74c3c";
-        })
-        .then(function () {
-          deleteBtn.disabled = false;
-          deleteBtn.textContent = "Xoa";
-        });
+    clearBtn.onclick = function () {
+      urlInput.value = "";
+      urlInput.focus();
     };
 
     btnCancel.onclick = function () { ov.remove(); };
@@ -738,33 +503,64 @@
     btnSave.onclick = function () {
       var raw = String(ta.value || "").trim();
       var vol = Math.max(0, Math.min(1, parseInt(volInput.value, 10) / 100));
+      var newUrl = String(urlInput.value || "").trim();
 
       btnSave.disabled = true;
       btnSave.textContent = "Dang luu...";
       msg.textContent = "";
+      msg.style.color = "#666";
 
-      var backupRaw = state.lyrics.raw;
-      var backupVol = state.music.volume;
-      state.lyrics.raw = raw;
-      state.music.volume = vol;
+      var backup = {
+        lyrics: state.lyrics.raw,
+        volume: state.music.volume,
+        url: state.music.url,
+        sourceUrl: state.music.sourceUrl,
+        updatedAt: state.music.updatedAt
+      };
 
-      saveLyricsToServer()
-        .then(function () {
-          saveLyricsCache();
-          if (state.music.url) {
-            return saveMusicToServer().then(saveMusicCache);
+      var urlChanged = (newUrl !== state.music.sourceUrl) && (newUrl !== state.music.url);
+      var extractPromise;
+
+      if (!newUrl) {
+        extractPromise = (state.music.url || state.music.sourceUrl)
+          ? Promise.resolve({ directUrl: "", sourceUrl: "" })
+          : Promise.resolve(null);
+      } else if (urlChanged) {
+        msg.textContent = "Dang xu ly link nhac...";
+        extractPromise = extractMusicUrl(newUrl);
+      } else {
+        extractPromise = Promise.resolve(null);
+      }
+
+      extractPromise
+        .then(function (result) {
+          if (result) {
+            state.music.url = result.directUrl;
+            state.music.sourceUrl = result.sourceUrl;
+            state.music.updatedAt = Date.now();
           }
+          state.lyrics.raw = raw;
+          state.music.volume = vol;
+          return saveLyricsToServer();
         })
         .then(function () {
+          saveLyricsCache();
+          return saveMusicToServer();
+        })
+        .then(function () {
+          saveMusicCache();
           emit("bdLyricsChanged");
           emit("bdMusicChanged");
-          msg.textContent = raw ? "Da luu loi bai hat" : "Da tat lyrics";
+          msg.textContent = "Da luu";
           msg.style.color = "#4fa370";
           setTimeout(function () { ov.remove(); }, 700);
         })
         .catch(function (e) {
-          state.lyrics.raw = backupRaw;
-          state.music.volume = backupVol;
+          state.lyrics.raw = backup.lyrics;
+          state.music.volume = backup.volume;
+          state.music.url = backup.url;
+          state.music.sourceUrl = backup.sourceUrl;
+          state.music.updatedAt = backup.updatedAt;
           msg.textContent = "Loi: " + (e && e.message ? e.message : "Khong luu duoc");
           msg.style.color = "#e74c3c";
           btnSave.disabled = false;
