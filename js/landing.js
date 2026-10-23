@@ -1,9 +1,11 @@
 /* =========================================================
-   LANDING VIEW — v3.2 (minhquan cũng thấy live feed)
+   LANDING VIEW — v3.3 (admin long-press sửa tiêu đề)
    ---------------------------------------------------------
+   v3.3:
+   - Tiêu đề sinh nhật lấy động từ window.__bdTitle
+   - Admin long-press sửa → đồng bộ toàn bộ user qua server
    v3.2:
    - minhquan cũng thấy live feed lời chúc của mọi người
-     (bỏ banner cố định "Hôm nay là sinh nhật của bạn")
    v3.1:
    - Fix: feed không còn nhảy/trượt dọc khi đổi wish
    v3.0:
@@ -21,7 +23,6 @@
 
   /* ═══════════════════════════════════════════════════════
      ⭐ DATA LỜI CHÚC SINH NHẬT (12 người)
-     Map theo username (lowercase)
      ═══════════════════════════════════════════════════════ */
   const BIRTHDAY_WISHES = {
     'tienloi': 'Chúc mừng sinh nhật Quân! Tuổi mới chúc mày sức khỏe dồi dào, tiền vô như nước, gặp nhiều may mắn!',
@@ -40,13 +41,30 @@
   const DEFAULT_WISH = 'Chúc mừng sinh nhật Quân! Chúc cậu tuổi mới ngập tràn niềm vui, hạnh phúc và thành công!';
 
   /* ═══════════════════════════════════════════════════════
+     ⭐ TITLE — lấy động từ __bdTitle (admin có thể sửa)
+     ═══════════════════════════════════════════════════════ */
+  const TITLE_HTML_FALLBACK =
+    '<span class="rainbow-line">Happy Birthday</span>' +
+    '<span class="rainbow-line">Minh Quân</span>';
+
+  function _getTitleHTML() {
+    if (window.__bdTitle && typeof window.__bdTitle.getHTML === 'function') {
+      try {
+        const h = window.__bdTitle.getHTML();
+        if (h) return h;
+      } catch (_) {}
+    }
+    return TITLE_HTML_FALLBACK;
+  }
+
+  /* ═══════════════════════════════════════════════════════
      ⭐ HELPER: NGÀY SINH NHẬT
      ═══════════════════════════════════════════════════════ */
   function isBirthdayToday() {
     try {
       const now = new Date();
       const vnDate = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
-      return vnDate.getDate() === 22 && vnDate.getMonth() === 9; // Tháng 10 (0-indexed)
+      return vnDate.getDate() === 22 && vnDate.getMonth() === 9;
     } catch(_) { return false; }
   }
 
@@ -54,8 +72,6 @@
     const now = new Date();
     const currentYear = now.getFullYear();
     let target = new Date(`${currentYear}-10-22T00:00:00+07:00`);
-    
-    // Nếu đã qua trọn vẹn ngày 22/10 (tức là bước sang 23/10), nhảy sang năm sau
     if (now.getTime() > target.getTime() + 24 * 60 * 60 * 1000 - 1) {
       target = new Date(`${currentYear + 1}-10-22T00:00:00+07:00`);
     }
@@ -63,7 +79,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     ⭐ COUNTDOWN LOGIC (Dành cho trước ngày 22/10)
+     ⭐ COUNTDOWN LOGIC
      ═══════════════════════════════════════════════════════ */
   const BIRTHDAY_DATE = getNextBirthday();
   let _countdownTimer = null;
@@ -120,9 +136,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     ⭐ FEED STYLES (inject 1 lần)
-     Khoá chiều cao container + đổi animation sang fade
-     → chặn hoàn toàn hiệu ứng "chữ chạy dọc"
+     ⭐ FEED STYLES
      ═══════════════════════════════════════════════════════ */
   function _ensureFeedStyles() {
     if (document.getElementById('birthdayFeedStableStyle')) return;
@@ -169,7 +183,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     ⭐ BIRTHDAY FEED LOGIC (Dành cho đúng ngày 22/10)
+     ⭐ BIRTHDAY FEED LOGIC
      ═══════════════════════════════════════════════════════ */
   let _feedTimer = null;
   let _feedIndex = 0;
@@ -178,15 +192,10 @@
   function _getBirthdayFeedHTML() {
     _ensureFeedStyles();
 
-    // Tạo danh sách lời chúc từ 12 người (ai cũng thấy giống nhau)
     _feedList = Object.keys(BIRTHDAY_WISHES).map(username => {
-      return {
-        username: username,
-        wish: BIRTHDAY_WISHES[username]
-      };
+      return { username: username, wish: BIRTHDAY_WISHES[username] };
     });
 
-    // Nếu không có ai trong list, fallback
     if (!_feedList.length) return '';
 
     const first = _feedList[0];
@@ -205,23 +214,19 @@
     if (!_feedList.length) return;
 
     _feedIndex = 0;
-    
-    // Cứ 2.5 giây đổi lời chúc 1 lần
     _feedTimer = setInterval(function() {
       const el = document.getElementById('birthdayFeedItem');
       if (!el) { _stopBirthdayFeed(); return; }
 
-      // Chỉ fade out (không translate) — CSS đã override
       el.classList.add('spin-feed-item-out');
-      
+
       setTimeout(function() {
         if (!document.getElementById('birthdayFeedItem')) return;
-        
+
         _feedIndex = (_feedIndex + 1) % _feedList.length;
         const next = _feedList[_feedIndex];
         const nameStr = window.DN ? window.DN(next.username) : next.username;
-        
-        // Reset class để hiện nội dung mới
+
         const parent = document.getElementById('birthdayFeed');
         if (parent) {
           parent.innerHTML = `
@@ -230,7 +235,7 @@
             </div>
           `;
         }
-      }, 400); // khớp với animation fade 0.4s
+      }, 400);
     }, 2500);
   }
 
@@ -245,7 +250,6 @@
      FALLBACK
      ═══════════════════════════════════════════════════════ */
   let _lastTop3Signature = '';
-  const TITLE_HTML = '<span class="rainbow-line">Happy Birthday</span><span class="rainbow-line">Minh Quân</span>';
 
   function _fallbackRender() {
     const els = S.els;
@@ -257,7 +261,7 @@
 
       els.question.innerHTML = `
         <span class="landing-kicker">🐱 DAILY TEAM HUB</span>
-        <span class="landing-title rainbow-birthday">${TITLE_HTML}</span>
+        <span class="landing-title rainbow-birthday">${_getTitleHTML()}</span>
         ${isBirthdayToday() ? _getBirthdayFeedHTML() : _getCountdownHTML()}
         <span class="landing-cta${ctaLocked ? ' locked' : ''}" data-cta="${stateName}" role="button">${_esc(ci.text)}</span>
       `;
@@ -265,10 +269,10 @@
       els.question.style.opacity = '1';
       els.question.style.transform = 'scale(1)';
       els.question.style.pointerEvents = ctaLocked ? 'none' : 'auto';
-      
+
       if (isBirthdayToday()) _startBirthdayFeed();
       else _startCountdownTimer();
-      
+
       console.warn('[LandingView] FALLBACK RENDERED');
     } catch (e) {
       console.error('[LandingView] Fallback crash:', e);
@@ -460,7 +464,6 @@
       const titleEl = els.question.querySelector('.landing-title');
       const hasStructure = !!titleEl && !forceFullReplay;
 
-      // Xác định component hiển thị dưới Title (Countdown hoặc Feed)
       const isBday = isBirthdayToday();
       const dynamicHtml = isBday ? _getBirthdayFeedHTML() : _getCountdownHTML();
 
@@ -477,7 +480,7 @@
 
         els.question.innerHTML = `
           <span class="landing-kicker" data-kicker-version="${kv}">${kh}</span>
-          <span class="landing-title rainbow-birthday">${TITLE_HTML}</span>
+          <span class="landing-title rainbow-birthday">${_getTitleHTML()}</span>
           ${dynamicHtml}
           ${top3HTML}
           <span class="landing-cta${ctaLocked ? ' locked' : ''}" data-cta="${ctaState}" role="button" ${ctaLocked ? 'aria-disabled="true" tabindex="-1"' : 'tabindex="0"'}>${_esc(ci.text)}</span>
@@ -494,7 +497,7 @@
 
         if (isBday) _startBirthdayFeed();
         else _startCountdownTimer();
-        
+
         return;
       }
 
@@ -505,30 +508,27 @@
         const needFix = !titleEl.classList.contains('rainbow-birthday') || !titleEl.querySelector('.rainbow-line');
         if (needFix) {
           titleEl.className = 'landing-title rainbow-birthday';
-          titleEl.innerHTML = TITLE_HTML;
+          titleEl.innerHTML = _getTitleHTML();
         }
       }
 
       /* 2b. Ensure dynamic element tồn tại và đúng loại */
       const hasCountdown = !!els.question.querySelector('.birthday-countdown');
       const hasFeed = !!els.question.querySelector('.birthday-feed-container');
-      
+
       if (isBday && !hasFeed) {
-        // Cần chuyển từ countdown sang feed (hoặc thêm mới)
         els.question.querySelector('.birthday-countdown')?.remove();
         const titleAfter = els.question.querySelector('.landing-title');
         if (titleAfter) titleAfter.insertAdjacentHTML('afterend', dynamicHtml);
         _stopCountdownTimer();
         _startBirthdayFeed();
       } else if (!isBday && !hasCountdown) {
-        // Cần chuyển từ feed sang countdown (hoặc thêm mới)
         els.question.querySelector('.birthday-feed-container')?.remove();
         const titleAfter = els.question.querySelector('.landing-title');
         if (titleAfter) titleAfter.insertAdjacentHTML('afterend', dynamicHtml);
         _stopBirthdayFeed();
         _startCountdownTimer();
       } else {
-        // Đã đúng element, đảm bảo timer đang chạy
         if (isBday) _startBirthdayFeed();
         else _startCountdownTimer();
       }
@@ -651,5 +651,11 @@
     if (!document.hidden) _updateCountdownLive();
   });
 
-  console.log('[LandingView] v3.2 ready ✓ (minhquan cũng thấy live feed)');
+  /* ⭐ v3.3: Re-render khi admin đổi tiêu đề → áp dụng ngay */
+  window.addEventListener('bdTitleChanged', function () {
+    try { renderLandingState(true); }
+    catch (e) { console.error('[LandingView] bdTitle re-render:', e); }
+  });
+
+  console.log('[LandingView] v3.3 ready ✓ (admin long-press title editor)');
 })();
