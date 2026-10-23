@@ -1,3 +1,12 @@
+/* =========================================================
+   SITE CONTENT EDITOR v1.7 (title + lyrics + music)
+   ---------------------------------------------------------
+   v1.7: Ultra-safe ES5 - fix SyntaxError line 176
+     - Bo ky tu Unicode la (。 -> \u3002)
+     - Bo .filter(Boolean) -> function(x){return !!x;}
+     - Bo arrow function, async/await, template literal
+   v1.6: iOS MP3 file picker fix
+   ========================================================= */
 (function () {
   "use strict";
   if (window.__bdTitle) return;
@@ -92,7 +101,14 @@
   function getLyricsPhrases() {
     var raw = String(_lyricsState.raw || "").trim();
     if (!raw) return [];
-    return raw.split(/[.。]/).map(function (s) { return s.trim(); }).filter(Boolean);
+    // Split by period or Chinese period (unicode)
+    var parts = raw.split(/[.\u3002]/);
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      var t = parts[i].trim();
+      if (t.length > 0) out.push(t);
+    }
+    return out;
   }
 
   function _loadLyricsCache() {
@@ -146,10 +162,17 @@
 
   function _getAccessToken() {
     var sb = window.__sb;
-    if (!sb || !sb.auth) return Promise.resolve("");
+    if (!sb || !sb.auth) {
+      return Promise.resolve("");
+    }
     return sb.auth.getSession().then(function (r) {
-      return (r && r.data && r.data.session && r.data.session.access_token) || "";
-    }).catch(function () { return ""; });
+      if (r && r.data && r.data.session) {
+        return r.data.session.access_token || "";
+      }
+      return "";
+    }).catch(function () {
+      return "";
+    });
   }
 
   function _loadMusicCache() {
@@ -171,14 +194,13 @@
         url: _musicState.url, volume: _musicState.volume, updatedAt: _musicState.updatedAt
       }));
     } catch (_) {}
- music }
+  }
 
-  function _loadState.urlMusicFrom,
-Server() {
-    return _r      volume: _pcLoad(MUSmusicIC_SETTING, functionState (o) {
-      if. (!o || typeof o.url !== "string") return false;
+  function _loadMusicFromServer() {
+    return _rpcLoad(MUSIC_SETTING, function (o) {
+      if (!o || typeof o.url !== "string") return false;
       var newUrl = o.url;
-      var newVol = Number(o.volume)volume || 0.4;
+      var newVol = Number(o.volume) || 0.4;
       var newUp  = Number(o.updatedAt) || 0;
       var changed = newUrl !== _musicState.url
                  || newVol !== _musicState.volume
@@ -193,13 +215,19 @@ Server() {
 
   function _saveMusicToServer() {
     return _rpcSave(MUSIC_SETTING, JSON.stringify({
-      url: _,
+      url: _musicState.url,
+      volume: _musicState.volume,
       updatedAt: _musicState.updatedAt
     }));
   }
 
+  // -------------------------------------------------------
+  // UPLOAD MUSIC (tach rieng de de debug)
+  // -------------------------------------------------------
   function _uploadMusicFile(file) {
-    if (!file) return Promise.reject(new Error("Chua chon file"));
+    if (!file) {
+      return Promise.reject(new Error("Chua chon file"));
+    }
 
     var mime = String(file.type || "").toLowerCase();
     var name = String(file.name || "").toLowerCase();
@@ -208,7 +236,6 @@ Server() {
     var okVideoMime = mime.indexOf("video/") === 0;
     var okExt = /\.(mp3|m4a|aac|ogg|wav|flac|opus|mp4|mov|webm|mkv|m4v)\b/i.test(name);
 
-    // Debug: cho phep xem iOS tra ve gi
     console.log("[bdTitle] upload file:", {
       name: file.name, type: file.type, size: file.size
     });
@@ -228,28 +255,30 @@ Server() {
       ));
     }
 
+    var ext = ".mp3";
+    var m = name.match(/\.(mp3|m4a|aac|ogg|wav|flac|opus|mp4|mov|webm|mkv|m4v)\b/i);
+    if (m) ext = "." + m[1].toLowerCase();
+
+    var path = "bgm" + ext;
+
+    var ctype = file.type;
+    if (!ctype) {
+      if (ext === ".mp3") ctype = "audio/mpeg";
+      else if (ext === ".m4a") ctype = "audio/mp4";
+      else if (ext === ".mp4") ctype = "video/mp4";
+      else if (ext === ".mov") ctype = "video/quicktime";
+      else ctype = "application/octet-stream";
+    }
+
     return _getAccessToken().then(function (token) {
-      if (!token) throw new Error("Chua login - thu dang nhap lai");
+      if (!token) {
+        throw new Error("Chua login - thu dang nhap lai");
+      }
 
       var baseUrl = _getSupabaseBaseUrl();
+      var url = baseUrl + "/storage/v1/object/site-audio/" + path;
 
-      // Xac dinh extension chuan
-      var ext = ".mp3";
-      var m = name.match(/\.(mp3|m4a|aac|ogg|wav|flac|opus|mp4|mov|webm|mkv|m4v)\b/i);
-      if (m) ext = "." + m[1].toLowerCase();
-
-      var path = "bgm" + ext;
-
-      // Content-Type chuan cho upload
-      var ctype = file.type || (
-        ext === ".mp3" ? "audio/mpeg" :
-        ext === ".m4a" ? "audio/mp4"  :
-        ext === ".mp4" ? "video/mp4"  :
-        ext === ".mov" ? "video/quicktime" :
-        "application/octet-stream"
-      );
-
-      return fetch(baseUrl + "/storage/v1/object/site-audio/" + path, {
+      return fetch(url, {
         method: "POST",
         headers: {
           "Authorization": "Bearer " + token,
@@ -259,13 +288,15 @@ Server() {
         },
         body: file
       }).then(function (res) {
-        if (!res.ok) {
-          return res.text().then(function (t) {
-            var msg = "Upload loi " + res.status;
-            if (t) msg += ": " + t.slice(0, 200);
-            throw new Error(msg);
-          });
+        if (res.ok) {
+          return true;
         }
+        return res.text().then(function (txt) {
+          var errMsg = "Upload loi " + res.status;
+          if (txt) errMsg += ": " + txt.slice(0, 200);
+          throw new Error(errMsg);
+        });
+      }).then(function () {
         var updatedAt = Date.now();
         var publicUrl = baseUrl + "/storage/v1/object/public/site-audio/" + path + "?t=" + updatedAt;
         _musicState.url = publicUrl;
@@ -281,15 +312,17 @@ Server() {
 
   function _deleteMusic() {
     return _getAccessToken().then(function (token) {
-      if (token && _musicState.url) {
-        var baseUrl = _getSupabaseBaseUrl();
-        var m = _musicState.url.match(/site-audio\/([^?]+)/);
-        var path = m ? m[1] : "bgm.mp3";
-        return fetch(baseUrl + "/storage/v1/object/site-audio/" + path, {
-          method: "DELETE",
-          headers: { "Authorization": "Bearer " + token }
-        }).catch(function () {});
+      if (!token || !_musicState.url) {
+        return null;
       }
+      var baseUrl = _getSupabaseBaseUrl();
+      var match = _musicState.url.match(/site-audio\/([^?]+)/);
+      var path = match ? match[1] : "bgm.mp3";
+      var url = baseUrl + "/storage/v1/object/site-audio/" + path;
+      return fetch(url, {
+        method: "DELETE",
+        headers: { "Authorization": "Bearer " + token }
+      }).catch(function () { return null; });
     }).then(function () {
       _musicState.url = "";
       _musicState.updatedAt = Date.now();
@@ -305,7 +338,9 @@ Server() {
   // =========================================================
   function _rpcLoad(key, applyFn) {
     var sb = window.__sb;
-    if (!sb || typeof sb.rpc !== "function") return Promise.resolve(false);
+    if (!sb || typeof sb.rpc !== "function") {
+      return Promise.resolve(false);
+    }
     return sb.rpc(RPC_GET, { p_key: key }).then(function (res) {
       if (res.error) {
         console.warn("[bdTitle] RPC_GET error:", res.error.message || res.error);
@@ -315,7 +350,9 @@ Server() {
       var o = null;
       try {
         o = typeof res.data === "string" ? JSON.parse(res.data) : res.data;
-      } catch (_) { return false; }
+      } catch (e) {
+        return false;
+      }
       return applyFn(o);
     }).catch(function (e) {
       console.warn("[bdTitle] load failed:", e && e.message);
@@ -329,7 +366,9 @@ Server() {
       return Promise.reject(new Error("Khong co ket noi server"));
     }
     return sb.rpc(RPC_SET, { p_key: key, p_value: value }).then(function (res) {
-      if (res.error) throw new Error(res.error.message || "Server tu choi");
+      if (res.error) {
+        throw new Error(res.error.message || "Server tu choi");
+      }
       return true;
     });
   }
@@ -339,25 +378,32 @@ Server() {
   // =========================================================
   function _isAdmin() {
     try {
-      var u = window.SRank && window.SRank.Auth && window.SRank.Auth.getCurrentUser && window.SRank.Auth.getCurrentUser();
+      var u = null;
+      if (window.SRank && window.SRank.Auth && window.SRank.Auth.getCurrentUser) {
+        u = window.SRank.Auth.getCurrentUser();
+      }
       if (!u) return false;
       if (window.Role && window.Role.isAdmin) {
-        try { return !!window.Role.isAdmin(u); } catch (_) {}
+        try { return !!window.Role.isAdmin(u); } catch (e) {}
       }
       var am = u.app_metadata || {};
       var um = u.user_metadata || {};
       var r = am.role || um.role || am.roles || um.roles || "";
       var arr = Array.isArray(r) ? r : [r];
-      if (arr.some(function (x) { return String(x).toLowerCase().indexOf("admin") >= 0; })) return true;
+      for (var i = 0; i < arr.length; i++) {
+        if (String(arr[i]).toLowerCase().indexOf("admin") >= 0) return true;
+      }
       if (am.is_admin === true || um.is_admin === true) return true;
       var un = String(u.username || "").toLowerCase();
       if (un === "minhquan" || un === "admin") return true;
       return false;
-    } catch (_) { return false; }
+    } catch (e) {
+      return false;
+    }
   }
 
   // =========================================================
-  // DIALOG - Content (Lyrics + Music)
+  // DIALOG - Content
   // =========================================================
   function _closeOverlay(id) {
     var el = document.getElementById(id);
@@ -399,7 +445,6 @@ Server() {
       '<button id="bdMusicDeleteBtn" type="button" style="padding:10px 14px;border:2px solid #e74c3c;' +
       'background:#fff;border-radius:8px;font-weight:800;font-size:13px;color:#e74c3c;cursor:pointer;">Xoa</button>' +
       '</div>' +
-      // FIX: them nhieu extension cu the de iOS Files hien MP3
       '<input type="file" id="bdMusicFileInput" ' +
       'accept="audio/*,video/*,.mp3,.m4a,.aac,.ogg,.wav,.flac,.opus,.mp4,.mov,.webm,.mkv,.m4v" hidden>' +
 
@@ -440,14 +485,27 @@ Server() {
 
     function _updateLyricsPreview() {
       var raw = String(ta.value || "").trim();
-      if (!raw) { prev.textContent = "- Trong: se hien countdown khoa Checklist -"; return; }
-      var parts = raw.split(/[.。]/).map(function (s) { return s.trim(); }).filter(Boolean);
-      var sample = parts[0] || "";
-      prev.textContent = parts.length + " cau - VD: \"" + sample.slice(0, 40) + (sample.length > 40 ? "..." : "") + "\"";
+      if (!raw) {
+        prev.textContent = "- Trong: se hien countdown khoa Checklist -";
+        return;
+      }
+      var parts = raw.split(/[.\u3002]/);
+      var arr = [];
+      for (var i = 0; i < parts.length; i++) {
+        var t = parts[i].trim();
+        if (t.length > 0) arr.push(t);
+      }
+      if (arr.length === 0) {
+        prev.textContent = "- Trong -";
+        return;
+      }
+      var sample = arr[0];
+      prev.textContent = arr.length + " cau - VD: \"" + sample.slice(0, 40) + (sample.length > 40 ? "..." : "") + "\"";
     }
     function _updateMusicStatus() {
       if (_musicState.url) {
-        var name = (_musicState.url.match(/site-audio\/([^?]+)/) || [])[1] || "bgm";
+        var match = _musicState.url.match(/site-audio\/([^?]+)/);
+        var name = match ? match[1] : "bgm";
         statusEl.innerHTML = "Dang dung: <b>" + _esc(name) + "</b>";
         statusEl.style.color = "#4fa370";
         deleteBtn.disabled = false;
@@ -474,6 +532,7 @@ Server() {
       pickBtn.disabled = true;
       pickBtn.textContent = "Dang upload...";
       msg.textContent = "";
+
       _uploadMusicFile(f).then(function () {
         _updateMusicStatus();
         msg.textContent = "Upload nhac thanh cong";
@@ -493,6 +552,7 @@ Server() {
       deleteBtn.disabled = true;
       deleteBtn.textContent = "...";
       msg.textContent = "";
+
       _deleteMusic().then(function () {
         _updateMusicStatus();
         msg.textContent = "Da xoa nhac";
@@ -616,19 +676,25 @@ Server() {
   }
 
   // =========================================================
-  // LONG-PRESS (generic)
+  // LONG-PRESS
   // =========================================================
   function _bindLongPress(selector, callback) {
-    var timer = null, target = null, startX = 0, startY = 0;
+    var timer = null;
+    var target = null;
+    var startX = 0;
+    var startY = 0;
 
     function cancel() {
       if (timer) { clearTimeout(timer); timer = null; }
-      if (target) { target.style.transform = ""; target = null; }
+      if (target) {
+        target.style.transform = "";
+        target = null;
+      }
     }
 
     document.addEventListener("pointerdown", function (e) {
       if (!_isAdmin()) return;
-      var t = e.target.closest && e.target.closest(selector);
+      var t = e.target && e.target.closest ? e.target.closest(selector) : null;
       if (!t) return;
       target = t;
       startX = e.clientX;
@@ -640,7 +706,9 @@ Server() {
         timer = null;
         if (target) {
           target.style.transform = "";
-          if (navigator.vibrate) { try { navigator.vibrate(30); } catch (_) {} }
+          if (navigator.vibrate) {
+            try { navigator.vibrate(30); } catch (e2) {}
+          }
           callback();
           target = null;
         }
@@ -651,20 +719,21 @@ Server() {
     document.addEventListener("pointercancel", cancel);
     document.addEventListener("pointermove", function (e) {
       if (!timer) return;
-      var dx = e.clientX - startX, dy = e.clientY - startY;
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
       if (Math.sqrt(dx * dx + dy * dy) > 10) cancel();
     }, { passive: true });
 
     document.addEventListener("contextmenu", function (e) {
       if (!_isAdmin()) return;
-      if (e.target.closest && e.target.closest(selector)) {
+      if (e.target && e.target.closest && e.target.closest(selector)) {
         e.preventDefault();
         callback();
       }
     });
 
     document.addEventListener("selectstart", function (e) {
-      if (target && e.target.closest && e.target.closest(selector)) {
+      if (target && e.target && e.target.closest && e.target.closest(selector)) {
         e.preventDefault();
       }
     });
@@ -683,13 +752,13 @@ Server() {
     try {
       if (localStorage.getItem(key) === "1") return;
       localStorage.setItem(key, "1");
-    } catch (_) {}
+    } catch (e) {}
     setTimeout(function () {
       try {
         if (window.Toast && window.Toast.show) {
           window.Toast.show(text, { type: "info", duration: 3200 });
         }
-      } catch (_) {}
+      } catch (e) {}
     }, 2500);
   }
 
@@ -761,5 +830,5 @@ Server() {
     setTimeout(_init, 0);
   }
 
-  console.log("[bdTitle] ready v1.6 (title + lyrics + music, iOS MP3 fix)");
+  console.log("[bdTitle] ready v1.7 (ultra-safe ES5)");
 })();
