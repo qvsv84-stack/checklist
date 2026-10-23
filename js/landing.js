@@ -1,16 +1,11 @@
 /* =========================================================
-   LANDING VIEW — v3.4 (countdown → giờ khoá Checklist)
+   LANDING VIEW — v4.1 (title editable + countdown khoá)
    ---------------------------------------------------------
-   v3.4:
-   - Countdown đếm ngược đến GIỜ KHOÁ CHECKLIST
-     · Chưa khoá: "Còn X Giờ : Y Phút : Z Giây nữa là khoá Checklist"
-     · Đã khoá:   "🔒 Đã khoá · Mở lại sau X Giờ : Y Phút : Z Giây"
-   - Feed sinh nhật (22/10) vẫn hiển thị song song phía trên countdown
-   - Countdown LUÔN hiển thị (cả ngày thường và ngày sinh nhật)
-   v3.3:
-   - Admin long-press sửa tiêu đề (qua __bdTitle)
-   v3.2:
-   - minhquan cũng thấy live feed lời chúc của mọi người
+   v4.1:
+   - Giữ title editable (admin long-press qua __bdTitle)
+   - Bỏ hoàn toàn feed sinh nhật + title "Happy Birthday"
+   - Title mặc định trống → admin thấy placeholder để long-press
+   - Countdown đếm ngược đến giờ khoá Checklist
    ========================================================= */
 (function(){
   "use strict";
@@ -23,54 +18,45 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     ⭐ DATA LỜI CHÚC SINH NHẬT (12 người)
+     ⭐ TITLE — editable qua __bdTitle
      ═══════════════════════════════════════════════════════ */
-  const BIRTHDAY_WISHES = {
-    'tienloi': 'Chúc mừng sinh nhật Quân! Tuổi mới chúc mày sức khỏe dồi dào, tiền vô như nước, gặp nhiều may mắn!',
-    'mydung': 'Chúc mừng sinh nhật Quân nhé! Mong cậu tuổi mới luôn vui vẻ, hạnh phúc và gặt hái nhiều thành công.',
-    'phamkimchi': 'Happy Birthday Quân! Chúc bạn một ngày ấm áp bên gia đình, tuổi mới bình an và rực rỡ.',
-    'phuongthao': 'Chúc mừng sinh nhật Quân! Chúc cậu ngày càng đẹp trai, tài giỏi và tràn đầy năng lượng tích cực.',
-    'kimchi2': 'Chúc mừng sinh nhật Quân! Chúc tuổi mới vạn sự như ý, công việc thuận buồm xuôi gió.',
-    'minhthuy': 'Quân ơi chúc mừng sinh nhật nha! Chúc tuổi mới có thật nhiều niềm vui và nhận được nhiều yêu thương.',
-    'nhuduong': 'Happy Birthday Quân! Mong tuổi mới mang đến cho cậu những điều tuyệt vời nhất, tình cảm viên mãn.',
-    'quynhtrang': 'Chúc mừng sinh nhật Quân! Chúc cậu luôn mạnh khỏe, gặp nhiều may mắn và đạt mọi mục tiêu.',
-    'tan': 'Chúc mừng sinh nhật Quân nhé! Tuổi mới phong độ ngời ngời, kiếm được nhiều tiền và thật chill.',
-    'thaouyen': 'Happy birthday Quân! Chúc cậu có một ngày đặc biệt thật vui vẻ. Tuổi mới ngập tràn hạnh phúc nha!',
-    'tuannguyen': 'Quân ơi chúc mừng sinh nhật! Chúc cậu sự nghiệp rộng mở, sức khỏe dồi dào, vạn sự hanh thông.',
-    'huonglye': 'Chúc mừng sinh nhật Quân! Chúc một năm mới tràn đầy bình an, may mắn và mọi việc suôn sẻ.'
-  };
-  const DEFAULT_WISH = 'Chúc mừng sinh nhật Quân! Chúc cậu tuổi mới ngập tràn niềm vui, hạnh phúc và thành công!';
-
-  /* ═══════════════════════════════════════════════════════
-     ⭐ TITLE — lấy động từ __bdTitle
-     ═══════════════════════════════════════════════════════ */
-  const TITLE_HTML_FALLBACK =
-    '<span class="rainbow-line">Happy Birthday</span>' +
-    '<span class="rainbow-line">Minh Quân</span>';
-
-  function _getTitleHTML() {
-    if (window.__bdTitle && typeof window.__bdTitle.getHTML === 'function') {
-      try {
-        const h = window.__bdTitle.getHTML();
-        if (h) return h;
-      } catch (_) {}
-    }
-    return TITLE_HTML_FALLBACK;
-  }
-
-  /* ═══════════════════════════════════════════════════════
-     ⭐ HELPER: NGÀY SINH NHẬT
-     ═══════════════════════════════════════════════════════ */
-  function isBirthdayToday() {
+  function _isAdmin() {
     try {
-      const now = new Date();
-      const vnDate = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
-      return vnDate.getDate() === 22 && vnDate.getMonth() === 9;
-    } catch(_) { return false; }
+      if (window.__bdTitle && typeof window.__bdTitle.isAdmin === 'function') {
+        return !!window.__bdTitle.isAdmin();
+      }
+    } catch (_) {}
+    try {
+      const u = window.SRank?.Auth?.getCurrentUser?.();
+      if (!u) return false;
+      if (window.Role?.isAdmin) {
+        try { return !!window.Role.isAdmin(u); } catch (_) {}
+      }
+      const un = String(u.username || '').toLowerCase();
+      return un === 'minhquan' || un === 'admin';
+    } catch (_) { return false; }
+  }
+
+  function _renderTitleArea() {
+    const bd = window.__bdTitle;
+    let html = '';
+    if (bd && typeof bd.getHTML === 'function') {
+      try { html = bd.getHTML() || ''; } catch (_) {}
+    }
+
+    if (!html) {
+      if (!_isAdmin()) return '';
+      return '<span class="landing-title rainbow-birthday" ' +
+        'style="opacity:.35;font-size:13px;font-weight:700;cursor:pointer;' +
+        'user-select:none;-webkit-user-select:none;" ' +
+        'data-placeholder="1">✏️ Nhấn giữ để thêm tiêu đề</span>';
+    }
+
+    return '<span class="landing-title rainbow-birthday">' + html + '</span>';
   }
 
   /* ═══════════════════════════════════════════════════════
-     ⭐ COUNTDOWN KHOÁ CHECKLIST — v2
+     ⭐ COUNTDOWN KHOÁ CHECKLIST
      ═══════════════════════════════════════════════════════ */
   let _countdownTimer = null;
 
@@ -121,12 +107,10 @@
     const hm = _getLockTimeHM();
     const p = _getVNNowParts();
 
-    // Giờ khoá hôm nay (epoch UTC): VN hh:mm = UTC (hh-7):mm
     const lockTodayEpoch = Date.UTC(p.year, p.month, p.day, hm.hh - 7, hm.mm, 0, 0);
     const nowEpoch = Date.now();
 
     if (nowEpoch >= lockTodayEpoch) {
-      // Đã khoá → đếm đến 00:00 ngày mai (VN) = giờ mở lại
       const nextMidnightEpoch = Date.UTC(p.year, p.month, p.day + 1, -7, 0, 0, 0);
       return { targetEpoch: nextMidnightEpoch, isLocked: true };
     }
@@ -181,117 +165,6 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     ⭐ FEED STYLES
-     ═══════════════════════════════════════════════════════ */
-  function _ensureFeedStyles() {
-    if (document.getElementById('birthdayFeedStableStyle')) return;
-    const style = document.createElement('style');
-    style.id = 'birthdayFeedStableStyle';
-    style.textContent = `
-      #birthdayFeed.birthday-feed-container {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        width: 100% !important;
-        height: 62px !important;
-        min-height: 62px !important;
-        max-height: 62px !important;
-        overflow: hidden !important;
-        box-sizing: border-box !important;
-        padding: 0 12px !important;
-        margin: 6px 0 !important;
-        position: relative;
-      }
-      #birthdayFeed .birthday-feed-item {
-        width: 100% !important;
-        line-height: 1.4 !important;
-        font-size: 12.5px !important;
-        text-align: center !important;
-        display: -webkit-box !important;
-        -webkit-line-clamp: 3 !important;
-        -webkit-box-orient: vertical !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-        animation: none !important;
-        transform: none !important;
-      }
-      #birthdayFeed .birthday-feed-item.spin-feed-item-out {
-        animation: bdFeedFadeOut 0.4s ease forwards !important;
-      }
-      #birthdayFeed .birthday-feed-item.spin-feed-item-in {
-        animation: bdFeedFadeIn 0.4s ease forwards !important;
-      }
-      @keyframes bdFeedFadeOut { from { opacity: 1; } to { opacity: 0; } }
-      @keyframes bdFeedFadeIn  { from { opacity: 0; } to { opacity: 1; } }
-    `;
-    document.head.appendChild(style);
-  }
-
-  /* ═══════════════════════════════════════════════════════
-     ⭐ BIRTHDAY FEED LOGIC
-     ═══════════════════════════════════════════════════════ */
-  let _feedTimer = null;
-  let _feedIndex = 0;
-  let _feedList = [];
-
-  function _getBirthdayFeedHTML() {
-    _ensureFeedStyles();
-
-    _feedList = Object.keys(BIRTHDAY_WISHES).map(username => {
-      return { username: username, wish: BIRTHDAY_WISHES[username] };
-    });
-
-    if (!_feedList.length) return '';
-
-    const first = _feedList[0];
-    const nameStr = window.DN ? window.DN(first.username) : first.username;
-    return `
-      <div class="birthday-feed-container" id="birthdayFeed">
-        <div class="birthday-feed-item" id="birthdayFeedItem">
-          <span class="bd-name">${nameStr}</span> chúc mừng Quân: <span class="bd-wish">"${first.wish}"</span>
-        </div>
-      </div>
-    `;
-  }
-
-  function _startBirthdayFeed() {
-    if (_feedTimer) return;
-    if (!_feedList.length) return;
-
-    _feedIndex = 0;
-    _feedTimer = setInterval(function() {
-      const el = document.getElementById('birthdayFeedItem');
-      if (!el) { _stopBirthdayFeed(); return; }
-
-      el.classList.add('spin-feed-item-out');
-
-      setTimeout(function() {
-        if (!document.getElementById('birthdayFeedItem')) return;
-
-        _feedIndex = (_feedIndex + 1) % _feedList.length;
-        const next = _feedList[_feedIndex];
-        const nameStr = window.DN ? window.DN(next.username) : next.username;
-
-        const parent = document.getElementById('birthdayFeed');
-        if (parent) {
-          parent.innerHTML = `
-            <div class="birthday-feed-item spin-feed-item-in" id="birthdayFeedItem">
-              <span class="bd-name">${nameStr}</span> chúc mừng Quân: <span class="bd-wish">"${next.wish}"</span>
-            </div>
-          `;
-        }
-      }, 400);
-    }, 2500);
-  }
-
-  function _stopBirthdayFeed() {
-    if (_feedTimer) {
-      clearInterval(_feedTimer);
-      _feedTimer = null;
-    }
-  }
-
-  /* ═══════════════════════════════════════════════════════
      FALLBACK
      ═══════════════════════════════════════════════════════ */
   let _lastTop3Signature = '';
@@ -306,8 +179,7 @@
 
       els.question.innerHTML = `
         <span class="landing-kicker">🐱 DAILY TEAM HUB</span>
-        <span class="landing-title rainbow-birthday">${_getTitleHTML()}</span>
-        ${isBirthdayToday() ? _getBirthdayFeedHTML() : ''}
+        ${_renderTitleArea()}
         ${_getCountdownHTML()}
         <span class="landing-cta${ctaLocked ? ' locked' : ''}" data-cta="${stateName}" role="button">${_esc(ci.text)}</span>
       `;
@@ -316,9 +188,7 @@
       els.question.style.transform = 'scale(1)';
       els.question.style.pointerEvents = ctaLocked ? 'none' : 'auto';
 
-      if (isBirthdayToday()) _startBirthdayFeed();
       _startCountdownTimer();
-
       console.warn('[LandingView] FALLBACK RENDERED');
     } catch (e) {
       console.error('[LandingView] Fallback crash:', e);
@@ -507,10 +377,8 @@
       const top3HTML = buildTop3HTML(top3);
       els.question.classList.toggle('landing-court-active', top3.length > 3);
 
-      const titleEl = els.question.querySelector('.landing-title');
-      const hasStructure = !!titleEl && !forceFullReplay;
-
-      const isBday = isBirthdayToday();
+      const hasCountdown = !!els.question.querySelector('.birthday-countdown');
+      const hasStructure = hasCountdown && !forceFullReplay;
 
       /* ═══════ CASE 1: BUILD ═══════ */
       if (!hasStructure) {
@@ -525,8 +393,7 @@
 
         els.question.innerHTML = `
           <span class="landing-kicker" data-kicker-version="${kv}">${kh}</span>
-          <span class="landing-title rainbow-birthday">${_getTitleHTML()}</span>
-          ${isBday ? _getBirthdayFeedHTML() : ''}
+          ${_renderTitleArea()}
           ${_getCountdownHTML()}
           ${top3HTML}
           <span class="landing-cta${ctaLocked ? ' locked' : ''}" data-cta="${ctaState}" role="button" ${ctaLocked ? 'aria-disabled="true" tabindex="-1"' : 'tabindex="0"'}>${_esc(ci.text)}</span>
@@ -541,46 +408,16 @@
         els.question.style.transform = 'scale(1)';
         els.question.style.pointerEvents = ctaLocked ? 'none' : 'auto';
 
-        if (isBday) _startBirthdayFeed();
         _startCountdownTimer();
-
         return;
       }
 
       /* ═══════ CASE 2: UPDATE ═══════ */
 
-      /* 2a. Force title */
-      if (titleEl) {
-        const needFix = !titleEl.classList.contains('rainbow-birthday') || !titleEl.querySelector('.rainbow-line');
-        if (needFix) {
-          titleEl.className = 'landing-title rainbow-birthday';
-          titleEl.innerHTML = _getTitleHTML();
-        }
-      }
-
-      /* 2b. Feed (chỉ bday) + Countdown (luôn có) */
-      const hasCountdown = !!els.question.querySelector('.birthday-countdown');
-      const hasFeed = !!els.question.querySelector('.birthday-feed-container');
-
-      // Feed
-      if (isBday && !hasFeed) {
-        if (titleEl) titleEl.insertAdjacentHTML('afterend', _getBirthdayFeedHTML());
-        _startBirthdayFeed();
-      } else if (!isBday && hasFeed) {
-        els.question.querySelector('.birthday-feed-container')?.remove();
-        _stopBirthdayFeed();
-      } else if (isBday && hasFeed) {
-        _startBirthdayFeed();
-      }
-
-      // Countdown — luôn tồn tại
-      if (!hasCountdown) {
-        const anchor = els.question.querySelector('.birthday-feed-container') || titleEl;
-        if (anchor) anchor.insertAdjacentHTML('afterend', _getCountdownHTML());
-      }
+      /* 2a. Countdown — luôn có */
       _startCountdownTimer();
 
-      /* 2c. Update top3 */
+      /* 2b. Update top3 */
       if (top3Changed) {
         els.question.querySelector('.landing-top3-label')?.remove();
         els.question.querySelector('.landing-top3')?.remove();
@@ -596,7 +433,7 @@
         }
       }
 
-      /* 2d. Update kicker */
+      /* 2c. Update kicker */
       const kickerEl = els.question.querySelector('.landing-kicker');
       if (kickerEl) {
         const kr = __getKickerRender();
@@ -607,7 +444,7 @@
         }
       }
 
-      /* 2e. Update CTA */
+      /* 2d. Update CTA */
       const cta = els.question.querySelector('.landing-cta');
       const lockNote = els.question.querySelector('.landing-lock-note');
 
@@ -693,16 +530,14 @@
     S.callbacks.resetHome = resetHome;
   }
 
-  /* Update countdown khi tab visible lại */
   document.addEventListener('visibilitychange', function() {
     if (!document.hidden) _updateCountdownLive();
   });
 
-  /* v3.3: Re-render khi admin đổi tiêu đề */
   window.addEventListener('bdTitleChanged', function () {
     try { renderLandingState(true); }
     catch (e) { console.error('[LandingView] bdTitle re-render:', e); }
   });
 
-  console.log('[LandingView] v3.4 ready ✓ (countdown → giờ khoá Checklist)');
+  console.log('[LandingView] v4.1 ready ✓ (title editable + countdown khoá)');
 })();
