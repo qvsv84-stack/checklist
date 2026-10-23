@@ -1,34 +1,34 @@
 /* =========================================================
-   SITE CONTENT EDITOR v1.5 (title + lyrics + music)
+   SITE CONTENT EDITOR v1.6 (title + lyrics + music)
    ---------------------------------------------------------
-   v1.5: Fix SyntaxError '\u2550' - chi dung ASCII trong comment
-   v1.4: them MUSIC upload len Storage bucket site-audio
-   v1.3: them LYRICS
-   v1.2: site title
+   v1.6: Fix iOS khong nhan MP3
+     - accept them extension .mp3 .m4a .mp4 .mov...
+     - validation nhan audio/* + video/* + extension
+     - max size: 8MB audio, 15MB video
+     - log file info de debug
+   v1.5: fix SyntaxError
+   v1.4: music upload
    ========================================================= */
 (function () {
   "use strict";
   if (window.__bdTitle) return;
 
-  // Cache keys
   var TITLE_CACHE_KEY  = "srank_site_title_v2";
   var LYR_CACHE_KEY    = "srank_site_lyrics_v1";
   var MUSIC_CACHE_KEY  = "srank_site_music_v1";
 
-  // Setting keys
   var TITLE_SETTING    = "site_title";
   var LYR_SETTING      = "site_lyrics";
   var MUSIC_SETTING    = "site_music";
 
-  // Hint keys
   var HINT_KEY         = "srank_site_title_hint_v2";
   var LYR_HINT_KEY     = "srank_site_lyrics_hint_v1";
 
-  // RPC
   var RPC_GET          = "rpc_get_site_setting";
   var RPC_SET          = "rpc_set_site_setting";
   var LONG_PRESS_MS    = 650;
-  var MAX_AUDIO_SIZE   = 8 * 1024 * 1024;
+  var MAX_AUDIO_SIZE   = 8  * 1024 * 1024;
+  var MAX_VIDEO_SIZE   = 15 * 1024 * 1024;
 
   var _titleState  = { line1: "", line2: "" };
   var _lyricsState = { raw: "" };
@@ -182,13 +182,14 @@
         url: _musicState.url, volume: _musicState.volume, updatedAt: _musicState.updatedAt
       }));
     } catch (_) {}
-  }
+ music }
 
-  function _loadMusicFromServer() {
-    return _rpcLoad(MUSIC_SETTING, function (o) {
-      if (!o || typeof o.url !== "string") return false;
+  function _loadState.urlMusicFrom,
+Server() {
+    return _r      volume: _pcLoad(MUSmusicIC_SETTING, functionState (o) {
+      if. (!o || typeof o.url !== "string") return false;
       var newUrl = o.url;
-      var newVol = Number(o.volume) || 0.4;
+      var newVol = Number(o.volume)volume || 0.4;
       var newUp  = Number(o.updatedAt) || 0;
       var changed = newUrl !== _musicState.url
                  || newVol !== _musicState.volume
@@ -203,35 +204,68 @@
 
   function _saveMusicToServer() {
     return _rpcSave(MUSIC_SETTING, JSON.stringify({
-      url: _musicState.url,
-      volume: _musicState.volume,
+      url: _,
       updatedAt: _musicState.updatedAt
     }));
   }
 
   function _uploadMusicFile(file) {
     if (!file) return Promise.reject(new Error("Chua chon file"));
-    if (!String(file.type || "").startsWith("audio/") && !/\.(mp3|m4a|ogg|wav|aac)$/i.test(file.name)) {
-      return Promise.reject(new Error("File khong phai audio"));
+
+    var mime = String(file.type || "").toLowerCase();
+    var name = String(file.name || "").toLowerCase();
+
+    var okAudioMime = mime.indexOf("audio/") === 0;
+    var okVideoMime = mime.indexOf("video/") === 0;
+    var okExt = /\.(mp3|m4a|aac|ogg|wav|flac|opus|mp4|mov|webm|mkv|m4v)\b/i.test(name);
+
+    // Debug: cho phep xem iOS tra ve gi
+    console.log("[bdTitle] upload file:", {
+      name: file.name, type: file.type, size: file.size
+    });
+
+    if (!okAudioMime && !okVideoMime && !okExt) {
+      return Promise.reject(new Error(
+        "File khong phai audio/video. Chon .mp3, .m4a hoac .mp4"
+      ));
     }
-    if (file.size > MAX_AUDIO_SIZE) {
-      return Promise.reject(new Error("File qua lon (toi da 8MB)"));
+
+    var isVideo = okVideoMime || /\.(mp4|mov|webm|mkv|m4v)\b/i.test(name);
+    var limit = isVideo ? MAX_VIDEO_SIZE : MAX_AUDIO_SIZE;
+    if (file.size > limit) {
+      return Promise.reject(new Error(
+        "File qua lon (" + Math.round(limit / 1024 / 1024) + "MB). "
+        + "Chuyen sang MP3 de giam dung luong."
+      ));
     }
 
     return _getAccessToken().then(function (token) {
       if (!token) throw new Error("Chua login - thu dang nhap lai");
 
       var baseUrl = _getSupabaseBaseUrl();
-      var m = file.name.match(/\.[a-z0-9]+$/i);
-      var ext = m ? m[0].toLowerCase() : ".mp3";
+
+      // Xac dinh extension chuan
+      var ext = ".mp3";
+      var m = name.match(/\.(mp3|m4a|aac|ogg|wav|flac|opus|mp4|mov|webm|mkv|m4v)\b/i);
+      if (m) ext = "." + m[1].toLowerCase();
+
       var path = "bgm" + ext;
+
+      // Content-Type chuan cho upload
+      var ctype = file.type || (
+        ext === ".mp3" ? "audio/mpeg" :
+        ext === ".m4a" ? "audio/mp4"  :
+        ext === ".mp4" ? "video/mp4"  :
+        ext === ".mov" ? "video/quicktime" :
+        "application/octet-stream"
+      );
 
       return fetch(baseUrl + "/storage/v1/object/site-audio/" + path, {
         method: "POST",
         headers: {
           "Authorization": "Bearer " + token,
           "x-upsert": "true",
-          "Content-Type": file.type || "audio/mpeg",
+          "Content-Type": ctype,
           "Cache-Control": "3600"
         },
         body: file
@@ -367,6 +401,7 @@
       '<div id="bdLyricsPreview" style="font-size:11px;color:#8a6a3a;margin-bottom:14px;min-height:14px;"></div>' +
 
       '<div style="font-size:12px;font-weight:800;color:#4a3520;margin-bottom:6px;">Nhac nen</div>' +
+      '<div style="font-size:11px;color:#888;margin-bottom:6px;">Ho tro MP3, M4A, MP4, MOV... Toi da 8MB (audio) / 15MB (video)</div>' +
       '<div id="bdMusicStatus" style="font-size:11px;color:#666;margin-bottom:8px;padding:8px 10px;' +
       'background:#f5f7fa;border-radius:6px;word-break:break-all;"></div>' +
       '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
@@ -375,7 +410,9 @@
       '<button id="bdMusicDeleteBtn" type="button" style="padding:10px 14px;border:2px solid #e74c3c;' +
       'background:#fff;border-radius:8px;font-weight:800;font-size:13px;color:#e74c3c;cursor:pointer;">Xoa</button>' +
       '</div>' +
-      '<input type="file" id="bdMusicFileInput" accept="audio/*" hidden>' +
+      // FIX: them nhieu extension cu the de iOS Files hien MP3
+      '<input type="file" id="bdMusicFileInput" ' +
+      'accept="audio/*,video/*,.mp3,.m4a,.aac,.ogg,.wav,.flac,.opus,.mp4,.mov,.webm,.mkv,.m4v" hidden>' +
 
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">' +
       '<span style="font-size:11px;font-weight:800;color:#666;min-width:56px;">Am luong</span>' +
@@ -735,5 +772,5 @@
     setTimeout(_init, 0);
   }
 
-  console.log("[bdTitle] ready v1.5 (title + lyrics + music)");
+  console.log("[bdTitle] ready v1.6 (title + lyrics + music, iOS MP3 fix)");
 })();
