@@ -1,10 +1,12 @@
 /* =========================================================
-   CONTENT EDITOR - v2.2
+   CONTENT EDITOR - v2.2.1
    ---------------------------------------------------------
+   v2.2.1:
+   - FIX: TikTok extract qua TikWM (cobalt.tools da chet)
+   - Ho tro vt.tiktok.com, vm.tiktok.com (link rut gon)
+   - YouTube: bao loi ro rang (can API rieng)
    v2.2:
    - BO upload file, chuyen sang nhap LINK nhac
-   - Ho tro YouTube, TikTok (auto extract qua cobalt.tools)
-   - Ho tro link MP3 truc tiep
    - Luu ca sourceUrl (link goc) va url (link phat truc tiep)
    v2.1: Upload XHR (da bo)
    v2.0: ultra-safe ES5
@@ -13,7 +15,7 @@
   "use strict";
   if (window.__bdTitle) return;
 
-  window.__bdTitleBuild = "v2.2.0";
+  window.__bdTitleBuild = "v2.2.1";
   console.log("[bdTitle] BUILD=" + window.__bdTitleBuild);
 
   var CACHE_TITLE = "srank_ct_v3";
@@ -231,68 +233,65 @@
     }));
   }
 
-  // ---- MUSIC URL HELPERS ----
-  function isYouTubeUrl(u) {
-    return /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/|m\.youtube\.com\/watch\?v=)/.test(u);
+  // ---- MUSIC URL EXTRACT ----
+  function isDirectAudio(u) {
+    return /\.(mp3|m4a|aac|ogg|wav|flac|opus)(\?.*)?$/i.test(u);
   }
 
-  function isTikTokUrl(u) {
+  function isTikTok(u) {
     return /tiktok\.com\//.test(u);
+  }
+
+  function isYouTube(u) {
+    return /(?:youtube\.com|youtu\.be)\//.test(u);
   }
 
   /**
    * Tra ve { directUrl, sourceUrl }.
    * - Link truc tiep (mp3, m4a...) -> giu nguyen
-   * - YT/TikTok -> extract qua cobalt.tools (link mp3 tam thoi)
-   * Note: link extract co the het han sau vai gio. Admin mo editor luu lai la xong.
+   * - TikTok (ke ca vt.tiktok.com) -> extract qua TikWM
+   * - YouTube -> bao loi (can API rieng)
+   * - Khac -> coi nhu link truc tiep
    */
   function extractMusicUrl(inputUrl) {
     var url = String(inputUrl || "").trim();
     if (!url) return Promise.resolve({ directUrl: "", sourceUrl: "" });
 
-    if (!isYouTubeUrl(url) && !isTikTokUrl(url)) {
+    if (isDirectAudio(url)) {
       return Promise.resolve({ directUrl: url, sourceUrl: "" });
     }
 
-    return withTimeout(
-      new Promise(function (resolve, reject) {
-        var body = {
-          url: url,
-          isAudioOnly: true,
-          aFormat: "mp3",
-          filenameStyle: "basic"
-        };
-        fetch("https://api.cobalt.tools/api/json", {
+    if (isTikTok(url)) {
+      return withTimeout(
+        fetch("https://tikwm.com/api/", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-          },
-          body: JSON.stringify(body)
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: "url=" + encodeURIComponent(url) + "&hd=1"
         })
           .then(function (r) {
-            if (!r.ok) {
-              throw new Error("Khong the lay nhac tu link (HTTP " + r.status + ")");
-            }
+            if (!r.ok) throw new Error("TikWM tra ve loi " + r.status);
             return r.json();
           })
           .then(function (data) {
-            if (!data) throw new Error("Phan hoi rong tu server extract");
-            if (data.status === "error") {
-              var code = (data.error && data.error.code) || "unknown";
-              throw new Error("Khong ho tro link nay (" + code + ")");
+            if (!data || data.code !== 0) {
+              throw new Error((data && data.msg) || "TikTok API tu choi link nay");
             }
-            if ((data.status === "tunnel" || data.status === "redirect" || data.status === "stream") && data.url) {
-              resolve({ directUrl: data.url, sourceUrl: url });
-            } else {
-              throw new Error("Khong the lay nhac tu link nay");
-            }
-          })
-          .catch(reject);
-      }),
-      EXTRACT_TIMEOUT,
-      "extract_music"
-    );
+            var musicUrl = data.data && data.data.music;
+            if (!musicUrl) throw new Error("Khong tim thay audio trong video nay");
+            return { directUrl: musicUrl, sourceUrl: url };
+          }),
+        EXTRACT_TIMEOUT,
+        "extract_tiktok"
+      );
+    }
+
+    if (isYouTube(url)) {
+      return Promise.reject(
+        new Error("Link YouTube can API extractor rieng. Hay dan link MP3 truc tiep hoac dung TikTok.")
+      );
+    }
+
+    return Promise.resolve({ directUrl: url, sourceUrl: "" });
   }
 
   // ---- SUPABASE ----
@@ -400,20 +399,20 @@
       '<div id="bdLyricsPreview" style="font-size:11px;color:#8a6a3a;margin-bottom:14px;min-height:14px;"></div>' +
 
       '<div style="font-size:12px;font-weight:800;color:#4a3520;margin-bottom:6px;">Nhac nen</div>' +
-      '<div style="font-size:11px;color:#888;margin-bottom:6px;">Dan link YouTube / TikTok / MP3 truc tiep (.mp3, .m4a...)</div>' +
+      '<div style="font-size:11px;color:#888;margin-bottom:6px;">Dan link TikTok / MP3 truc tiep (.mp3, .m4a...)</div>' +
 
       '<div id="bdMusicStatus" style="font-size:11px;color:#666;margin-bottom:8px;padding:8px 10px;' +
       'background:#f5f7fa;border-radius:6px;word-break:break-all;"></div>' +
 
-      '<input id="bdMusicUrlInput" type="text" placeholder="https://www.youtube.com/watch?v=... hoac https://.../music.mp3" ' +
+      '<input id="bdMusicUrlInput" type="text" placeholder="https://vt.tiktok.com/... hoac https://.../music.mp3" ' +
       'style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:8px;font-size:13px;' +
       'font-weight:600;margin-bottom:8px;box-sizing:border-box;font-family:inherit;">' +
 
       '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
       '<button id="bdMusicClearBtn" type="button" style="padding:10px 14px;border:2px solid #e74c3c;' +
       'background:#fff;border-radius:8px;font-weight:800;font-size:12px;color:#e74c3c;cursor:pointer;">Xoa nhac</button>' +
-      '<div style="flex:.value =1;font-size:10px;color:#999 state;display:flex;align-items:center;line-height:1.3;">' +
-      'YT/TikTok co the het han sau vai gio. Neu nhac tat, mo editor luu lai.' +
+      '<div style="flex:1;font-size:10px;color:#999;display:flex;align-items:center;line-height:1.3;">' +
+      'TikTok mp3 co the het han sau vai gio. Neu nhac tat, mo editor luu lai.' +
       '</div>' +
       '</div>' +
 
@@ -447,7 +446,7 @@
     var volInput  = ov.querySelector("#bdMusicVolume");
     var volLabel  = ov.querySelector("#bdMusicVolLabel");
 
-    ta.lyrics.raw || "";
+    ta.value = state.lyrics.raw || "";
     urlInput.value = state.music.sourceUrl || state.music.url || "";
     volInput.value = Math.round((state.music.volume || 0.4) * 100);
     volLabel.textContent = volInput.value + "%";
@@ -720,6 +719,15 @@
     console.log("=== END ===");
   };
 
+  // Test TikTok extractor thu cong
+  window.__bdTestExtract = function (url) {
+    console.log("[bdTitle] test extract:", url);
+    return extractMusicUrl(url).then(
+      function (r) { console.log("OK:", r); return r; },
+      function (e) { console.error("FAIL:", e.message); throw e; }
+    );
+  };
+
   // ---- INIT ----
   function init() {
     loadTitleCache();
@@ -765,6 +773,7 @@
     getMusic: getMusic,
     isAdmin: isAdmin,
     build: window.__bdTitleBuild,
+    extractMusicUrl: extractMusicUrl,
     reload: function () {
       return Promise.all([
         loadTitleFromServer(),
