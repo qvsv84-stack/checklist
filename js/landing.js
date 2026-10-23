@@ -1,11 +1,12 @@
 /* =========================================================
-   LANDING VIEW — v5.0 (lyrics thay countdown)
+   LANDING VIEW — v5.1 (lyrics + music + countdown fallback)
    ---------------------------------------------------------
-   v5.0:
-   - Nếu admin đã đặt lyrics (site_lyrics) → hiện LYRICS bay lên
-   - Nếu chưa có lyrics → fallback countdown khoá Checklist
-   - Mỗi câu lyric ~3.5s: fade in → giữ → fade out bay lên
-   - Admin long-press (lyric HOẶC countdown) → mở editor lyrics
+   v5.1:
+   - Thêm MUSIC PLAYER: nút loa cạnh lyric/countdown
+   - User bấm loa → bật/tắt nhạc (lưu vào localStorage)
+   - Lần sau vào app: nếu đã bật trước đó + có nhạc → tự play
+     khi có gesture đầu tiên (browser policy)
+   v5.0: lyrics > countdown
    ========================================================= */
 (function(){
   "use strict";
@@ -18,7 +19,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     ⭐ TITLE — editable qua __bdTitle
+     TITLE
      ═══════════════════════════════════════════════════════ */
   function _isAdmin() {
     try {
@@ -29,9 +30,7 @@
     try {
       const u = window.SRank?.Auth?.getCurrentUser?.();
       if (!u) return false;
-      if (window.Role?.isAdmin) {
-        try { return !!window.Role.isAdmin(u); } catch (_) {}
-      }
+      if (window.Role?.isAdmin) { try { return !!window.Role.isAdmin(u); } catch (_) {} }
       const un = String(u.username || '').toLowerCase();
       return un === 'minhquan' || un === 'admin';
     } catch (_) { return false; }
@@ -54,7 +53,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     ⭐ LYRICS — player bay lên
+     LYRICS
      ═══════════════════════════════════════════════════════ */
   const PHRASE_MS = 3500;
   let _lyricTimer = null;
@@ -72,7 +71,6 @@
         80%  { opacity: 1; transform: translateY(0); }
         100% { opacity: 0; transform: translateY(-32px); }
       }
-
       .landing-lyric {
         display: flex !important;
         align-items: center !important;
@@ -89,7 +87,6 @@
         user-select: none !important;
         -webkit-user-select: none !important;
       }
-
       .landing-lyric-inner {
         display: block !important;
         text-align: center !important;
@@ -106,6 +103,43 @@
         animation: lyricFlyUp ${PHRASE_MS}ms ease-in-out infinite !important;
         will-change: transform, opacity !important;
       }
+
+      /* Wrapper bọc lyric/countdown + nút loa */
+      .landing-dynamic-wrap {
+        position: relative !important;
+        width: 100% !important;
+        padding-right: 36px !important;
+        box-sizing: border-box !important;
+      }
+
+      /* Nút loa */
+      .landing-music-btn {
+        position: absolute !important;
+        right: 0 !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        width: 28px !important;
+        height: 28px !important;
+        border-radius: 50% !important;
+        border: none !important;
+        background: rgba(255,255,255,.7) !important;
+        cursor: pointer !important;
+        font-size: 14px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0 1px 4px rgba(0,0,0,.12) !important;
+        z-index: 5 !important;
+        padding: 0 !important;
+        transition: background .15s, transform .15s !important;
+      }
+      .landing-music-btn:active { transform: translateY(-50%) scale(.9) !important; }
+      .landing-music-btn.playing {
+        background: linear-gradient(135deg,#4fa370,#3d8b5f) !important;
+        color: #fff !important;
+        box-shadow: 0 2px 8px rgba(79,163,112,.4) !important;
+      }
+      .landing-music-btn.hidden-btn { display: none !important; }
     `;
     document.head.appendChild(s);
   }
@@ -127,7 +161,7 @@
     if (!_lyricPhrases.length) { el.textContent = ''; return; }
     const phrase = _lyricPhrases[_lyricIndex % _lyricPhrases.length];
     el.style.animation = 'none';
-    void el.offsetWidth; // force reflow → restart animation
+    void el.offsetWidth;
     el.style.animation = '';
     el.textContent = phrase;
   }
@@ -150,23 +184,19 @@
   }
 
   function _stopLyricPlayer() {
-    if (_lyricTimer) {
-      clearInterval(_lyricTimer);
-      _lyricTimer = null;
-    }
+    if (_lyricTimer) { clearInterval(_lyricTimer); _lyricTimer = null; }
   }
 
   function _getLyricHTML() {
     _ensureLyricStyles();
     const phrases = _getLyricPhrases();
     const firstTxt = phrases[0] ? _esc(phrases[0]) : '';
-    return '<span class="landing-lyric" id="landingLyric" ' +
-      'aria-label="Lời bài hát"><span class="landing-lyric-inner" ' +
-      'id="landingLyricInner">' + firstTxt + '</span></span>';
+    return '<span class="landing-lyric" id="landingLyric">' +
+      '<span class="landing-lyric-inner" id="landingLyricInner">' + firstTxt + '</span></span>';
   }
 
   /* ═══════════════════════════════════════════════════════
-     ⭐ COUNTDOWN KHOÁ CHECKLIST — fallback khi không có lyrics
+     COUNTDOWN
      ═══════════════════════════════════════════════════════ */
   let _countdownTimer = null;
 
@@ -196,11 +226,10 @@
         hour12: false
       });
       const p = {};
-      fmt.formatToParts(new Date()).forEach(function (x) { p[x.type] = x.value; });
+      fmt.formatToParts(new Date()).forEach(x => { p[x.type] = x.value; });
       return {
-        year: parseInt(p.year, 10), month: parseInt(p.month, 10) - 1,
-        day: parseInt(p.day, 10), hour: parseInt(p.hour, 10),
-        minute: parseInt(p.minute, 10), second: parseInt(p.second, 10)
+        year: +p.year, month: +p.month - 1, day: +p.day,
+        hour: +p.hour, minute: +p.minute, second: +p.second
       };
     } catch (_) {
       const n = new Date();
@@ -227,9 +256,7 @@
     const hh = _pad2(Math.floor(t / 3600));
     const mm = _pad2(Math.floor((t % 3600) / 60));
     const ss = _pad2(t % 60);
-    if (isLocked) {
-      return `🔒 Đã khoá · Mở lại sau <b>${hh}</b> Giờ : <b>${mm}</b> Phút : <b>${ss}</b> Giây`;
-    }
+    if (isLocked) return `🔒 Đã khoá · Mở lại sau <b>${hh}</b> Giờ : <b>${mm}</b> Phút : <b>${ss}</b> Giây`;
     return `Còn <b>${hh}</b> Giờ : <b>${mm}</b> Phút : <b>${ss}</b> Giây nữa là khoá Checklist`;
   }
 
@@ -258,18 +285,173 @@
   }
 
   function _stopCountdownTimer() {
-    if (_countdownTimer) {
-      clearInterval(_countdownTimer);
-      _countdownTimer = null;
-    }
+    if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
   }
 
   /* ═══════════════════════════════════════════════════════
-     DYNAMIC AREA — lyrics ưu tiên, countdown fallback
+     MUSIC PLAYER
+     ═══════════════════════════════════════════════════════ */
+  const MUSIC_ENABLED_KEY = "srank_music_enabled_v1";
+  let _audio = null;
+  let _audioMounted = false;
+
+  function _isMusicEnabled() {
+    try { return localStorage.getItem(MUSIC_ENABLED_KEY) === "1"; } catch (_) { return false; }
+  }
+
+  function _setMusicEnabled(v) {
+    try { localStorage.setItem(MUSIC_ENABLED_KEY, v ? "1" : "0"); } catch (_) {}
+  }
+
+  function _getMusicMeta() {
+    if (window.__bdTitle && typeof window.__bdTitle.getMusic === 'function') {
+      try { return window.__bdTitle.getMusic() || { url: "", volume: 0.4 }; } catch (_) {}
+    }
+    return { url: "", volume: 0.4 };
+  }
+
+  function _ensureAudioMounted() {
+    if (_audioMounted && _audio) return _audio;
+
+    _audio = document.createElement('audio');
+    _audio.id = 'landingMusicAudio';
+    _audio.loop = true;
+    _audio.preload = 'auto';
+    _audio.style.display = 'none';
+    document.body.appendChild(_audio);
+
+    _audio.addEventListener('play', _updateMusicBtnState);
+    _audio.addEventListener('pause', _updateMusicBtnState);
+    _audio.addEventListener('error', function () {
+      console.warn('[LandingView] audio error');
+      _updateMusicBtnState();
+    });
+
+    _audioMounted = true;
+    return _audio;
+  }
+
+  function _syncAudioSource() {
+    const meta = _getMusicMeta();
+    const audio = _ensureAudioMounted();
+
+    if (!meta.url) {
+      // Không có nhạc → pause + clear
+      try { audio.pause(); } catch (_) {}
+      if (audio.src) { audio.removeAttribute('src'); audio.load(); }
+      return;
+    }
+
+    // Chỉ đổi src khi URL khác (so sánh string)
+    if (audio.dataset.url !== meta.url) {
+      audio.dataset.url = meta.url;
+      audio.src = meta.url;
+      try { audio.load(); } catch (_) {}
+    }
+
+    // Volume
+    audio.volume = Math.max(0, Math.min(1, Number(meta.volume) || 0.4));
+  }
+
+  function _updateMusicBtnState() {
+    const btn = document.getElementById('landingMusicBtn');
+    if (!btn) return;
+    const meta = _getMusicMeta();
+
+    if (!meta.url) {
+      btn.classList.add('hidden-btn');
+      btn.textContent = '🔊';
+      return;
+    }
+
+    btn.classList.remove('hidden-btn');
+
+    const playing = _audio && !_audio.paused;
+    btn.classList.toggle('playing', !!playing);
+    btn.textContent = playing ? '🔊' : '🔇';
+    btn.title = playing ? 'Tắt nhạc' : 'Bật nhạc';
+    btn.setAttribute('aria-label', playing ? 'Tắt nhạc nền' : 'Bật nhạc nền');
+  }
+
+  async function _toggleMusic() {
+    const meta = _getMusicMeta();
+    if (!meta.url) return;
+
+    const audio = _ensureAudioMounted();
+    _syncAudioSource();
+
+    if (audio.paused) {
+      try {
+        await audio.play();
+        _setMusicEnabled(true);
+      } catch (e) {
+        console.warn('[LandingView] play failed:', e && e.message);
+      }
+    } else {
+      audio.pause();
+      _setMusicEnabled(false);
+    }
+    _updateMusicBtnState();
+  }
+
+  function _getMusicBtnHTML() {
+    _ensureLyricStyles();
+    // Nếu không có nhạc + không phải admin → không hiện gì
+    const meta = _getMusicMeta();
+    if (!meta.url && !_isAdmin()) return '';
+
+    const extraClass = !meta.url ? ' hidden-btn' : '';
+    return '<button type="button" id="landingMusicBtn" class="landing-music-btn' + extraClass + '" ' +
+      'title="Bật nhạc" aria-label="Bật nhạc nền">🔇</button>';
+  }
+
+  function _bindMusicBtn() {
+    const btn = document.getElementById('landingMusicBtn');
+    if (!btn || btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      _toggleMusic();
+    });
+    _updateMusicBtnState();
+  }
+
+  function _autoResumeMusicIfEnabled() {
+    if (!_isMusicEnabled()) return;
+    const meta = _getMusicMeta();
+    if (!meta.url) return;
+
+    const audio = _ensureAudioMounted();
+    _syncAudioSource();
+    if (!audio.paused) return;
+
+    const doPlay = function () {
+      if (!_isMusicEnabled()) return;
+      audio.play().then(() => {
+        document.removeEventListener('pointerdown', doPlay, true);
+        document.removeEventListener('touchstart', doPlay, true);
+        document.removeEventListener('keydown', doPlay, true);
+        _updateMusicBtnState();
+      }).catch(() => {});
+    };
+
+    // Thử play ngay (nếu user đã tương tác trang rồi thì OK)
+    audio.play().catch(function () {
+      // Chờ gesture đầu tiên
+      document.addEventListener('pointerdown', doPlay, true);
+      document.addEventListener('touchstart', doPlay, true);
+      document.addEventListener('keydown', doPlay, true);
+    });
+  }
+
+  /* ═══════════════════════════════════════════════════════
+     DYNAMIC WRAPPER — lyric/countdown + music btn
      ═══════════════════════════════════════════════════════ */
   function _getDynamicHTML() {
-    if (_getLyricPhrases().length) return _getLyricHTML();
-    return _getCountdownHTML();
+    _ensureLyricStyles();
+    const inner = _getLyricPhrases().length ? _getLyricHTML() : _getCountdownHTML();
+    return '<div class="landing-dynamic-wrap">' + inner + _getMusicBtnHTML() + '</div>';
   }
 
   function _startDynamic() {
@@ -279,6 +461,9 @@
       _stopLyricPlayer();
       _startCountdownTimer();
     }
+    _syncAudioSource();
+    _bindMusicBtn();
+    _autoResumeMusicIfEnabled();
   }
 
   /* ═══════════════════════════════════════════════════════
@@ -304,16 +489,12 @@
       els.question.style.opacity = '1';
       els.question.style.transform = 'scale(1)';
       els.question.style.pointerEvents = ctaLocked ? 'none' : 'auto';
-
       _startDynamic();
-      console.warn('[LandingView] FALLBACK RENDERED');
-    } catch (e) {
-      console.error('[LandingView] Fallback crash:', e);
-    }
+    } catch (e) { console.error('[LandingView] Fallback crash:', e); }
   }
 
   /* ═══════════════════════════════════════════════════════
-     CTA HELPERS
+     CTA / HELPERS
      ═══════════════════════════════════════════════════════ */
   function __getCtaRender() {
     try {
@@ -357,9 +538,7 @@
   }
 
   function top3Signature(list) {
-    return list.map(function(p) {
-      return `${p.name}|${p.time}|${S.getAvatarUrl(p.name)}`;
-    }).join('::');
+    return list.map(p => `${p.name}|${p.time}|${S.getAvatarUrl(p.name)}`).join('::');
   }
 
   /* ═══════════════════════════════════════════════════════
@@ -379,7 +558,6 @@
       }
       return `<span class="${cls}-fallback show">${ini}</span>`;
     }
-
     function makeName(p) {
       return _esc(String((window.DN ? window.DN(p.name) : p.name) || ''));
     }
@@ -392,42 +570,33 @@
     let podiumHtml = '<div class="court-podium">';
 
     podiumHtml += '<div class="podium-slot podium-slot-2">';
-    if (t2) {
-      podiumHtml += `
-        <div class="advisor rank-2" data-name="${_esc(t2.name)}">
-          <div class="advisor-crown">☀️</div>
-          <div class="advisor-avatar">${makeAvatarHtml(t2, 'advisor-avatar')}</div>
-          <div class="advisor-name" title="${makeName(t2)}">${makeName(t2)}</div>
-          <div class="advisor-time">${t2.time}</div>
-        </div>
-      `;
-    }
+    if (t2) podiumHtml += `
+      <div class="advisor rank-2" data-name="${_esc(t2.name)}">
+        <div class="advisor-crown">☀️</div>
+        <div class="advisor-avatar">${makeAvatarHtml(t2, 'advisor-avatar')}</div>
+        <div class="advisor-name" title="${makeName(t2)}">${makeName(t2)}</div>
+        <div class="advisor-time">${t2.time}</div>
+      </div>`;
     podiumHtml += '</div>';
 
     podiumHtml += '<div class="podium-slot podium-slot-1">';
-    if (t1) {
-      podiumHtml += `
-        <div class="court-throne" data-name="${_esc(t1.name)}">
-          <div class="throne-crown">👑</div>
-          <div class="throne-avatar">${makeAvatarHtml(t1, 'throne-avatar')}</div>
-          <div class="throne-name" title="${makeName(t1)}">${makeName(t1)}</div>
-          <div class="throne-time">${t1.time}</div>
-        </div>
-      `;
-    }
+    if (t1) podiumHtml += `
+      <div class="court-throne" data-name="${_esc(t1.name)}">
+        <div class="throne-crown">👑</div>
+        <div class="throne-avatar">${makeAvatarHtml(t1, 'throne-avatar')}</div>
+        <div class="throne-name" title="${makeName(t1)}">${makeName(t1)}</div>
+        <div class="throne-time">${t1.time}</div>
+      </div>`;
     podiumHtml += '</div>';
 
     podiumHtml += '<div class="podium-slot podium-slot-3">';
-    if (t3) {
-      podiumHtml += `
-        <div class="advisor rank-3" data-name="${_esc(t3.name)}">
-          <div class="advisor-crown">🌙</div>
-          <div class="advisor-avatar">${makeAvatarHtml(t3, 'advisor-avatar')}</div>
-          <div class="advisor-name" title="${makeName(t3)}">${makeName(t3)}</div>
-          <div class="advisor-time">${t3.time}</div>
-        </div>
-      `;
-    }
+    if (t3) podiumHtml += `
+      <div class="advisor rank-3" data-name="${_esc(t3.name)}">
+        <div class="advisor-crown">🌙</div>
+        <div class="advisor-avatar">${makeAvatarHtml(t3, 'advisor-avatar')}</div>
+        <div class="advisor-name" title="${makeName(t3)}">${makeName(t3)}</div>
+        <div class="advisor-time">${t3.time}</div>
+      </div>`;
     podiumHtml += '</div>';
 
     podiumHtml += '</div>';
@@ -450,8 +619,7 @@
               <div class="courtier-name"${meStyle} title="${makeName(p)}">${makeName(p)}</div>
               <div class="courtier-time">${p.time}</div>
             </div>
-          </div>
-        `;
+          </div>`;
       }
 
       courtiersHtml += '<div class="court-courtiers-label"><span>✦ QUẦN THẦN ✦</span></div>';
@@ -490,17 +658,13 @@
       const top3 = checkedList.slice(0, 20);
       const newSig = top3Signature(top3);
       const top3Changed = newSig !== _lastTop3Signature;
-
       const top3HTML = buildTop3HTML(top3);
       els.question.classList.toggle('landing-court-active', top3.length > 3);
 
-      // "Có structure" = đã có lyric hoặc countdown
-      const hasDynamic =
-        !!els.question.querySelector('.landing-lyric') ||
-        !!els.question.querySelector('.birthday-countdown');
-      const hasStructure = hasDynamic && !forceFullReplay;
+      const hasWrap = !!els.question.querySelector('.landing-dynamic-wrap');
+      const hasStructure = hasWrap && !forceFullReplay;
 
-      /* ═══════ CASE 1: BUILD ═══════ */
+      /* ═══════ BUILD ═══════ */
       if (!hasStructure) {
         const kr = __getKickerRender();
         const kh = kr.html || kr.text;
@@ -532,31 +696,42 @@
         return;
       }
 
-      /* ═══════ CASE 2: UPDATE ═══════ */
+      /* ═══════ UPDATE ═══════ */
 
-      /* 2a. Dynamic — swap lyric ↔ countdown nếu cần */
+      /* Swap lyric ↔ countdown nếu cần */
       const wantsLyric = _getLyricPhrases().length > 0;
       const hasLyricEl = !!els.question.querySelector('.landing-lyric');
       const hasCountdownEl = !!els.question.querySelector('.birthday-countdown');
+      const wrap = els.question.querySelector('.landing-dynamic-wrap');
 
       if (wantsLyric && !hasLyricEl) {
         if (hasCountdownEl) els.question.querySelector('.birthday-countdown')?.remove();
-        const anchor = els.question.querySelector('.landing-title') || els.question.querySelector('.landing-kicker');
-        if (anchor) anchor.insertAdjacentHTML('afterend', _getLyricHTML());
+        if (wrap) wrap.insertAdjacentHTML('afterbegin', _getLyricHTML());
         _stopCountdownTimer();
         _startLyricPlayer();
       } else if (!wantsLyric && !hasCountdownEl) {
         if (hasLyricEl) els.question.querySelector('.landing-lyric')?.remove();
-        const anchor = els.question.querySelector('.landing-title') || els.question.querySelector('.landing-kicker');
-        if (anchor) anchor.insertAdjacentHTML('afterend', _getCountdownHTML());
+        if (wrap) wrap.insertAdjacentHTML('afterbegin', _getCountdownHTML());
         _stopLyricPlayer();
         _startCountdownTimer();
       } else {
-        // Cùng loại → đảm bảo timer chạy
         _startDynamic();
       }
 
-      /* 2b. Update top3 */
+      /* Đảm bảo nút loa sync đúng (có thể admin vừa thêm/xoá nhạc) */
+      const meta = _getMusicMeta();
+      let btn = document.getElementById('landingMusicBtn');
+      if (meta.url && !btn && wrap) {
+        wrap.insertAdjacentHTML('beforeend', _getMusicBtnHTML());
+        _bindMusicBtn();
+      } else if (!meta.url && !_isAdmin() && btn) {
+        btn.remove();
+      }
+      _syncAudioSource();
+      _bindMusicBtn();
+      _updateMusicBtnState();
+
+      /* Update top3 */
       if (top3Changed) {
         els.question.querySelector('.landing-top3-label')?.remove();
         els.question.querySelector('.landing-top3')?.remove();
@@ -572,7 +747,7 @@
         }
       }
 
-      /* 2c. Update kicker */
+      /* Update kicker */
       const kickerEl = els.question.querySelector('.landing-kicker');
       if (kickerEl) {
         const kr = __getKickerRender();
@@ -583,10 +758,9 @@
         }
       }
 
-      /* 2d. Update CTA */
+      /* Update CTA */
       const cta = els.question.querySelector('.landing-cta');
       const lockNote = els.question.querySelector('.landing-lock-note');
-
       const ci2 = __getCtaRender();
       const state2 = _resolveCtaState(ci2);
       const locked2 = _isCtaLocked(ci2, state2);
@@ -650,17 +824,15 @@
       if (S.els.hint) {
         S.els.hint.textContent = S.isChecklistLocked() ? '' : (S.names.length ? 'Chạm vào câu hỏi' : 'Đang tải dữ liệu…');
       }
-    } catch (e) {
-      console.error('[LandingView] resetHome crash:', e);
-    }
+    } catch (e) { console.error('[LandingView] resetHome crash:', e); }
   }
 
   window.LandingView = {
     render: renderLandingState,
     maybe: maybeRenderLanding,
     resetHome: resetHome,
-    _getSignature: function() { return _lastTop3Signature; },
-    _resetSignature: function() { _lastTop3Signature = ''; }
+    _getSignature: () => _lastTop3Signature,
+    _resetSignature: () => { _lastTop3Signature = ''; }
   };
 
   if (S.callbacks) {
@@ -669,19 +841,28 @@
     S.callbacks.resetHome = resetHome;
   }
 
-  document.addEventListener('visibilitychange', function() {
-    if (!document.hidden) _updateCountdownLive();
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) {
+      _updateCountdownLive();
+      if (_audio && _audio.paused && _isMusicEnabled()) _autoResumeMusicIfEnabled();
+    }
   });
 
-  /* Re-render khi admin đổi title hoặc lyrics */
-  window.addEventListener('bdTitleChanged', function () {
-    try { renderLandingState(true); }
-    catch (e) { console.error('[LandingView] bdTitle re-render:', e); }
+  window.addEventListener('bdTitleChanged', () => {
+    try { renderLandingState(true); } catch (e) { console.error('[LandingView] bdTitle:', e); }
   });
-  window.addEventListener('bdLyricsChanged', function () {
-    try { _stopLyricPlayer(); renderLandingState(true); }
-    catch (e) { console.error('[LandingView] bdLyrics re-render:', e); }
+  window.addEventListener('bdLyricsChanged', () => {
+    try { _stopLyricPlayer(); renderLandingState(true); } catch (e) { console.error('[LandingView] bdLyrics:', e); }
+  });
+  window.addEventListener('bdMusicChanged', () => {
+    try {
+      _syncAudioSource();
+      _bindMusicBtn();
+      _updateMusicBtnState();
+      if (_isMusicEnabled() && _audio && _audio.paused) _autoResumeMusicIfEnabled();
+      renderLandingState(true);
+    } catch (e) { console.error('[LandingView] bdMusic:', e); }
   });
 
-  console.log('[LandingView] v5.0 ready ✓ (lyrics > countdown)');
+  console.log('[LandingView] v5.1 ready ✓ (music player)');
 })();
