@@ -1,24 +1,25 @@
 /* =========================================================
-   BIRTHDAY TITLE EDITOR — v1.1 (RPC-only)
+   SITE TITLE EDITOR — v1.2 (không còn birthday)
    ---------------------------------------------------------
+   v1.2:
+   - Đổi SETTING_KEY: birthday_title → site_title
+   - Đổi CACHE_KEY → invalidate cache "Happy Birthday" cũ
+   - Default = trống (admin tự đặt tiêu đề)
+   - getHTML() trả "" khi cả 2 dòng trống → landing tự ẩn title
+   - Expose isAdmin() cho landing.js dùng chung
    v1.1:
-   - Bỏ hoàn toàn fallback .from() (adapter không hỗ trợ)
-   - Chỉ dùng RPC → tương thích mọi supabase-adapter.js
-   v1.0:
-   - Admin long-press tiêu đề → dialog sửa
-   - Lưu Supabase (site_settings) → áp dụng cho toàn bộ user
-   - Cache localStorage → hiển thị tức thì
+   - RPC-only, không dùng .from()
    ========================================================= */
 (function () {
   "use strict";
   if (window.__bdTitle) return;
 
-  const CACHE_KEY    = "srank_birthday_title_v1";
-  const HINT_KEY     = "srank_bd_title_hint_shown";
-  const SETTING_KEY  = "birthday_title";
+  const CACHE_KEY    = "srank_site_title_v2";
+  const HINT_KEY     = "srank_site_title_hint_v2";
+  const SETTING_KEY  = "site_title";
   const RPC_GET      = "rpc_get_site_setting";
   const RPC_SET      = "rpc_set_site_setting";
-  const DEFAULT      = { line1: "Happy Birthday", line2: "Minh Quân" };
+  const DEFAULT      = { line1: "", line2: "" };
   const LONG_PRESS_MS = 650;
 
   const _state = { line1: DEFAULT.line1, line2: DEFAULT.line2 };
@@ -34,13 +35,22 @@
     window.dispatchEvent(new Event("bdTitleChanged"));
   }
 
+  /* ⭐ Trả "" khi cả 2 dòng trống → landing tự ẩn title */
   function getHTML() {
-    let h = '<span class="rainbow-line">' + _esc(_state.line1) + "</span>";
-    if (_state.line2) h += '<span class="rainbow-line">' + _esc(_state.line2) + "</span>";
+    let h = "";
+    const l1 = String(_state.line1 || "").trim();
+    const l2 = String(_state.line2 || "").trim();
+    if (l1) h += '<span class="rainbow-line">' + _esc(l1) + "</span>";
+    if (l2) h += '<span class="rainbow-line">' + _esc(l2) + "</span>";
     return h;
   }
 
-  function getLines() { return { line1: _state.line1, line2: _state.line2 }; }
+  function getLines() {
+    return {
+      line1: String(_state.line1 || ""),
+      line2: String(_state.line2 || "")
+    };
+  }
 
   /* ---------- Cache ---------- */
   function _loadCache() {
@@ -68,9 +78,7 @@
   /* ---------- Server (RPC-only) ---------- */
   async function _loadFromServer() {
     const sb = window.__sb;
-    if (!sb || typeof sb.rpc !== "function") {
-      return false;
-    }
+    if (!sb || typeof sb.rpc !== "function") return false;
 
     try {
       const res = await sb.rpc(RPC_GET, { p_key: SETTING_KEY });
@@ -89,11 +97,12 @@
       }
       if (!o || typeof o.line1 !== "string") return false;
 
-      const changed = (o.line1 !== _state.line1)
-        || ((typeof o.line2 === "string" ? o.line2 : "") !== _state.line2);
+      const newL1 = o.line1;
+      const newL2 = typeof o.line2 === "string" ? o.line2 : "";
+      const changed = (newL1 !== _state.line1) || (newL2 !== _state.line2);
 
-      _state.line1 = o.line1;
-      _state.line2 = typeof o.line2 === "string" ? o.line2 : "";
+      _state.line1 = newL1;
+      _state.line2 = newL2;
       _saveCache();
       return changed;
     } catch (e) {
@@ -107,7 +116,10 @@
     if (!sb || typeof sb.rpc !== "function") {
       throw new Error("Không có kết nối server");
     }
-    const value = JSON.stringify({ line1: _state.line1, line2: _state.line2 });
+    const value = JSON.stringify({
+      line1: String(_state.line1 || "").trim(),
+      line2: String(_state.line2 || "").trim()
+    });
     const res = await sb.rpc(RPC_SET, { p_key: SETTING_KEY, p_value: value });
     if (res.error) {
       throw new Error(res.error.message || "Server từ chối");
@@ -148,10 +160,10 @@
       "display:flex;align-items:center;justify-content:center;padding:20px;";
 
     ov.innerHTML =
-      '<div style="background:#fff;border-radius:16px;padding:20px;width:100%;' +
-      'max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.3);">' +
-      '<div style="font-size:16px;font-weight:900;margin-bottom:4px;color:#333;">✏️ Sửa tiêu đề sinh nhật</div>' +
-      '<div style="font-size:12px;color:#888;margin-bottom:14px;">Áp dụng cho tất cả mọi người</div>' +
+      '<div style="background:#fff;border-radius:16px;padding:20px;16widthpx;:100%;' +
+      'max-width:380px;boxfont-shadow:0 20px 60px rgba(0,-weight0,0,.3);">:' +
+      '<div style="font-size:900;margin-bottom:4px;color:#333;">✏️ Sửa tiêu đề</div>' +
+      '<div style="font-size:12px;color:#888;margin-bottom:14px;">Áp dụng cho tất cả mọi người · Để trống cả 2 dòng để ẩn tiêu đề</div>' +
       '<label style="display:block;font-size:11px;font-weight:800;color:#666;margin-bottom:4px;">Dòng 1</label>' +
       '<input id="bdTitleL1" type="text" maxlength="40" style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;' +
       'border-radius:8px;font-size:14px;font-weight:700;margin-bottom:12px;box-sizing:border-box;">' +
@@ -175,8 +187,8 @@
     const btnS = ov.querySelector("#bdTitleSave");
     const btnC = ov.querySelector("#bdTitleCancel");
 
-    inp1.value = _state.line1;
-    inp2.value = _state.line2;
+    inp1.value = _state.line1 || "";
+    inp2.value = _state.line2 || "";
     setTimeout(function () { inp1.focus(); inp1.select(); }, 60);
 
     btnC.onclick = function () { ov.remove(); };
@@ -185,7 +197,6 @@
     btnS.onclick = async function () {
       const l1 = inp1.value.trim();
       const l2 = inp2.value.trim();
-      if (!l1) { msg.textContent = "Dòng 1 không được trống"; msg.style.color = "#e74c3c"; return; }
 
       btnS.disabled = true;
       btnS.textContent = "⏳ Đang lưu...";
@@ -199,7 +210,7 @@
         await _saveToServer();
         _saveCache();
         _notify();
-        msg.textContent = "✓ Đã lưu cho tất cả mọi người";
+        msg.textContent = (!l1 && !l2) ? "✓ Đã xoá tiêu đề" : "✓ Đã lưu cho tất cả mọi người";
         msg.style.color = "#4fa370";
         setTimeout(function () { ov.remove(); }, 700);
       } catch (e) {
@@ -251,7 +262,6 @@
       if (Math.hypot(dx, dy) > 10) cancel();
     }, { passive: true });
 
-    // Desktop: chuột phải cũng mở editor
     document.addEventListener("contextmenu", function (e) {
       if (!_isAdmin()) return;
       if (e.target.closest && e.target.closest(".landing-title.rainbow-birthday")) {
@@ -260,7 +270,6 @@
       }
     });
 
-    // Prevent text selection trong lúc long-press
     document.addEventListener("selectstart", function (e) {
       if (target && e.target.closest && e.target.closest(".landing-title")) {
         e.preventDefault();
@@ -301,6 +310,7 @@
   window.__bdTitle = {
     getHTML: getHTML,
     getLines: getLines,
+    isAdmin: _isAdmin,
     openEditor: _openEditor,
     onChange: function (cb) { if (typeof cb === "function") _listeners.push(cb); },
     reload: function () {
@@ -314,5 +324,5 @@
     setTimeout(_init, 0);
   }
 
-  console.log("[bdTitle] ready ✓ v1.1 (RPC-only)");
+  console.log("[bdTitle] ready ✓ v1.2 (site title, no birthday)");
 })();
