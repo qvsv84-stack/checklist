@@ -1,10 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — MODULE #7: TAB FORGE (v5.0 — cap 100)
-   ───────────────────────────────────────────────────────────────────────
-   CHANGELOG v5.0:
-     - Check `s.enh >= CFG.MAX_ENH` (thay vì 15) ở mọi chỗ
-     - Progress label hiển thị XXX / 100
-     - Result modal 2 nút (Đóng + Rèn tiếp)
+   WEAPON FORGE — MODULE #7: TAB FORGE (v5.1 — có character sprite)
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -31,9 +26,17 @@
     shakeScreen, spawnSparks, numberPop,
   } = U;
 
-  /* ═══════════════════════════════════════════════════════════════
-     RENDER TAB
-     ═══════════════════════════════════════════════════════════════ */
+  function renderCharacterSprite(s){
+    const LIB = window.__WF.characterLibrary;
+    if (!LIB) return '';
+    const char = LIB.getById(s.character_id) || LIB.getDefault();
+    if (!char) return '';
+    const url = LIB.getUrl(char, 200);
+    return `<img src="${url}" alt="" loading="lazy"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <span class="wf-character-fallback" style="display:none">${char.emoji || '👤'}</span>`;
+  }
+
   function renderForgeTab(){
     const s = S.state;
     const tier = tierOf(s.enh), ti = CFG.TIERS[tier];
@@ -68,6 +71,7 @@
       </div>
       <div class="wf-stage" id="wfStage">
         <div class="wf-hammer" id="wfHammer">${CFG.HAMMERS[s.hammer].emoji}</div>
+        <div class="wf-character-sprite" id="wfCharSprite">${renderCharacterSprite(s)}</div>
         <div class="wf-weapon-wrap">
           <div class="wf-weapon" id="wfWeaponEmoji">${ti.emoji}</div>
           <div style="display:flex;align-items:center;gap:6px;">
@@ -100,9 +104,6 @@
     `;
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     FORGE ACTION
-     ═══════════════════════════════════════════════════════════════ */
   async function doForge(){
     if (S.busy || !S.state) return;
     const s = S.state;
@@ -126,27 +127,20 @@
     const enhBefore = s.enh;
 
     try {
-      // Phase 1: raise
       if (hammer){ hammer.classList.remove('striking'); hammer.classList.add('raising'); }
       playSound(180, .1);
       await sleep(220);
-
-      // Phase 2: strike
       if (hammer){ hammer.classList.remove('raising'); hammer.classList.add('striking'); }
       playSound(120, .08, 'triangle');
       await sleep(160);
-
-      // Phase 3: impact
       shakeScreen();
       spawnSparks(8);
       vibrate(30);
 
-      // Roll outcome
       const rates = effectiveRates(s);
       const outcome = rollOutcome(rates, s.fails);
       const result = applyOutcome(s, outcome);
 
-      // Phase 4: reveal
       const w = document.getElementById('wfWeaponEmoji');
       if (w){
         w.classList.remove('shake','shine','shatter');
@@ -159,7 +153,6 @@
       }
 
       const unlocked = checkAchievements(s);
-
       s.history.unshift({
         ts: nowMs(), outcome,
         deltaEnh: result.deltaEnh,
@@ -169,7 +162,6 @@
         matUsed,
       });
       if (s.history.length > 50) s.history.length = 50;
-
       ST.scheduleSave();
       playForgeSound(outcome);
 
@@ -181,7 +173,6 @@
       await sleep(400);
       pending = { outcome, result, unlocked };
 
-      // Quest + Season hooks
       API.questProgress('forge', 1);
       const xp = outcome === 'great' ? CFG.SEASON_XP.forge_great : CFG.SEASON_XP.forge;
       API.seasonAddXP(xp);
@@ -199,9 +190,6 @@
     }
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     RESULT POPUP
-     ═══════════════════════════════════════════════════════════════ */
   function showResult(outcome, result, unlocked){
     const ov = document.getElementById('wfResult');
     if (!ov) return;
@@ -270,15 +258,9 @@
     document.getElementById('wfResult')?.classList.remove('show');
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     EXPORT
-     ═══════════════════════════════════════════════════════════════ */
   window.__WF.tabForge = {
-    renderForgeTab,
-    doForge,
-    showResult,
-    closeResult,
+    renderForgeTab, doForge, showResult, closeResult,
   };
 
-  console.log('[WF] tab-forge.js ✓ (v5.0 — cap 100)');
+  console.log('[WF] tab-forge.js ✓ (v5.1 — character sprite)');
 })();
