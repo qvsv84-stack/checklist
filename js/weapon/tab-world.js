@@ -1,7 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — TAB WORLD (v1.1 — pass scene directly)
+   WEAPON FORGE — TAB WORLD (v1.2 — wait for layout)
    ───────────────────────────────────────────────────────────────────────
-   v1.1: Truyền TownScene OBJECT trực tiếp vào mount, không qua registry.
+   v1.2: Chờ container có kích thước > 0 trước khi mount.
+         Bỏ CSS force 100% canvas (để Phaser tự resize).
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -47,10 +48,9 @@
   width: 100%;
   height: 100%;
 }
+/* ⭐ Không force 100% — để Phaser tự điều khiển canvas */
 .wf-world-mount canvas{
-  display: block !important;
-  width: 100% !important;
-  height: 100% !important;
+  display: block;
 }
 .wf-world-placeholder{
   position: absolute;
@@ -150,18 +150,11 @@
     }
 
     try {
-      // ⭐ LẤY SCENE OBJECT TRỰC TIẾP — không qua registry
       const TownScene = window.__WF.sceneTown?.TownScene;
-
       if (!TownScene){
-        console.error('[WF-TabWorld] scene-town.js chưa load hoặc export sai');
-        console.error('[WF-TabWorld] window.__WF.sceneTown =', window.__WF.sceneTown);
-        throw new Error('scene-town.js chưa load — kiểm tra Network tab');
+        throw new Error('scene-town.js chưa load');
       }
 
-      log('TownScene found:', typeof TownScene, TownScene.key || '(no key)');
-
-      // Attach HUD
       WorldUI.attach(_container);
       WorldUI.setLoading(true, 'Đang tải thế giới…');
 
@@ -173,10 +166,21 @@
         }
       });
 
-      // ⭐ Mount với scene OBJECT trực tiếp
+      /* ⭐ FIX: Chờ container có kích thước thực trước khi mount Phaser */
+      let waited = 0;
+      while ((_mountEl.clientWidth === 0 || _mountEl.clientHeight === 0) && waited < 2000){
+        await new Promise(r => setTimeout(r, 30));
+        waited += 30;
+      }
+      log('Container size ready:', _mountEl.clientWidth, 'x', _mountEl.clientHeight);
+
+      if (_mountEl.clientWidth === 0 || _mountEl.clientHeight === 0){
+        throw new Error('Container có kích thước 0×0 sau 2s');
+      }
+
       log('Mounting with TownScene object...');
       await World.mount(_mountEl, {
-        scenes: [TownScene],   // ← OBJECT trực tiếp
+        scenes: [TownScene],
       });
 
       log('World engine ready');
@@ -285,5 +289,5 @@
     isMounted,
   };
 
-  log('tab-world.js ✓ v1.1 (pass scene object directly)');
+  log('tab-world.js ✓ v1.2 (wait for layout, no canvas force)');
 })();
