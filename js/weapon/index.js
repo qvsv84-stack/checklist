@@ -1,11 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — MODULE #16: INDEX (boot + render + public API)
-   - ensurePage: DOM gốc (header, body, result modal)
-   - render: dispatch theo S.activeTab → tab-*.js
-   - wireActiveTab: gắn event listeners cho tab đang active
-   - openPage / closePage
-   - Public API: window.WeaponForge
-   - Load: #16 (CUỐI CÙNG)
+   WEAPON FORGE — MODULE #16: INDEX (boot + render + public API) v5.1
+   - v5.1: thêm tab character
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -36,11 +31,9 @@
   const { nowMs, fmtGold, esc, toast } = U;
   const { tierOf, powerOf, regenEnergy, checkAchievements } = C;
 
-  /* ═══════════════════════════════════════════════════════════════
-     TAB DEFINITIONS
-     ═══════════════════════════════════════════════════════════════ */
   const TABS = [
     { key:'forge',     icon:'🔨', label:'Rèn' },
+    { key:'character', icon:'👤', label:'Nhân vật' },
     { key:'market',    icon:'🏪', label:'Chợ' },
     { key:'inventory', icon:'🎒', label:'Kho' },
     { key:'quest',     icon:'📜', label:'Quest',   badge:true },
@@ -52,9 +45,6 @@
     { key:'gift',      icon:'🎁', label:'Tặng' },
   ];
 
-  /* ═══════════════════════════════════════════════════════════════
-     ENSURE PAGE (DOM gốc)
-     ═══════════════════════════════════════════════════════════════ */
   function ensurePage(){
     let page = document.getElementById('weaponPage');
     if (page) return page;
@@ -105,14 +95,10 @@
     return page;
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     RENDER MAIN (dispatch)
-     ═══════════════════════════════════════════════════════════════ */
   function render(){
     const body = document.getElementById('wfBody');
     if (!body) return;
 
-    /* Login wall */
     if (!S.user){
       body.innerHTML = renderLoginWall();
       body.querySelector('#wfLoginBtn')?.addEventListener('click', () => {
@@ -121,21 +107,17 @@
       return;
     }
 
-    /* Loading */
     if (!S.state){
       body.innerHTML = '<div class="wf-history-empty">Đang tải…</div>';
       return;
     }
 
-    /* Energy regen */
     const gained = regenEnergy(S.state, nowMs());
     if (gained > 0) ST.scheduleSave();
 
-    /* Gold pill */
     const gv = document.getElementById('wfGoldVal');
     if (gv) gv.textContent = fmtGold(S.state.gold);
 
-    /* Tabs nav */
     let tabsHTML = '<nav class="wf-tabs">';
     TABS.forEach(t => {
       const badge = t.badge ? '<span class="wf-tab-badge" style="display:none"></span>' : '';
@@ -146,10 +128,10 @@
     });
     tabsHTML += '</nav>';
 
-    /* Tab content dispatch */
     let content = '';
     switch (S.activeTab){
       case 'forge':     content = TF.renderForgeTab(); break;
+      case 'character': content = window.__WF.tabCharacter?.renderCharacterTab() || ''; break;
       case 'market':    content = TS.renderMarketTab(); break;
       case 'inventory': content = TS.renderInventoryTab(); break;
       case 'quest':     content = TQ.renderQuestTab(); break;
@@ -163,7 +145,6 @@
 
     body.innerHTML = tabsHTML + content;
 
-    /* Wire tab buttons */
     body.querySelectorAll('.wf-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         S.activeTab = btn.dataset.tab;
@@ -178,9 +159,6 @@
     wireActiveTab();
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     ON TAB CHANGE — lazy load data
-     ═══════════════════════════════════════════════════════════════ */
   function onTabChange(tab){
     switch (tab){
       case 'arena':
@@ -209,9 +187,6 @@
     }
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     WIRE ACTIVE TAB
-     ═══════════════════════════════════════════════════════════════ */
   function wireActiveTab(){
     const body = document.getElementById('wfBody');
     if (!body) return;
@@ -220,7 +195,9 @@
     if (t === 'forge'){
       document.getElementById('wfForgeBtn')?.addEventListener('click', TF.doForge);
     }
-
+    if (t === 'character'){
+      window.__WF.tabCharacter?.wireCharacter(body);
+    }
     if (t === 'market'){
       body.querySelectorAll('[data-buy-mat]').forEach(b => {
         b.addEventListener('click', () => TS.doBuyMaterial(b.dataset.buyMat));
@@ -233,11 +210,9 @@
       });
       document.getElementById('wfRefillBtn')?.addEventListener('click', TS.doRefillEnergy);
     }
-
     if (t === 'inventory'){
       document.getElementById('wfSellBtn')?.addEventListener('click', TS.doSell);
     }
-
     if (t === 'quest')    TQ.wireQuest(body);
     if (t === 'season')   TQ.wireSeason(body);
     if (t === 'pet')      TP.wirePet(body);
@@ -247,9 +222,6 @@
     if (t === 'gift')     TA.wireGift(body);
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     LOGIN WALL
-     ═══════════════════════════════════════════════════════════════ */
   function renderLoginWall(){
     return `<div class="wf-login-wall">
       <div class="wf-login-wall-emoji">⚔️</div>
@@ -261,9 +233,6 @@
     </div>`;
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     OPEN / CLOSE
-     ═══════════════════════════════════════════════════════════════ */
   async function openPage(){
     ensurePage();
     const page = document.getElementById('weaponPage');
@@ -283,13 +252,11 @@
     document.body.style.overflow = 'hidden';
     render();
 
-    /* ─── Load state (local + remote) ─── */
     const remote = await ST.pullRemote();
     const local = ST.loadLocal(S.user.id);
     S.state = ST.mergeState(local, remote?.state);
     ST.saveLocal(S.user.id, S.state);
 
-    /* ─── Regen energy + display name ─── */
     regenEnergy(S.state, nowMs());
     const dn = S.user.displayName || S.user.username || '';
     if (dn) S.state.display_name = dn;
@@ -297,7 +264,6 @@
     ST.scheduleSave();
     render();
 
-    /* ─── Boot realtime + prefetch social data ─── */
     RT.boot();
     API.fetchArena();
     API.fetchFeed();
@@ -307,7 +273,6 @@
     API.fetchPets().then(() => TP.rerenderPets());
     API.fetchBoss().then(() => TB.rerenderBoss());
 
-    /* ─── Check active battle ─── */
     const activeId = ST.getActiveBattleId(S.user.id);
     if (activeId){
       const activeData = await API.fetchActiveBattle();
@@ -333,9 +298,6 @@
     if (S.state && S.user) ST.saveLocal(S.user.id, S.state);
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     BOOT — bind trigger button
-     ═══════════════════════════════════════════════════════════════ */
   function bindTriggers(){
     const btn = document.getElementById('weaponBtn');
     if (btn && !btn.__wfBound){
@@ -356,7 +318,7 @@
       bindTriggers();
       if (++tries > 20) clearInterval(t);
     }, 300);
-    U.log('v4.0 modular ready ✓ (16 modules)');
+    U.log('v5.1 modular ready ✓ (11 tabs, có Nhân vật)');
   }
 
   if (document.readyState === 'loading'){
@@ -365,9 +327,6 @@
     boot();
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     EXPORT INDEX (cần cho các module khác gọi render/rerender)
-     ═══════════════════════════════════════════════════════════════ */
   window.__WF.index = {
     render,
     wireActiveTab,
@@ -376,7 +335,6 @@
     openPage,
     closePage,
     ensurePage,
-    // Bridge cho tab modules
     rerenderArena:   () => TA.rerenderArena(),
     rerenderFeed:    () => TA.rerenderFeed(),
     rerenderChat:    () => TC.rerenderChat(),
@@ -387,9 +345,6 @@
     rerenderGift:    () => TA.rerenderGift(),
   };
 
-  /* ═══════════════════════════════════════════════════════════════
-     PUBLIC API — window.WeaponForge (giữ tương thích v3.1)
-     ═══════════════════════════════════════════════════════════════ */
   window.WeaponForge = {
     open: openPage,
     close: closePage,
@@ -418,25 +373,17 @@
       render();
       onTabChange(tab);
     },
-    // Debug
     _S: S,
     _SOC: SOC,
     _modules: {
-      config: C,
-      utils: U,
-      state: ST,
-      api: API,
-      tabForge: TF,
-      tabShop: TS,
-      tabQuest: TQ,
-      tabPet: TP,
-      tabBoss: TB,
-      tabArena: TA,
-      tabChat: TC,
-      battle: BATTLE,
-      realtime: RT,
+      config: C, utils: U, state: ST, api: API,
+      tabForge: TF, tabShop: TS, tabQuest: TQ, tabPet: TP,
+      tabBoss: TB, tabArena: TA, tabChat: TC,
+      tabCharacter: window.__WF.tabCharacter,
+      characterLibrary: window.__WF.characterLibrary,
+      battle: BATTLE, realtime: RT,
     },
   };
 
-  console.log('[WF] index.js ✓ — Weapon Forge v4.0 modular ready');
+  console.log('[WF] index.js ✓ — Weapon Forge v5.1 (character tab)');
 })();
