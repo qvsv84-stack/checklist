@@ -1,42 +1,23 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE WORLD — ENGINE (v1.0)
+   WEAPON FORGE WORLD — ENGINE (v1.1 — fix register object scene)
    ───────────────────────────────────────────────────────────────────────
-   Boot Phaser khi user mở tab World. Destroy khi đóng.
-   Không load Phaser lúc page boot (tiết kiệm 1MB cho user không dùng).
-   ───────────────────────────────────────────────────────────────────────
-   Public API (window.__WF.world):
-     .registerScene(key, SceneClass)  — Scene đăng ký với engine
-     .mount(parentEl, opts)           — Khởi tạo game (async)
-     .unmount()                       — Destroy game
-     .pause() / .resume()             — Tạm dừng / tiếp tục
-     .isReady()                       — Có game đang chạy?
-     .getGame()                       — Trả về Phaser.Game
-     .getScene(key)                   — Trả về Scene instance
-     .loadPhaser()                    — Preload Phaser (nếu cần)
-   ───────────────────────────────────────────────────────────────────────
-   Load order: SAU `character-library.js`, TRƯỚC các file scene.
+   v1.1: registerScene chấp nhận cả function (class) VÀ object (config).
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
   if (window.__WF && window.__WF.world) return;
   window.__WF = window.__WF || {};
 
-  /* ═══════════════════════════════════════════════════════════════
-     CONSTANTS
-     ═══════════════════════════════════════════════════════════════ */
   const PHASER_VERSION = '3.80.1';
   const PHASER_URL = `https://cdn.jsdelivr.net/npm/phaser@${PHASER_VERSION}/dist/phaser.min.js`;
   const SCENE_REGISTER_TIMEOUT_MS = 5000;
 
-  /* ═══════════════════════════════════════════════════════════════
-     INTERNAL STATE
-     ═══════════════════════════════════════════════════════════════ */
   let _game = null;
   let _phaserPromise = null;
   let _parent = null;
   let _resizeObserver = null;
   let _visibilityHandler = null;
-  const _scenes = {}; // { Town: SceneClass, ... }
+  const _scenes = {};
 
   function log(...a){
     try { console.log('[WF-World]', ...a); } catch(_){}
@@ -53,7 +34,6 @@
     if (_phaserPromise) return _phaserPromise;
 
     _phaserPromise = new Promise((resolve, reject) => {
-      // Nếu tag script đã có nhưng chưa load xong
       const existing = document.querySelector(`script[src="${PHASER_URL}"]`);
       if (existing){
         if (window.Phaser) return resolve(window.Phaser);
@@ -83,15 +63,21 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     SCENE REGISTRY
+     SCENE REGISTRY — v1.1 fix: accept object + function
      ═══════════════════════════════════════════════════════════════ */
   function registerScene(key, SceneClass){
-    if (!key || typeof SceneClass !== 'function'){
+    if (!key || !SceneClass){
       warn('registerScene: invalid args', key, SceneClass);
       return;
     }
+    const t = typeof SceneClass;
+    // ⭐ FIX v1.1: chấp nhận cả class (function) VÀ config (object)
+    if (t !== 'function' && t !== 'object'){
+      warn('registerScene: SceneClass phải là class hoặc object — nhận:', t);
+      return;
+    }
     _scenes[key] = SceneClass;
-    log('Scene registered:', key);
+    log('Scene registered:', key, '(' + t + ')');
   }
 
   async function waitForScenes(keys, timeout){
@@ -122,35 +108,36 @@
       ? Number(opts.sceneTimeout)
       : SCENE_REGISTER_TIMEOUT_MS;
 
-    // 1. Load Phaser (chỉ lần đầu)
     await loadPhaser();
 
-    // 2. Chờ scenes đăng ký xong
     const ready = await waitForScenes(sceneKeys, sceneTimeout);
     if (!ready){
       const missing = sceneKeys.filter(k => !_scenes[k]);
-      throw new Error('Scenes chưa đăng ký: ' + missing.join(', '));
+      const available = Object.keys(_scenes);
+      throw new Error(
+        'Scenes chưa đăng ký: ' + missing.join(', ') +
+        ' (có sẵn: ' + (available.length ? available.join(', ') : 'trống') + ')'
+      );
     }
 
     _parent = parent;
 
-    // 3. Tạo game
     const Phaser = window.Phaser;
     const w = Math.max(1, parent.clientWidth);
     const h = Math.max(1, parent.clientHeight);
 
     _game = new Phaser.Game({
-      type: Phaser.AUTO,        // WebGL → fallback Canvas
+      type: Phaser.AUTO,
       parent: parent,
       width: w,
       height: h,
       backgroundColor: '#2d2420',
-      pixelArt: true,           // Tắt smoothing
-      roundPixels: true,        // Không nửa pixel
+      pixelArt: true,
+      roundPixels: true,
       physics: {
         default: 'arcade',
         arcade: {
-          gravity: { y: 0 },    // Top-down
+          gravity: { y: 0 },
           debug: false,
         },
       },
@@ -166,7 +153,6 @@
       scene: sceneKeys.map(k => _scenes[k]),
     });
 
-    // 4. Handle resize parent (mobile xoay ngang, đổi kích thước)
     if (typeof ResizeObserver !== 'undefined'){
       _resizeObserver = new ResizeObserver(() => {
         if (!_game || !_parent) return;
@@ -179,7 +165,6 @@
       _resizeObserver.observe(parent);
     }
 
-    // 5. Pause khi tab ẩn (tiết kiệm pin)
     _visibilityHandler = () => {
       if (!_game || !_game.loop) return;
       try {
@@ -197,7 +182,7 @@
     if (!_game) return;
 
     try {
-      _game.destroy(true); // true = xoá canvas khỏi DOM
+      _game.destroy(true);
     } catch(e){
       warn('destroy error:', e);
     }
@@ -213,7 +198,6 @@
       _visibilityHandler = null;
     }
 
-    // Xoá canvas còn sót
     if (_parent){
       try {
         const canvases = _parent.querySelectorAll('canvas');
@@ -256,9 +240,6 @@
     return Object.keys(_scenes);
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     PLAYER DATA (từ state.js)
-     ═══════════════════════════════════════════════════════════════ */
   function getPlayerData(){
     const ST = window.__WF.state;
     if (!ST || !ST.S) return null;
@@ -272,30 +253,21 @@
     };
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     EXPORT
-     ═══════════════════════════════════════════════════════════════ */
   window.__WF.world = {
-    // Scene
     registerScene,
     getRegisteredScenes,
-    // Lifecycle
     mount,
     unmount,
     pause,
     resume,
-    // State
     isReady,
     getGame,
     getScene,
-    // Data
     getPlayerData,
-    // Utility
     loadPhaser,
     PHASER_VERSION,
-    // Debug
     _scenes,
   };
 
-  log('engine.js ✓ (Phaser', PHASER_VERSION, '— lazy load)');
+  log('engine.js ✓ v1.1 (Phaser', PHASER_VERSION, '— accept class + object)');
 })();
