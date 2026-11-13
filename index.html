@@ -26,15 +26,13 @@
 <title>S Rank — Daily Mission</title>
 
 <!-- ═══ TỐI ƯU: Preload file quan trọng nhất ═══ -->
-<!-- main.css = critical, cần fetch priority cao -->
 <link rel="preload" href="css/main.css" as="style" fetchpriority="high">
-<!-- supabase CDN = file nặng nhất, boot app cần ngay -->
 <link rel="preload" href="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" as="script" crossorigin>
 
 <link rel="stylesheet" href="css/main.css">
 <link rel="stylesheet" href="css/menu.css">
 <link rel="stylesheet" href="css/shop.css">
-<link rel="stylesheet" href="css/weapon.css"><!-- ⚔️ WEAPON -->
+<!-- ⚔️ WEAPON: CSS inject từ js/weapon/css.js — không cần link file riêng -->
 
 <style id="landingCourtForce">
 
@@ -100,9 +98,6 @@ html body #question::before, html body #question::after { display: none !importa
 html body #question.landing-court-active { max-height: none !important; height: auto !important; overflow: visible !important; }
 html body #question .landing-kicker { display: block !important; margin: 0 0 14px !important; padding: 0 !important; min-height: 16px !important; line-height: 1.2 !important; }
 
-/* ═══════════════════════════════════════════════════════════
-   ⭐ RAINBOW BIRTHDAY TITLE — v5 (Dịu mắt hơn - Pastel) ⭐
-   ═══════════════════════════════════════════════════════════ */
 html body #question .landing-title { margin: 0 0 10px !important; }
 
 html body #question .landing-title.rainbow-birthday {
@@ -174,9 +169,6 @@ html body #question .landing-title.rainbow-birthday .rainbow-line {
   }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   ⭐ COUNTDOWN SINH NHẬT — v2 (Gọn 1 dòng) ⭐
-   ═══════════════════════════════════════════════════════════ */
 html body #question .birthday-countdown {
   display: block !important;
   margin: 0 auto 14px !important;
@@ -216,9 +208,6 @@ html body #question .birthday-countdown.ended {
   50% { transform: scale(1.05); opacity: 0.85; }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   LANDING COURT & PODIUM
-   ═══════════════════════════════════════════════════════════ */
 html body #question .landing-top3.landing-court, html body #question .landing-court { display: flex !important; flex-direction: column !important; align-items: stretch !important; justify-content: flex-start !important; flex-wrap: nowrap !important; gap: 8px !important; padding: 0 !important; margin: 0 0 12px !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; height: auto !important; max-height: none !important; overflow: visible !important; position: static !important; background: none !important; border: 0 !important; box-shadow: none !important; box-sizing: border-box !important; }
 html body #question .landing-court::before, html body #question .landing-court::after { display: none !important; content: none !important; }
 html body #question .landing-court > * { flex: 0 0 auto !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; box-sizing: border-box !important; }
@@ -610,7 +599,7 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
 </div>
 
 <!-- #shopPage được js/shop.js tự tạo khi boot -->
-<!-- #weaponPage được js/weapon.js tự tạo khi boot ⚔️ WEAPON -->
+<!-- #weaponPage được js/weapon/index.js tự tạo khi boot ⚔️ WEAPON -->
 <!-- #spinFeed được js/spin-feed.js tự tạo khi boot -->
 <!-- Tab Data được js/admin-data.js tự tạo khi boot -->
 
@@ -699,7 +688,7 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     ⚡ TỐI ƯU: TẤT CẢ script đều có defer — tải song song
+     ⚡ TẤT CẢ script đều có defer — tải song song
      ══════════════════════════════════════════════════════════ -->
 <script defer src="js/config.js"></script>
 <script defer src="js/role.js"></script>
@@ -730,7 +719,26 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
 <script defer src="js/shop.js"></script>
 <script defer src="js/shop-admin.js"></script>
 <script defer src="js/shop-requests.js"></script>
-<script defer src="js/weapon.js"></script><!-- ⚔️ WEAPON -->
+
+<!-- ⚔️ WEAPON FORGE v4.0 MODULAR — 16 files, load order BẮT BUỘC -->
+<script defer src="js/weapon/config.js"></script>
+<script defer src="js/weapon/utils.js"></script>
+<script defer src="js/weapon/css.js"></script>
+<script defer src="js/weapon/state.js"></script>
+<script defer src="js/weapon/api.js"></script>
+<script defer src="js/weapon/modals.js"></script>
+<script defer src="js/weapon/tab-forge.js"></script>
+<script defer src="js/weapon/tab-shop.js"></script>
+<script defer src="js/weapon/tab-quest.js"></script>
+<script defer src="js/weapon/tab-pet.js"></script>
+<script defer src="js/weapon/tab-boss.js"></script>
+<script defer src="js/weapon/tab-arena.js"></script>
+<script defer src="js/weapon/tab-chat.js"></script>
+<script defer src="js/weapon/battle.js"></script>
+<script defer src="js/weapon/realtime.js"></script>
+<script defer src="js/weapon/index.js"></script>
+<!-- ⚔️ WEAPON END -->
+
 <script defer src="js/spin-feed.js"></script>
 <script defer src="js/admin-data.js"></script>
 <script defer src="js/debug-menu.js"></script>
@@ -756,11 +764,7 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
 </script>
 
 <!-- ══════════════════════════════════════════════════════════
-     TỐI ƯU LỚN: Version check chuyển xuống cuối body
-     - Trước: chạy ngay đầu <head> → fetch version.json chiếm
-       bandwidth của CSS/JS quan trọng
-     - Sau: chờ load xong mới check (trễ < 1s, không ai thấy)
-     - Logic giữ nguyên 100%
+     TỐI ƯU LỚN: Version check cuối body
      ══════════════════════════════════════════════════════════ -->
 <script>
 (function(){
@@ -816,7 +820,6 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
       checkVersion();
     });
   }
-  // Chờ load xong mới check — không tranh bandwidth với CSS/JS
   if (document.readyState === 'complete') {
     startWatchers();
   } else {
