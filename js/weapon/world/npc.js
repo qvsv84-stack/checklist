@@ -1,70 +1,32 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE WORLD — NPC + PORTAL (v1.0)
+   WEAPON FORGE WORLD — NPC + PORTAL (v1.1 — proximity gate)
    ───────────────────────────────────────────────────────────────────────
-   NPC và Portal đều là "interactable" — tap để trigger callback.
-
-   NPC (nhân vật):
-     • Circle base tinted theo type
-     • Emoji icon chính giữa
-     • Nametag dưới chân
-     • Hover: scale up nhẹ + glow
-     • Tap → gọi onInteract callback
-
-   Portal (cổng):
-     • Ring pulse animation mạnh
-     • Emoji icon (⚔️🏪🏆👹...)
-     • Nametag trên
-     • Xoay nhẹ
-     • Tap → gọi onInteract callback
-
-   Player-proximity:
-     • Khi player lại gần (< INTERACT_RADIUS)
-     • Hiện arrow nhấp nháy trên đầu NPC/Portal để gợi ý "tap vào đây"
-
-   ───────────────────────────────────────────────────────────────────────
-   Public API (window.__WF.npc):
-     .create(scene, config)          — Tạo NPC hoặc Portal
-     .updateAll(playerX, playerY)    — Gọi mỗi frame để check proximity
-     .destroyAll()                   — Cleanup
-     .getAll()                        — Danh sách NPC/portal đã tạo
-
-   Config format:
-     {
-       type: 'npc' | 'portal',
-       x: 500, y: 300,
-       emoji: '🔨',
-       name: 'Thợ Rèn',
-       tint: 0xff6b6b,               // cho NPC, màu circle
-       action: 'forge',               // string identifier (optional)
-       onInteract: () => { ... }      // callback khi tap
-     }
-   ───────────────────────────────────────────────────────────────────────
-   Load order: SAU tileset.js + player.js.
+   v1.1 FIX:
+     - Chỉ tap được NPC/Portal khi player ở gần (< INTERACT_RADIUS)
+     - Tap xa → toast "Đi tới gần để tương tác" (không trigger)
+     - Per-item debounce (không block tap nhiều NPC liên tiếp)
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
   if (window.__WF && window.__WF.npc) return;
   window.__WF = window.__WF || {};
 
-  /* ═══════════════════════════════════════════════════════════════
-     CONSTANTS
-     ═══════════════════════════════════════════════════════════════ */
-  const INTERACT_RADIUS = 90;        // Khoảng cách player có thể tap
+  const INTERACT_RADIUS = 90;
   const NPC_DEPTH_BASE = 1000;
   const PORTAL_SIZE = 100;
+  const INTERACT_COOLDOWN_MS = 800;
 
-  function log(...a){
-    try { console.log('[WF-NPC]', ...a); } catch(_){}
+  function log(...a){ try { console.log('[WF-NPC]', ...a); } catch(_){} }
+
+  const _items = [];
+
+  function toast(msg, type){
+    try {
+      const U = window.__WF.utils;
+      if (U && U.toast) return U.toast(msg, type || 'info');
+    } catch(_){}
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     STATE
-     ═══════════════════════════════════════════════════════════════ */
-  const _items = [];  // [{ container, type, x, y, onInteract, arrow, sprite, ... }]
-
-  /* ═══════════════════════════════════════════════════════════════
-     CREATE
-     ═══════════════════════════════════════════════════════════════ */
   function create(scene, config){
     if (!scene) throw new Error('npc.create: scene required');
     if (!config) throw new Error('npc.create: config required');
@@ -82,6 +44,30 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
+     HANDLE TAP — gate by proximity
+     ═══════════════════════════════════════════════════════════════ */
+  function handleTap(item){
+    if (!item) return;
+    if (item._lastTapAt && Date.now() - item._lastTapAt < INTERACT_COOLDOWN_MS){
+      return; // debounce per-item
+    }
+    item._lastTapAt = Date.now();
+
+    if (!item.nearPlayer){
+      toast('Đi tới gần để tương tác', 'info');
+      return;
+    }
+
+    try {
+      if (typeof item.onInteract === 'function'){
+        item.onInteract(item);
+      }
+    } catch(e){
+      console.warn('[WF-NPC] onInteract error:', e);
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
      NPC
      ═══════════════════════════════════════════════════════════════ */
   function createNpc(scene, x, y, emoji, name, onInteract, config){
@@ -89,16 +75,13 @@
     const container = scene.add.container(x, y);
     container.setDepth(NPC_DEPTH_BASE + y);
 
-    // Shadow
     const shadow = scene.add.ellipse(0, 26, 44, 14, 0x000000, 0.35);
     container.add(shadow);
 
-    // Circle base (tinted)
     const base = scene.add.image(0, 0, 'npc_base').setTint(tint);
     base.setDisplaySize(56, 64);
     container.add(base);
 
-    // Emoji icon
     const emojiText = scene.add.text(0, 0, emoji, {
       fontFamily: 'system-ui, -apple-system, "Segoe UI Emoji", sans-serif',
       fontSize: '28px',
@@ -106,7 +89,6 @@
     emojiText.setOrigin(0.5, 0.55);
     container.add(emojiText);
 
-    // Nametag
     const nametag = scene.add.text(0, 40, name, {
       fontFamily: 'ui-rounded, system-ui, sans-serif',
       fontSize: '11px',
@@ -118,7 +100,6 @@
     nametag.setOrigin(0.5, 0);
     container.add(nametag);
 
-    // Arrow chỉ "tap" khi player gần
     const arrow = scene.add.text(0, -46, '⬇', {
       fontFamily: 'system-ui, sans-serif',
       fontSize: '18px',
@@ -130,58 +111,36 @@
     arrow.setAlpha(0);
     container.add(arrow);
 
-    // Tween: emoji bob nhẹ
     scene.tweens.add({
       targets: emojiText,
-      y: -3,
-      duration: 1200,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.InOut',
+      y: -3, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.InOut',
     });
-
-    // Tween: arrow bounce (chỉ khi hiện)
     scene.tweens.add({
       targets: arrow,
-      y: -52,
-      duration: 500,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.InOut',
+      y: -52, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.InOut',
     });
 
-    // Interactive: tap to trigger
     base.setInteractive({ useHandCursor: true });
-    base.on('pointerdown', (pointer, localX, localY, event) => {
+    base.on('pointerdown', (pointer, lx, ly, event) => {
       event.stopPropagation();
-      triggerInteract(item);
+      handleTap(item);
     });
     base.on('pointerover', () => {
-      scene.tweens.add({
-        targets: container,
-        scale: 1.08,
-        duration: 120,
-        ease: 'Sine.Out',
-      });
+      scene.tweens.add({ targets: container, scale: 1.08, duration: 120, ease: 'Sine.Out' });
       base.setTint(0xffffff);
     });
     base.on('pointerout', () => {
-      scene.tweens.add({
-        targets: container,
-        scale: 1,
-        duration: 120,
-        ease: 'Sine.Out',
-      });
+      scene.tweens.add({ targets: container, scale: 1, duration: 120, ease: 'Sine.Out' });
       base.setTint(tint);
     });
 
     const item = {
       type: 'npc',
       container, base, emojiText, nametag, arrow, shadow,
-      x, y,
-      onInteract,
+      x, y, onInteract,
       action: config.action || null,
       nearPlayer: false,
+      _lastTapAt: 0,
     };
     _items.push(item);
     log('NPC created:', name, 'at', x, y);
@@ -196,13 +155,11 @@
     const container = scene.add.container(x, y);
     container.setDepth(NPC_DEPTH_BASE + y - 10);
 
-    // Ring (rotate + pulse)
     const ring = scene.add.image(0, 0, 'portal_ring');
     ring.setDisplaySize(PORTAL_SIZE, PORTAL_SIZE);
     ring.setTint(color);
     container.add(ring);
 
-    // Emoji icon
     const emojiText = scene.add.text(0, 0, emoji, {
       fontFamily: 'system-ui, -apple-system, "Segoe UI Emoji", sans-serif',
       fontSize: '36px',
@@ -210,7 +167,6 @@
     emojiText.setOrigin(0.5, 0.5);
     container.add(emojiText);
 
-    // Nametag (trên)
     const nametag = scene.add.text(0, -PORTAL_SIZE / 2 - 12, name, {
       fontFamily: 'ui-rounded, system-ui, sans-serif',
       fontSize: '11px',
@@ -222,7 +178,6 @@
     nametag.setOrigin(0.5, 1);
     container.add(nametag);
 
-    // Arrow
     const arrow = scene.add.text(0, PORTAL_SIZE / 2 + 6, '⬆', {
       fontFamily: 'system-ui, sans-serif',
       fontSize: '18px',
@@ -234,74 +189,47 @@
     arrow.setAlpha(0);
     container.add(arrow);
 
-    // Ring animation
     scene.tweens.add({
       targets: ring,
       scale: { from: 0.92, to: 1.05 },
-      duration: 1400,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.InOut',
+      duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.InOut',
     });
     scene.tweens.add({
-      targets: ring,
-      angle: 360,
-      duration: 8000,
-      repeat: -1,
-      ease: 'Linear',
+      targets: ring, angle: 360, duration: 8000, repeat: -1, ease: 'Linear',
     });
-
-    // Emoji pulse
     scene.tweens.add({
       targets: emojiText,
       scale: { from: 1, to: 1.08 },
-      duration: 900,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.InOut',
+      duration: 900, yoyo: true, repeat: -1, ease: 'Sine.InOut',
     });
-
-    // Arrow bounce
     scene.tweens.add({
       targets: arrow,
       y: PORTAL_SIZE / 2 + 12,
-      duration: 500,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.InOut',
+      duration: 500, yoyo: true, repeat: -1, ease: 'Sine.InOut',
     });
 
-    // Interactive: tap
     ring.setInteractive(
       new Phaser.Geom.Circle(PORTAL_SIZE / 2, PORTAL_SIZE / 2, PORTAL_SIZE / 2),
       Phaser.Geom.Circle.Contains
     );
-    ring.on('pointerdown', (pointer, localX, localY, event) => {
+    ring.on('pointerdown', (pointer, lx, ly, event) => {
       event.stopPropagation();
-      triggerInteract(item);
+      handleTap(item);
     });
     ring.on('pointerover', () => {
-      scene.tweens.add({
-        targets: container,
-        scale: 1.1,
-        duration: 120,
-      });
+      scene.tweens.add({ targets: container, scale: 1.1, duration: 120 });
     });
     ring.on('pointerout', () => {
-      scene.tweens.add({
-        targets: container,
-        scale: 1,
-        duration: 120,
-      });
+      scene.tweens.add({ targets: container, scale: 1, duration: 120 });
     });
 
     const item = {
       type: 'portal',
       container, ring, emojiText, nametag, arrow,
-      x, y,
-      onInteract,
+      x, y, onInteract,
       action: config.action || null,
       nearPlayer: false,
+      _lastTapAt: 0,
     };
     _items.push(item);
     log('Portal created:', name, 'at', x, y);
@@ -309,26 +237,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     TRIGGER
-     ═══════════════════════════════════════════════════════════════ */
-  let _triggering = false;
-  function triggerInteract(item){
-    if (!item || _triggering) return;
-    _triggering = true;
-    // Cho phép trigger lại sau 500ms (tránh double-tap)
-    setTimeout(() => { _triggering = false; }, 500);
-
-    try {
-      if (typeof item.onInteract === 'function'){
-        item.onInteract(item);
-      }
-    } catch(e){
-      console.warn('[WF-NPC] onInteract error:', e);
-    }
-  }
-
-  /* ═══════════════════════════════════════════════════════════════
-     UPDATE ALL — check player proximity
+     UPDATE ALL
      ═══════════════════════════════════════════════════════════════ */
   function updateAll(playerX, playerY){
     if (typeof playerX !== 'number' || typeof playerY !== 'number') return;
@@ -340,7 +249,6 @@
       const dist = Math.sqrt(dx * dx + dy * dy);
       const near = dist < INTERACT_RADIUS;
 
-      // Toggle arrow visibility khi near
       if (near !== item.nearPlayer){
         item.nearPlayer = near;
         if (item.arrow){
@@ -350,33 +258,20 @@
     }
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     DESTROY
-     ═══════════════════════════════════════════════════════════════ */
   function destroyAll(){
     for (const item of _items){
-      try {
-        if (item.container) item.container.destroy();
-      } catch(_){}
+      try { if (item.container) item.container.destroy(); } catch(_){}
     }
     _items.length = 0;
     log('All NPCs/portals destroyed');
   }
 
-  function getAll(){
-    return _items.slice();
-  }
+  function getAll(){ return _items.slice(); }
 
-  /* ═══════════════════════════════════════════════════════════════
-     EXPORT
-     ═══════════════════════════════════════════════════════════════ */
   window.__WF.npc = {
-    create,
-    updateAll,
-    destroyAll,
-    getAll,
+    create, updateAll, destroyAll, getAll,
     INTERACT_RADIUS,
   };
 
-  log('npc.js ✓ (NPC + Portal + tap trigger + proximity hint)');
+  log('npc.js ✓ v1.1 (proximity gate + per-item debounce)');
 })();
