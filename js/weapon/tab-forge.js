@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — MODULE #7: TAB FORGE (v5.3 — weapon sprite AutoSprite)
+   WEAPON FORGE — MODULE #7: TAB FORGE (v5.4 — fix weapon animation)
    ───────────────────────────────────────────────────────────────────────
-   v5.3:
-     - Weapon sprite thay emoji, lấy từ weapon-library.js
-     - Animated spritesheet (16 frame, 4×4 hoặc 5×5)
-     - Fallback emoji nếu CDN fail
+   v5.4:
+     - FIX: bỏ CSS animation gây glitch
+     - Weapon hiển thị static frame (frame 0)
+     - Log dimensions spritesheet để debug
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -67,24 +67,33 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     WEAPON SPRITE (animated spritesheet)
+     WEAPON SPRITE (static — no animation)
      ═══════════════════════════════════════════════════════════════ */
   function renderWeaponSprite(enh){
     const tier = tierOf(enh);
     const weapon = WL.getByTier(tier);
     if (!weapon) return '<div style="font-size:64px">⚔️</div>';
 
-    // Inline CSS variables for animation
+    // Log dimensions 1 lần để debug
+    if (!weapon._dimLogged) {
+      weapon._dimLogged = true;
+      const img = new Image();
+      img.onload = () => {
+        console.log(`[WF] Weapon "${weapon.id}" loaded: ${img.width}×${img.height}px (cols=${weapon.cols}, rows=${weapon.rows})`);
+      };
+      img.onerror = () => {
+        console.warn(`[WF] Weapon "${weapon.id}" FAILED to load: ${weapon.sheet}`);
+      };
+      img.src = weapon.sheet;
+    }
+
     const style = [
       `--weapon-url: url('${weapon.sheet}')`,
       `--cols: ${weapon.cols}`,
       `--rows: ${weapon.rows}`,
-      `--frames: ${weapon.frames}`,
     ].join('; ');
 
-    return `<div class="wf-weapon-sprite" style="${style}"
-                 data-emoji="${weapon.emoji || '⚔️'}"
-                 onerror="this.classList.add('fallback')"></div>
+    return `<div class="wf-weapon-sprite" style="${style}"></div>
             <span class="wf-weapon-emoji-fallback" style="display:none">${weapon.emoji || '⚔️'}</span>`;
   }
 
@@ -203,7 +212,6 @@
       const outcome = rollOutcome(rates, s.fails);
       const result = applyOutcome(s, outcome);
 
-      // Animate weapon
       if (weaponWrap){
         weaponWrap.classList.remove('shake','shine','shatter');
         if (outcome === 'broken') weaponWrap.classList.add('shatter');
@@ -334,5 +342,5 @@
     closeResult,
   };
 
-  console.log('[WF] tab-forge.js ✓ (v5.3 — AutoSprite weapon)');
+  console.log('[WF] tab-forge.js ✓ (v5.4 — weapon static, no glitch)');
 })();
