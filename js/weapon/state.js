@@ -1,11 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — MODULE #4: STATE + STORAGE + REMOTE SYNC
-   - State objects S (runtime), SOC (social cache)
-   - localStorage load/save
-   - Supabase push/pull (rpc_weapon_get_state / save_state)
-   - Active battle ID cache (localStorage)
-   - Không render UI, chỉ quản lý data
-   - Load: #4 (sau config, utils)
+   WEAPON FORGE — MODULE #4: STATE + STORAGE + REMOTE SYNC (v5.0)
+   ───────────────────────────────────────────────────────────────────────
+   CHANGELOG v5.0:
+     - Migration: enh cũ 0-15 → 0-100 (scale tuyến tính, chỉ chạy 1 lần)
+     - normalizeState: clamp enh 0-MAX_ENH
+     - defaultState có v5_migrated flag
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -16,6 +15,7 @@
   if (!C || !U) { console.error('[WF] state.js cần config.js + utils.js load trước'); return; }
 
   const CFG = C.CFG;
+  const MAX_ENH = C.MAX_ENH;
   const { nowMs, getSb } = U;
 
   /* ═══════════════════════════════════════════════════════════════
@@ -32,10 +32,8 @@
   };
 
   const SOC = {
-    // Social
     arena: null, chat: [], feed: [], giftTargets: [],
     pendingChallenges: 0, unreadChat: 0,
-    // v4
     quests: null, questsDayKey: '',
     season: null, seasonProgress: null,
     pets: [],
@@ -44,7 +42,7 @@
   };
 
   /* ═══════════════════════════════════════════════════════════════
-     ACTIVE BATTLE CACHE (localStorage)
+     ACTIVE BATTLE CACHE
      ═══════════════════════════════════════════════════════════════ */
   const ACTIVE_BATTLE_KEY = '__wf_active_battle_';
 
@@ -70,13 +68,15 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     GAME STATE (localStorage)
+     GAME STATE
      ═══════════════════════════════════════════════════════════════ */
   function stateKey(uid){ return CFG.LS_PREFIX + (uid||'guest'); }
 
   function defaultState(){
     return {
-      v: 1, gold: CFG.START_GOLD, energy: CFG.ENERGY_MAX,
+      v: 1,
+      v5_migrated: true,   // user mới không cần migrate
+      gold: CFG.START_GOLD, energy: CFG.ENERGY_MAX,
       max_energy: CFG.ENERGY_MAX, last_energy_at: nowMs(),
       enh: 0, hammer: 'wooden', hammers: ['wooden'],
       materials: { wood: 10 },
@@ -91,9 +91,17 @@
     const d = defaultState();
     if (!raw || typeof raw !== 'object') return d;
     const s = Object.assign({}, d, raw);
+
+    /* ⭐ MIGRATION v5: enh cũ 0-15 → 0-100 (chỉ chạy 1 lần) */
+    if (!raw.v5_migrated && typeof raw.enh === 'number' && raw.enh > 0 && raw.enh <= 15){
+      const oldEnh = raw.enh;
+      s.enh = Math.min(MAX_ENH, Math.round(oldEnh * MAX_ENH / 15));
+      s.v5_migrated = true;
+    }
+
     s.gold = Math.max(0, Number(s.gold)||0);
     s.energy = Math.max(0, Math.min(CFG.ENERGY_MAX, Number(s.energy)||0));
-    s.enh = Math.max(0, Math.min(15, Number(s.enh)||0));
+    s.enh = Math.max(0, Math.min(MAX_ENH, Number(s.enh)||0));
     s.combo = Math.max(0, Number(s.combo)||0);
     s.fails = Math.max(0, Number(s.fails)||0);
     s.materials = (s.materials && typeof s.materials === 'object') ? s.materials : {};
@@ -117,7 +125,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     REMOTE SYNC (Supabase)
+     REMOTE SYNC
      ═══════════════════════════════════════════════════════════════ */
   let _remoteAvailable = null;
   let _saveTimer = null;
@@ -171,7 +179,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     MERGE local + remote (khi mở page)
+     MERGE
      ═══════════════════════════════════════════════════════════════ */
   function mergeState(local, remoteState){
     if (!remoteState) return local ? normalizeState(local) : defaultState();
@@ -217,5 +225,5 @@
     isRemoteAvailable: () => _remoteAvailable,
   };
 
-  console.log('[WF] state.js ✓');
+  console.log('[WF] state.js ✓ (v5.0 — migrate enh 15→100)');
 })();
