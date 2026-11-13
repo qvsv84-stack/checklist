@@ -1,8 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE WORLD — SCENE TOWN (v1.1 — plain object, không extends)
+   WEAPON FORGE WORLD — SCENE TOWN (v1.2 — bind custom methods)
    ───────────────────────────────────────────────────────────────────────
-   v1.1: Đổi từ `class extends Phaser.Scene` → plain object config
-         → Fix bug "Phaser is not defined" khi Phaser load lazy.
+   v1.2 FIX: Bind custom methods vào Scene instance trong init().
+   Phaser 3 chỉ copy init/preload/create/update từ config object.
+   Custom methods (_makeTreeTexture, _drawGround, ...) cần bind thủ công.
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -37,15 +38,30 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     SCENE CONFIG OBJECT (không extends Phaser.Scene)
+     SCENE CONFIG — với bind fix
      ═══════════════════════════════════════════════════════════════ */
   const TownScene = {
     key: 'Town',
 
-    /* ─── INIT (chạy trước create) ─── */
+    /* ─── INIT — bind custom methods vào this ─── */
     init: function(){
       this._lastSave = 0;
       this._shutdownFired = false;
+
+      /* ⭐ FIX: Phaser chỉ copy init/preload/create/update từ config.
+         Custom methods phải tự bind vào Scene instance. */
+      const self = TownScene;
+      this._makeTreeTexture = self._makeTreeTexture.bind(this);
+      this._drawGround      = self._drawGround.bind(this);
+      this._drawPath        = self._drawPath.bind(this);
+      this._drawDecorations = self._drawDecorations.bind(this);
+      this._createNPCs      = self._createNPCs.bind(this);
+      this._showWelcome     = self._showWelcome.bind(this);
+      this._savePos         = self._savePos.bind(this);
+      this._loadPos         = self._loadPos.bind(this);
+      this._cleanup         = self._cleanup.bind(this);
+
+      log('init() — bound 9 custom methods');
     },
 
     /* ─── CREATE ─── */
@@ -114,7 +130,9 @@
       } catch(e){}
     },
 
-    /* ─── TREE TEXTURE ─── */
+    /* ═══════════════════════════════════════════════════════════════
+       CUSTOM METHODS (sẽ được bind trong init)
+       ═══════════════════════════════════════════════════════════════ */
     _makeTreeTexture: function(){
       if (this.textures.exists('tree')) return;
       const g = this.make.graphics({ add: false });
@@ -136,7 +154,6 @@
       g.destroy();
     },
 
-    /* ─── DRAW GROUND ─── */
     _drawGround: function(){
       const T = Tileset.TILE_SIZE;
       const cx = Math.floor(WORLD_COLS / 2);
@@ -191,7 +208,6 @@
       for (let x = xStart; x <= xEnd; x++) put(x, y2);
     },
 
-    /* ─── DECORATIONS ─── */
     _drawDecorations: function(){
       const T = Tileset.TILE_SIZE;
       const trees = [
@@ -212,7 +228,6 @@
       });
     },
 
-    /* ─── NPCs ─── */
     _createNPCs: function(){
       const T = Tileset.TILE_SIZE;
       const cx = Math.floor(WORLD_COLS / 2);
@@ -285,7 +300,6 @@
       log('5 NPC/Portal created');
     },
 
-    /* ─── WELCOME ─── */
     _showWelcome: function(){
       const cam = this.cameras.main;
       const w = cam.width;
@@ -337,7 +351,6 @@
       });
     },
 
-    /* ─── SAVE/LOAD POS ─── */
     _savePos: function(x, y){
       try {
         localStorage.setItem(SAVE_KEY, JSON.stringify({
@@ -362,7 +375,6 @@
       return { x: WORLD_W / 2, y: WORLD_H / 2 };
     },
 
-    /* ─── CLEANUP ─── */
     _cleanup: function(){
       try {
         const pos = Player.getPosition();
@@ -394,5 +406,5 @@
     SAVE_KEY,
   };
 
-  log('scene-town.js v1.1 ✓ (plain object, registered)');
+  log('scene-town.js v1.2 ✓ (bind custom methods in init)');
 })();
