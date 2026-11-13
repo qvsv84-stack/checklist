@@ -1,10 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — MODULE #4: STATE + STORAGE + REMOTE SYNC (v5.0)
-   ───────────────────────────────────────────────────────────────────────
-   CHANGELOG v5.0:
-     - Migration: enh cũ 0-15 → 0-100 (scale tuyến tính, chỉ chạy 1 lần)
-     - normalizeState: clamp enh 0-MAX_ENH
-     - defaultState có v5_migrated flag
+   WEAPON FORGE — MODULE #4: STATE + STORAGE + REMOTE SYNC (v5.1)
+   - v5.1: thêm character_id (nullable)
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -18,9 +14,6 @@
   const MAX_ENH = C.MAX_ENH;
   const { nowMs, getSb } = U;
 
-  /* ═══════════════════════════════════════════════════════════════
-     RUNTIME STATE
-     ═══════════════════════════════════════════════════════════════ */
   const S = {
     user: null, state: null, busy: false,
     activeTab: 'forge', arenaSubTab: 'incoming',
@@ -41,9 +34,6 @@
     unclaimedQuests: 0, unclaimedSeason: 0, claimableBoss: false,
   };
 
-  /* ═══════════════════════════════════════════════════════════════
-     ACTIVE BATTLE CACHE
-     ═══════════════════════════════════════════════════════════════ */
   const ACTIVE_BATTLE_KEY = '__wf_active_battle_';
 
   function saveActiveBattleId(userId, matchId){
@@ -67,15 +57,13 @@
     } catch(_){ return null; }
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     GAME STATE
-     ═══════════════════════════════════════════════════════════════ */
   function stateKey(uid){ return CFG.LS_PREFIX + (uid||'guest'); }
 
   function defaultState(){
     return {
       v: 1,
-      v5_migrated: true,   // user mới không cần migrate
+      v5_migrated: true,
+      character_id: null,
       gold: CFG.START_GOLD, energy: CFG.ENERGY_MAX,
       max_energy: CFG.ENERGY_MAX, last_energy_at: nowMs(),
       enh: 0, hammer: 'wooden', hammers: ['wooden'],
@@ -92,7 +80,6 @@
     if (!raw || typeof raw !== 'object') return d;
     const s = Object.assign({}, d, raw);
 
-    /* ⭐ MIGRATION v5: enh cũ 0-15 → 0-100 (chỉ chạy 1 lần) */
     if (!raw.v5_migrated && typeof raw.enh === 'number' && raw.enh > 0 && raw.enh <= 15){
       const oldEnh = raw.enh;
       s.enh = Math.min(MAX_ENH, Math.round(oldEnh * MAX_ENH / 15));
@@ -110,6 +97,7 @@
     if (!CFG.HAMMERS[s.hammer] || !s.hammers.includes(s.hammer)) s.hammer = 'wooden';
     s.achievements = (s.achievements && typeof s.achievements === 'object') ? s.achievements : {};
     s.history = Array.isArray(s.history) ? s.history.slice(0, 50) : [];
+    s.character_id = typeof s.character_id === 'string' ? s.character_id : null;
     return s;
   }
 
@@ -124,9 +112,6 @@
     try { localStorage.setItem(stateKey(uid), JSON.stringify(s)); } catch(_){}
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     REMOTE SYNC
-     ═══════════════════════════════════════════════════════════════ */
   let _remoteAvailable = null;
   let _saveTimer = null;
 
@@ -178,9 +163,6 @@
     schedulePush();
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     MERGE
-     ═══════════════════════════════════════════════════════════════ */
   function mergeState(local, remoteState){
     if (!remoteState) return local ? normalizeState(local) : defaultState();
     if (!local) return normalizeState(remoteState);
@@ -207,12 +189,10 @@
       remoteState.achievements||{},
       local.achievements||{}
     );
+    if (!base.character_id) base.character_id = local.character_id || remoteState.character_id || null;
     return normalizeState(base);
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     EXPORT
-     ═══════════════════════════════════════════════════════════════ */
   window.__WF.state = {
     S, SOC,
     ACTIVE_BATTLE_KEY,
@@ -225,5 +205,5 @@
     isRemoteAvailable: () => _remoteAvailable,
   };
 
-  console.log('[WF] state.js ✓ (v5.0 — migrate enh 15→100)');
+  console.log('[WF] state.js ✓ (v5.1 — character_id added)');
 })();
