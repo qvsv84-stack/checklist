@@ -1,10 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE WORLD — SCENE TOWN (v1.3 — fix goToTab + reset state)
-   ───────────────────────────────────────────────────────────────────────
-   v1.3 FIX:
-     - goToTab() gọi tabWorld.closeWorld() thay vì World.unmount() trực tiếp
-       → reset _mounted flag → mở lại World tab được
-     - Fallback nếu tabWorld chưa có
+   WEAPON FORGE WORLD — SCENE TOWN (v1.4 — fix tab mapping)
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -66,27 +61,19 @@
       try {
         const canvas = this.sys.game.canvas;
         const parentEl = canvas && canvas.parentElement;
-        if (parentEl){
-          Joystick.attach({ parent: parentEl });
-        }
-      } catch(e){
-        console.warn('[WF-Town] Joystick attach fail:', e);
-      }
+        if (parentEl) Joystick.attach({ parent: parentEl });
+      } catch(e){ console.warn('[WF-Town] Joystick attach fail:', e); }
 
       const saved = this._loadPos();
       Player.create(this, { x: saved.x, y: saved.y }).then(() => {
         log('Player ready');
-      }).catch(e => {
-        console.warn('[WF-Town] Player create fail:', e);
-      });
+      }).catch(e => console.warn('[WF-Town] Player create fail:', e));
 
       this._createNPCs();
 
       try {
         if (MP) MP.init(this, { sceneKey: 'town' });
-      } catch(e){
-        console.warn('[WF-Town] Multiplayer init fail:', e);
-      }
+      } catch(e){ console.warn('[WF-Town] Multiplayer init fail:', e); }
 
       this._showWelcome();
 
@@ -212,23 +199,17 @@
     _createNPCs: function(){
       const T = Tileset.TILE_SIZE;
       const cx = Math.floor(WORLD_COLS / 2);
-      const self = this;
 
-      /* ⭐ FIX: goToTab dùng tabWorld.closeWorld() để reset state */
       function goToTab(tab){
         return function(){
           log('Interact →', tab);
 
-          // Ưu tiên closeWorld() — reset _mounted flag
           if (window.__WF.tabWorld && typeof window.__WF.tabWorld.closeWorld === 'function'){
             window.__WF.tabWorld.closeWorld();
           } else {
-            // Fallback: unmount trực tiếp (chỉ dùng khi tabWorld chưa load)
-            try { self._cleanup(); } catch(_){}
-            if (World.isReady()) World.unmount();
+            try { if (World.isReady()) World.unmount(); } catch(_){}
           }
 
-          // Chuyển tab
           if (window.__WF.index && typeof window.__WF.index.goto === 'function'){
             window.__WF.index.goto(tab);
           }
@@ -253,8 +234,8 @@
         emoji: '🏪',
         name: 'Cửa Hàng',
         tint: 0x4fa370,
-        action: 'shop',
-        onInteract: goToTab('shop'),
+        action: 'market',
+        onInteract: goToTab('market'),   // ⭐ FIX: 'shop' → 'market'
       });
 
       NPC.create(this, {
@@ -359,9 +340,7 @@
     _cleanup: function(){
       try {
         const pos = Player.getPosition();
-        if (pos && Number.isFinite(pos.x)){
-          this._savePos(pos.x, pos.y);
-        }
+        if (pos && Number.isFinite(pos.x)) this._savePos(pos.x, pos.y);
       } catch(_){}
 
       try { if (MP) MP.destroy(); } catch(_){}
@@ -379,5 +358,5 @@
     TownScene, WORLD_W, WORLD_H, WORLD_COLS, WORLD_ROWS, SAVE_KEY,
   };
 
-  log('scene-town.js v1.3 ✓ (goToTab resets state)');
+  log('scene-town.js v1.4 ✓ (fix tab mapping: shop → market)');
 })();
