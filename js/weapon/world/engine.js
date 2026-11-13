@@ -1,10 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE WORLD — ENGINE (v2.0 — no registry, direct scene)
+   WEAPON FORGE WORLD — ENGINE (v2.1 — dimension fallback)
    ───────────────────────────────────────────────────────────────────────
-   v2.0: LOẠI BỎ hoàn toàn registry `_scenes`.
-   - mount() nhận scene object/class TRỰC TIẾP
-   - Không cần registerScene, waitForScenes
-   - Backward compat: nhận string key → lookup fallback trong __WF.scene*
+   v2.1: Không dùng Math.max(1, 0) nữa. Fallback về window size nếu
+         container có 0 size (defensive).
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -27,9 +25,6 @@
     try { console.warn('[WF-World]', ...a); } catch(_){}
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     LOAD PHASER
-     ═══════════════════════════════════════════════════════════════ */
   function loadPhaser(){
     if (window.Phaser) return Promise.resolve(window.Phaser);
     if (_phaserPromise) return _phaserPromise;
@@ -62,27 +57,15 @@
     return _phaserPromise;
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     RESOLVE SCENE — nhận object/class trực tiếp hoặc string key
-     ═══════════════════════════════════════════════════════════════ */
   function resolveScene(s){
-    // Đã là object/class → dùng trực tiếp
     if (typeof s !== 'string') return s;
-
-    // Là string → thử lookup trong các module scene đã load
     if (s === 'Town'){
       const Town = window.__WF.sceneTown?.TownScene;
       if (Town) return Town;
     }
-    // Thêm fallback cho scene khác ở đây nếu cần
-    // if (s === 'Forest') { ... }
-
-    throw new Error(`Scene "${s}" không tìm thấy trong window.__WF.scene*`);
+    throw new Error(`Scene "${s}" không tìm thấy`);
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     MOUNT
-     ═══════════════════════════════════════════════════════════════ */
   async function mount(parent, opts){
     if (!parent) throw new Error('mount: parent required');
     if (_game){
@@ -92,29 +75,28 @@
 
     opts = opts || {};
 
-    // Resolve scene — chấp nhận cả object trực tiếp và string key
     const rawScenes = Array.isArray(opts.scenes) && opts.scenes.length
       ? opts.scenes
       : [window.__WF.sceneTown?.TownScene];
 
     log('Resolving scenes:', rawScenes.map(s => typeof s === 'string' ? `"${s}"` : (s?.key || 'object')));
 
-    const resolvedScenes = rawScenes.map(s => {
-      const resolved = resolveScene(s);
-      if (!resolved) throw new Error('Scene resolve failed: ' + s);
-      return resolved;
-    });
+    const resolvedScenes = rawScenes.map(s => resolveScene(s));
+    log('Resolved', resolvedScenes.length, 'scene(s)');
 
-    log('Resolved', resolvedScenes.length, 'scene(s):', resolvedScenes.map(s => s.key || s.name || '?'));
-
-    // Load Phaser (sau khi resolve để tránh load thừa nếu lỗi)
     await loadPhaser();
 
     _parent = parent;
-
     const Phaser = window.Phaser;
-    const w = Math.max(1, parent.clientWidth);
-    const h = Math.max(1, parent.clientHeight);
+
+    /* ⭐ FIX: Không dùng Math.max(1, 0). Fallback window size. */
+    let w = parent.clientWidth;
+    let h = parent.clientHeight;
+
+    if (!w || w < 10) w = window.innerWidth || 400;
+    if (!h || h < 10) h = Math.max(300, (window.innerHeight || 600) - 100);
+
+    log('Initial size:', w, 'x', h);
 
     _game = new Phaser.Game({
       type: Phaser.AUTO,
@@ -143,20 +125,21 @@
       scene: resolvedScenes,
     });
 
-    // Resize observer
+    /* ⭐ ResizeObserver — chỉ resize khi size hợp lệ > 10px */
     if (typeof ResizeObserver !== 'undefined'){
       _resizeObserver = new ResizeObserver(() => {
         if (!_game || !_parent) return;
         try {
-          const cw = Math.max(1, _parent.clientWidth);
-          const ch = Math.max(1, _parent.clientHeight);
-          _game.scale.resize(cw, ch);
+          const cw = _parent.clientWidth;
+          const ch = _parent.clientHeight;
+          if (cw > 10 && ch > 10){
+            _game.scale.resize(cw, ch);
+          }
         } catch(_){}
       });
       _resizeObserver.observe(parent);
     }
 
-    // Visibility pause
     _visibilityHandler = () => {
       if (!_game || !_game.loop) return;
       try {
@@ -170,9 +153,6 @@
     return _game;
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     UNMOUNT
-     ═══════════════════════════════════════════════════════════════ */
   function unmount(){
     if (!_game) return;
 
@@ -204,9 +184,6 @@
     log('Game destroyed');
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     CONTROL
-     ═══════════════════════════════════════════════════════════════ */
   function pause(){
     if (_game && _game.loop) {
       try { _game.loop.sleep(); } catch(_){}
@@ -218,9 +195,6 @@
     }
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     GETTERS
-     ═══════════════════════════════════════════════════════════════ */
   function isReady(){ return !!_game; }
   function getGame(){ return _game; }
   function getScene(key){
@@ -241,9 +215,6 @@
     };
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     EXPORT — bỏ registerScene, giữ cho backward compat (deprecated)
-     ═══════════════════════════════════════════════════════════════ */
   window.__WF.world = {
     mount,
     unmount,
@@ -255,13 +226,9 @@
     getPlayerData,
     loadPhaser,
     PHASER_VERSION,
-
-    // Deprecated — no-op, giữ để code cũ không crash
-    registerScene: function(key, scene){
-      log('registerScene (deprecated) — bỏ qua, mount nhận scene trực tiếp');
-    },
+    registerScene: function(){ log('registerScene (deprecated)'); },
     getRegisteredScenes: function(){ return []; },
   };
 
-  log('engine.js ✓ v2.0 (no registry — direct scene)');
+  log('engine.js ✓ v2.1 (dimension fallback)');
 })();
