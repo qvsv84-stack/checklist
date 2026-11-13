@@ -1,47 +1,19 @@
 /* ═══════════════════════════════════════════════════════════════════════
    WEAPON FORGE — TAB WORLD (v1.0)
-   ───────────────────────────────────────────────────────────────────────
-   Tab wrapper "🌍 Thế giới" — entry point của world mode.
-
-   Lifecycle:
-     renderWorldTab()   → trả HTML placeholder (container rỗng + spinner)
-     wireWorld()        → mount Phaser vào container (async)
-     closeWorld()       → unmount Phaser + detach HUD + detach joystick
-
-   Auto-cleanup:
-     • Khi user chuyển tab khác → unmount tự động
-     • Khi đóng weapon page → unmount tự động
-     • Khi user bấm nút back trong HUD → unmount + goto tab forge
-
-   ───────────────────────────────────────────────────────────────────────
-   Public API (window.__WF.tabWorld):
-     .renderWorldTab()    — HTML placeholder
-     .wireWorld()         — Mount engine + HUD
-     .closeWorld()        — Cleanup
-     .isMounted()         — Check đang mount
-   ───────────────────────────────────────────────────────────────────────
-   Load order: SAU world/*, CUỐI CÙNG (trước index.js hoặc sau).
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
   if (window.__WF && window.__WF.tabWorld) return;
   window.__WF = window.__WF || {};
 
-  /* ═══════════════════════════════════════════════════════════════
-     DEPENDENCIES
-     ═══════════════════════════════════════════════════════════════ */
   const World = window.__WF.world;
   const WorldUI = window.__WF.worldUI;
-  const Player = window.__WF.player;
 
   if (!World || !WorldUI){
-    console.error('[WF-TabWorld] thiếu world engine hoặc world-ui — kiểm tra load order');
+    console.error('[WF-TabWorld] thiếu world engine hoặc world-ui');
     return;
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     STATE
-     ═══════════════════════════════════════════════════════════════ */
   let _mounted = false;
   let _mounting = false;
   let _container = null;
@@ -51,9 +23,6 @@
     try { console.log('[WF-TabWorld]', ...a); } catch(_){}
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     CSS INJECT (chỉ cần 1 lần — các file khác đã có base CSS)
-     ═══════════════════════════════════════════════════════════════ */
   function injectCSS(){
     if (document.getElementById('__wfTabWorldStyle')) return;
     const st = document.createElement('style');
@@ -141,9 +110,6 @@
     document.head.appendChild(st);
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     RENDER TAB (HTML placeholder)
-     ═══════════════════════════════════════════════════════════════ */
   function renderWorldTab(){
     injectCSS();
 
@@ -164,9 +130,6 @@
     `;
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     WIRE (mount engine + HUD)
-     ═══════════════════════════════════════════════════════════════ */
   async function wireWorld(){
     if (_mounting || _mounted){
       log('Already mounting/mounted — skip');
@@ -185,21 +148,17 @@
     }
 
     try {
-      // ─── 1. Attach HUD trước (hiện loading overlay) ───
       WorldUI.attach(_container);
       WorldUI.setLoading(true, 'Đang tải thế giới…');
 
-      // ─── 2. Wire back button ───
       WorldUI.onBack(() => {
         log('Back pressed → closeWorld');
         closeWorld();
-        // Chuyển về tab Rèn
         if (window.__WF.index?.goto){
           window.__WF.index.goto('forge');
         }
       });
 
-      // ─── 3. Mount World engine (async, load Phaser + mount scene) ───
       log('Mounting World engine…');
       await World.mount(_mountEl, {
         scenes: ['Town'],
@@ -209,17 +168,14 @@
       log('World engine ready');
       _mounted = true;
 
-      // ─── 4. Ẩn placeholder + loading ───
       if (placeholder) placeholder.style.display = 'none';
       WorldUI.setLoading(false);
 
-      // ─── 5. Welcome toast ───
       WorldUI.toast('Chào mừng đến làng! 🏘️', 'success', 2200);
 
     } catch(err){
       console.error('[WF-TabWorld] Mount failed:', err);
 
-      // Hiện lỗi rõ ràng
       const msg = String(err?.message || err || 'Lỗi không xác định');
       if (placeholder){
         placeholder.innerHTML = `
@@ -233,7 +189,6 @@
       WorldUI.setLoading(false);
       WorldUI.toast('Không tải được thế giới', 'error', 3000);
 
-      // Cleanup nửa chừng
       try { World.unmount(); } catch(_){}
       try { WorldUI.detach(); } catch(_){}
 
@@ -242,15 +197,11 @@
     }
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     CLOSE / UNMOUNT
-     ═══════════════════════════════════════════════════════════════ */
   function closeWorld(){
     if (!_mounted && !_mounting) return;
 
     log('Closing world…');
 
-    // 1. Unmount Phaser (destroy canvas + scenes)
     try {
       if (World.isReady()){
         World.unmount();
@@ -259,15 +210,12 @@
       console.warn('[WF-TabWorld] World unmount error:', e);
     }
 
-    // 2. Detach HUD
     try { WorldUI.detach(); } catch(_){}
 
-    // 3. Placeholder về trạng thái ban đầu để lần sau vào lại
     if (_container){
       const oldPlaceholder = document.getElementById('wfWorldPlaceholder');
       if (oldPlaceholder) oldPlaceholder.remove();
 
-      // Tạo lại placeholder
       const ph = document.createElement('div');
       ph.className = 'wf-world-placeholder';
       ph.id = 'wfWorldPlaceholder';
@@ -287,9 +235,6 @@
     log('World closed ✓');
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     HELPERS
-     ═══════════════════════════════════════════════════════════════ */
   function escapeHtml(s){
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;')
@@ -303,13 +248,7 @@
     return _mounted;
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     AUTO CLEANUP — khi tab đổi hoặc page đóng
-     ═══════════════════════════════════════════════════════════════ */
   function setupAutoCleanup(){
-    // Hook tab change của index.js (nếu có)
-    // index.js sẽ gọi closeWorld khi activeTab !== 'world'
-    // Đây là fallback: nghe event
     window.addEventListener('wf:tabChanged', (e) => {
       const tab = e?.detail?.tab;
       if (tab && tab !== 'world'){
@@ -317,12 +256,10 @@
       }
     });
 
-    // Nghe weapon page close
     window.addEventListener('wf:pageClosing', () => {
       closeWorld();
     });
 
-    // Nghe visibilitychange — pause Phaser khi tab ẩn
     document.addEventListener('visibilitychange', () => {
       if (!_mounted) return;
       if (document.hidden){
@@ -333,14 +270,8 @@
     });
   }
 
-  /* ═══════════════════════════════════════════════════════════════
-     BOOT
-     ═══════════════════════════════════════════════════════════════ */
   setupAutoCleanup();
 
-  /* ═══════════════════════════════════════════════════════════════
-     EXPORT
-     ═══════════════════════════════════════════════════════════════ */
   window.__WF.tabWorld = {
     renderWorldTab,
     wireWorld,
