@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="css/main.css">
 <link rel="stylesheet" href="css/menu.css">
 <link rel="stylesheet" href="css/shop.css">
+<link rel="stylesheet" href="css/weapon.css"><!-- ⚔️ WEAPON -->
 
 <style id="landingCourtForce">
 
@@ -424,6 +425,7 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
   </nav>
   <nav id="secondaryNav" aria-label="Công cụ">
     <button id="attendanceBtn" type="button">🗓 Chấm công</button>
+    <button id="weaponBtn" type="button">⚔ Vũ khí</button><!-- ⚔️ WEAPON -->
   </nav>
 
   <section id="adminPage" aria-label="Cài đặt Admin">
@@ -608,6 +610,7 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
 </div>
 
 <!-- #shopPage được js/shop.js tự tạo khi boot -->
+<!-- #weaponPage được js/weapon.js tự tạo khi boot ⚔️ WEAPON -->
 <!-- #spinFeed được js/spin-feed.js tự tạo khi boot -->
 <!-- Tab Data được js/admin-data.js tự tạo khi boot -->
 
@@ -727,6 +730,7 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
 <script defer src="js/shop.js"></script>
 <script defer src="js/shop-admin.js"></script>
 <script defer src="js/shop-requests.js"></script>
+<script defer src="js/weapon.js"></script><!-- ⚔️ WEAPON -->
 <script defer src="js/spin-feed.js"></script>
 <script defer src="js/admin-data.js"></script>
 <script defer src="js/debug-menu.js"></script>
@@ -870,6 +874,7 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
       <div class="menu-section-title"><span>🎀</span> Công cụ</div>
       <div class="menu-grid">
         <button class="menu-item" data-target="attendanceBtn" type="button"><span class="menu-item-icon">🗓</span><span class="menu-item-label">Chấm công</span></button>
+        <button class="menu-item" data-target="weaponBtn" type="button"><span class="menu-item-icon">⚔️</span><span class="menu-item-label">Vũ khí</span></button><!-- ⚔️ WEAPON -->
         <button class="menu-item" data-target="displayNameBtn" type="button"><span class="menu-item-icon">🎴</span><span class="menu-item-label">Đổi tên hiển thị</span></button>
       </div>
     </div>
