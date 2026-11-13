@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — MODULE #7: TAB FORGE (v5.2 — full body character)
+   WEAPON FORGE — MODULE #7: TAB FORGE (v5.3 — weapon sprite AutoSprite)
    ───────────────────────────────────────────────────────────────────────
-   v5.2:
-     - renderCharacterSprite: hỗ trợ full body (Ragnarok + LPC)
-     - LPC fetch async, cache URL
-     - Fallback emoji nếu fail
+   v5.3:
+     - Weapon sprite thay emoji, lấy từ weapon-library.js
+     - Animated spritesheet (16 frame, 4×4 hoặc 5×5)
+     - Fallback emoji nếu CDN fail
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -14,7 +14,11 @@
   const U = window.__WF.utils;
   const ST = window.__WF.state;
   const API = window.__WF.api;
-  if (!C || !U || !ST || !API) { console.error('[WF] tab-forge.js thiếu dependency'); return; }
+  const WL = window.__WF.weaponLibrary;
+  if (!C || !U || !ST || !API || !WL) {
+    console.error('[WF] tab-forge.js thiếu dependency (cần weapon-library.js)');
+    return;
+  }
 
   const CFG = C.CFG;
   const MAX_ENH = C.MAX_ENH;
@@ -32,7 +36,7 @@
   } = U;
 
   /* ═══════════════════════════════════════════════════════════════
-     CHARACTER SPRITE (full body)
+     CHARACTER SPRITE
      ═══════════════════════════════════════════════════════════════ */
   function renderCharacterSprite(s){
     const LIB = window.__WF.characterLibrary;
@@ -47,7 +51,6 @@
               <span class="wf-character-fallback" style="display:none">${char.emoji || '👤'}</span>`;
     }
 
-    // LPC — fetch async
     if (char.job == null) {
       LIB.getUrlAsync(char).then(u => {
         if (!u) return;
@@ -61,6 +64,28 @@
 
     return `<div style="font-size:24px;color:#a06a28;animation:wfSpin 1s linear infinite">⏳</div>
             <span class="wf-character-fallback" style="display:none">${char.emoji || '👤'}</span>`;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     WEAPON SPRITE (animated spritesheet)
+     ═══════════════════════════════════════════════════════════════ */
+  function renderWeaponSprite(enh){
+    const tier = tierOf(enh);
+    const weapon = WL.getByTier(tier);
+    if (!weapon) return '<div style="font-size:64px">⚔️</div>';
+
+    // Inline CSS variables for animation
+    const style = [
+      `--weapon-url: url('${weapon.sheet}')`,
+      `--cols: ${weapon.cols}`,
+      `--rows: ${weapon.rows}`,
+      `--frames: ${weapon.frames}`,
+    ].join('; ');
+
+    return `<div class="wf-weapon-sprite" style="${style}"
+                 data-emoji="${weapon.emoji || '⚔️'}"
+                 onerror="this.classList.add('fallback')"></div>
+            <span class="wf-weapon-emoji-fallback" style="display:none">${weapon.emoji || '⚔️'}</span>`;
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -102,7 +127,9 @@
         <div class="wf-hammer" id="wfHammer">${CFG.HAMMERS[s.hammer].emoji}</div>
         <div class="wf-character-sprite" id="wfCharSprite">${renderCharacterSprite(s)}</div>
         <div class="wf-weapon-wrap">
-          <div class="wf-weapon" id="wfWeaponEmoji">${ti.emoji}</div>
+          <div class="wf-weapon-sprite-wrap" id="wfWeaponSprite">
+            ${renderWeaponSprite(s.enh)}
+          </div>
           <div style="display:flex;align-items:center;gap:6px;">
             <span class="wf-tier-badge tier-${tier}">${tier}</span>
             <span class="wf-enh-badge">+<b>${s.enh}</b></span>
@@ -146,6 +173,7 @@
     S.busy = true;
     const hammer = document.getElementById('wfHammer');
     const btn = document.getElementById('wfForgeBtn');
+    const weaponWrap = document.getElementById('wfWeaponSprite');
     if (btn){ btn.classList.add('forging'); btn.disabled = true; }
 
     s.energy -= CFG.FORGE_ENERGY;
@@ -175,13 +203,13 @@
       const outcome = rollOutcome(rates, s.fails);
       const result = applyOutcome(s, outcome);
 
-      const w = document.getElementById('wfWeaponEmoji');
-      if (w){
-        w.classList.remove('shake','shine','shatter');
-        if (outcome === 'broken') w.classList.add('shatter');
-        else if (outcome === 'damaged' || outcome === 'hold') w.classList.add('shake');
+      // Animate weapon
+      if (weaponWrap){
+        weaponWrap.classList.remove('shake','shine','shatter');
+        if (outcome === 'broken') weaponWrap.classList.add('shatter');
+        else if (outcome === 'damaged' || outcome === 'hold') weaponWrap.classList.add('shake');
         else {
-          w.classList.add('shine');
+          weaponWrap.classList.add('shine');
           if (outcome === 'great') spawnSparks(20);
         }
       }
@@ -306,5 +334,5 @@
     closeResult,
   };
 
-  console.log('[WF] tab-forge.js ✓ (v5.2 — full body character)');
+  console.log('[WF] tab-forge.js ✓ (v5.3 — AutoSprite weapon)');
 })();
