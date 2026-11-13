@@ -1,13 +1,23 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — v2.0 (ForgeTax-style full game)
+   WEAPON FORGE — v2.1 (ForgeTax-style, fixed UX)
    ───────────────────────────────────────────────────────────────────────
-   Tích hợp với project sẵn có:
-     • window.__sb.rpc(...)          — Supabase sync (tùy chọn)
+   CHANGELOG v2.1:
+     ✅ Fix FORGE_ENERGY: 10 → 1 (đập được nhiều lần hơn)
+     ✅ Fix button kẹt: S.busy=false TRƯỚC render()
+     ✅ Modal kết quả có 2 nút: "Đóng" + "🔨 Rèn tiếp"
+     ✅ Merge logic: MAX(local.gold, remote.gold) → admin grant
+        từ SQL vẫn đến được client dù user đã chơi trước đó
+     ✅ Refactor doForge: tách phase rõ ràng, không block UI
+
+   v2.0: game hoàn chỉnh (tier, energy, combo, pity, achievements...)
+
+   Tích hợp dự án:
+     • window.__sb.rpc(...)          — Supabase (tuỳ chọn)
      • window.SRank.Auth             — user identity
      • window.Toast                  — feedback
      • window.SRank.setStatus        — status bar
 
-   Nếu RPC chưa cài → chạy 100% offline với localStorage.
+   Không chạy SQL vẫn chơi được 100% với localStorage.
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -21,9 +31,9 @@
     // ─── CURRENCY ───
     START_GOLD:            300,
     FORGE_GOLD:             10,
-    FORGE_ENERGY:           10,
+    FORGE_ENERGY:            1,       // ✅ v2.1: 1 energy/lần đập
     ENERGY_MAX:            100,
-    ENERGY_REGEN_MS:    6 * 60 * 1000,   // 1 energy / 6 min
+    ENERGY_REGEN_MS:    6 * 60 * 1000,
     REFILL_COST_GOLD:       50,
     REFILL_AMOUNT:          50,
 
@@ -31,7 +41,7 @@
     LS_PREFIX:      "__wf_state_",
     SAVE_DEBOUNCE_MS: 800,
 
-    // ─── TIERS (đồng bộ với rank system của app) ───
+    // ─── TIERS ───
     TIER_ORDER: ['B', 'A', 'S', 'SS', 'SSS', 'VIP'],
     TIERS: {
       B:   { name: 'Gỗ Mục',       emoji: '🪵', mult:  1, enhMax:  3, color: '#8b7355' },
@@ -41,7 +51,6 @@
       SSS: { name: 'Huyền Thiết',  emoji: '🌟', mult: 16, enhMax: 14, color: '#e74c3c' },
       VIP: { name: 'Thần Binh',    emoji: '👑', mult: 32, enhMax: 15, color: '#f1c40f' },
     },
-    // enh → tier mapping: [0-3]=B, [4-6]=A, [7-9]=S, [10-12]=SS, [13-14]=SSS, [15]=VIP
     ENH_TO_TIER: [ 'B','B','B','B','A','A','A','S','S','S','SS','SS','SS','SSS','SSS','VIP' ],
 
     // ─── MATERIALS ───
@@ -63,7 +72,7 @@
       divine:  { name: 'Búa Thần',    emoji: '🔨', price: 10000, rarity: 'legendary', bonus: { success: 25, great: 15, broken: -10, damaged: -5, hold: 5 } },
     },
 
-    // ─── BASE OUTCOME RATES (percent) ───
+    // ─── BASE OUTCOME RATES ───
     BASE_RATES: {
       broken:  5,
       damaged: 15,
@@ -72,12 +81,10 @@
       great:   10,
     },
 
-    // ─── PITY ───
-    PITY_FAILS_FOR_SUCCESS: 10,   // 10 fail liên tiếp → ép success
-    PITY_FAILS_FOR_GREAT:   20,   // 20 fail liên tiếp → ép great
-
-    // ─── COMBO BONUS ───
-    COMBO_BONUS_PER_STACK: 1,     // +1% success per combo stack
+    // ─── PITY & COMBO ───
+    PITY_FAILS_FOR_SUCCESS: 10,
+    PITY_FAILS_FOR_GREAT:   20,
+    COMBO_BONUS_PER_STACK: 1,
     COMBO_BONUS_CAP:       25,
 
     // ─── ACHIEVEMENTS ───
@@ -96,7 +103,6 @@
       reach_vip:   { icon: '🏆', name: 'Thần Binh',   desc: 'Đạt tier VIP',           gold: 5000 },
     },
 
-    // ─── DAILY ───
     DAILY_GOLD: 100,
     DAILY_MATERIALS: 3,
   };
@@ -104,7 +110,7 @@
   /* ═══════════════════════════════════════════════════════
      2. UTILS
      ═══════════════════════════════════════════════════════ */
-  const $  = id => document.getElementById(id);
+  const $   = id => document.getElementById(id);
   const log = (...a) => console.log('[Weapon]', ...a);
   const pad2 = n => String(n).padStart(2, '0');
 
@@ -125,10 +131,6 @@
     return null;
   }
   function nowMs(){ return Date.now(); }
-  function todayKey(){
-    try { return window.Store?.todayKey?.() || new Date().toISOString().slice(0,10); }
-    catch(_){ return new Date().toISOString().slice(0,10); }
-  }
   function fmtGold(n){ return (Number(n)||0).toLocaleString('vi-VN'); }
   function fmtTime(ts){
     try {
@@ -141,9 +143,10 @@
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
+  function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
   /* ═══════════════════════════════════════════════════════
-     3. STATE
+     3. STATE SHAPE + LOCAL STORAGE
      ═══════════════════════════════════════════════════════ */
   function stateKey(userId){ return CFG.LS_PREFIX + (userId || 'guest'); }
 
@@ -177,13 +180,11 @@
     const d = defaultState();
     if (!raw || typeof raw !== 'object') return d;
     const s = Object.assign({}, d, raw);
-    // defensive: numbers
     s.gold = Math.max(0, Number(s.gold)||0);
     s.energy = Math.max(0, Math.min(CFG.ENERGY_MAX, Number(s.energy)||0));
     s.enh = Math.max(0, Math.min(15, Number(s.enh)||0));
     s.combo = Math.max(0, Number(s.combo)||0);
     s.fails = Math.max(0, Number(s.fails)||0);
-    // objects
     s.materials = (s.materials && typeof s.materials === 'object') ? s.materials : {};
     s.hammers = Array.isArray(s.hammers) ? s.hammers.filter(h => CFG.HAMMERS[h]) : ['wooden'];
     if (!s.hammers.includes('wooden')) s.hammers.unshift('wooden');
@@ -204,11 +205,10 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     4. REMOTE SYNC (Supabase — tùy chọn)
+     4. REMOTE SYNC (Supabase)
      ═══════════════════════════════════════════════════════ */
-  let _remoteAvailable = null;   // null=unknown, true/false sau khi thử
+  let _remoteAvailable = null;
   let _saveTimer = null;
-  let _lastStateSnapshot = null;
 
   async function pullRemote(){
     const sb = getSb();
@@ -237,14 +237,8 @@
     if (_remoteAvailable === false) return false;
     try {
       const res = await sb.rpc('rpc_weapon_save_state', { p_state: state });
-      if (res.error){
-        _remoteAvailable = false;
-        return false;
-      }
-      if (res.data && res.data.ok !== true){
-        _remoteAvailable = false;
-        return false;
-      }
+      if (res.error){ _remoteAvailable = false; return false; }
+      if (res.data && res.data.ok !== true){ _remoteAvailable = false; return false; }
       _remoteAvailable = true;
       return true;
     } catch(_){ _remoteAvailable = false; return false; }
@@ -255,7 +249,6 @@
     _saveTimer = setTimeout(() => {
       _saveTimer = null;
       if (!S.user || !S.state) return;
-      _lastStateSnapshot = JSON.stringify(S.state);
       pushRemote(S.state).catch(()=>{});
     }, CFG.SAVE_DEBOUNCE_MS);
   }
@@ -274,7 +267,6 @@
     return Math.round(t.mult * (enh + 1) * 100) / 100;
   }
   function sellPrice(enh){
-    // power * 5 = gold
     return Math.round(powerOf(enh) * 5);
   }
 
@@ -282,24 +274,16 @@
     const base = Object.assign({}, CFG.BASE_RATES);
     const hammer = CFG.HAMMERS[s.hammer] || {};
     const matBonus = currentMaterialBonus(s);
-
-    // apply hammer bonus
     applyBonus(base, hammer.bonus);
-    // apply material bonus
     applyBonus(base, matBonus);
-    // apply combo bonus to success, subtract from hold
     if (s.combo > 0){
       const cBonus = Math.min(CFG.COMBO_BONUS_CAP, s.combo * CFG.COMBO_BONUS_PER_STACK);
       base.success = (base.success||0) + cBonus;
       base.hold    = Math.max(0, (base.hold||0) - cBonus);
     }
-
-    // clamp >= 0
     ['broken','damaged','hold','success','great'].forEach(k => {
       base[k] = Math.max(0, Number(base[k])||0);
     });
-
-    // normalize to 100
     const sum = Object.values(base).reduce((a,b)=>a+b, 0);
     if (sum > 0 && Math.abs(sum - 100) > 0.5){
       const scale = 100 / sum;
@@ -316,8 +300,6 @@
   }
 
   function currentMaterialBonus(s){
-    // material of current tier — bonuses apply only if user HAS and uses it
-    // Design: mats are auto-consumed on forge (1 per forge) if available
     const tier = tierOf(s.enh);
     const matId = materialForTier(tier);
     if (!matId) return {};
@@ -337,21 +319,18 @@
   }
 
   function rollOutcome(rates, pityFails){
-    // Pity override
     if (pityFails >= CFG.PITY_FAILS_FOR_GREAT) return 'great';
     if (pityFails >= CFG.PITY_FAILS_FOR_SUCCESS) return 'success';
-
     const r = Math.random() * 100;
     let acc = 0;
     for (const key of ['broken', 'damaged', 'hold', 'success', 'great']){
       acc += rates[key] || 0;
       if (r < acc) return key;
     }
-    return 'success'; // fallback
+    return 'success';
   }
 
   function applyOutcome(s, outcome){
-    // returns { deltaEnh, goldDelta, matConsumed }
     const before = s.enh;
     let deltaEnh = 0;
     let goldDelta = 0;
@@ -387,7 +366,6 @@
     s.best_combo = Math.max(s.best_combo, s.combo);
     s.total_forges++;
 
-    // track best power for leaderboard
     const p = powerOf(s.enh);
     if (p > (s.best_power || 0)) s.best_power = p;
 
@@ -452,7 +430,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     6. AUDIO + HAPTICS + ANIMATION HELPERS
+     6. AUDIO / HAPTICS / ANIMATION
      ═══════════════════════════════════════════════════════ */
   let _audioCtx = null;
   function playSound(freq, dur, type){
@@ -475,11 +453,11 @@
   }
 
   function playForgeSound(outcome){
-    if (outcome === 'broken')  { playSound(400, .3, 'sawtooth'); setTimeout(()=>playSound(150,.4,'sawtooth'), 60); }
-    else if (outcome === 'damaged'){ playSound(300, .25, 'square'); }
-    else if (outcome === 'hold')   { playSound(500, .15, 'sine'); }
-    else if (outcome === 'success'){ playSound(600, .12); setTimeout(()=>playSound(800,.15), 80); }
-    else if (outcome === 'great'){
+    if (outcome === 'broken')       { playSound(400, .3, 'sawtooth'); setTimeout(()=>playSound(150,.4,'sawtooth'), 60); }
+    else if (outcome === 'damaged') { playSound(300, .25, 'square'); }
+    else if (outcome === 'hold')    { playSound(500, .15, 'sine'); }
+    else if (outcome === 'success') { playSound(600, .12); setTimeout(()=>playSound(800,.15), 80); }
+    else if (outcome === 'great')   {
       playSound(523, .1); setTimeout(()=>playSound(659,.1),80);
       setTimeout(()=>playSound(784,.1),160); setTimeout(()=>playSound(1047,.25),240);
     }
@@ -518,20 +496,20 @@
     }
   }
 
-  function numberPop(text, color, x, y){
+  function numberPop(text, color){
     const el = document.createElement('div');
     el.className = 'wf-number-pop';
     el.textContent = text;
     el.style.color = color || '#d97706';
-    el.style.left = (x || window.innerWidth/2) + 'px';
-    el.style.top  = (y || window.innerHeight/2) + 'px';
+    el.style.left = (window.innerWidth/2) + 'px';
+    el.style.top  = (window.innerHeight/2) + 'px';
     el.style.transform = 'translate(-50%, 0)';
     document.body.appendChild(el);
     setTimeout(()=>el.remove(), 1100);
   }
 
   /* ═══════════════════════════════════════════════════════
-     7. APP STATE + DOM
+     7. RUNTIME STATE
      ═══════════════════════════════════════════════════════ */
   const S = {
     user: null,
@@ -570,15 +548,25 @@
           <div class="wf-result-title" id="wfResTitle">—</div>
           <div class="wf-result-desc" id="wfResDesc">—</div>
           <div class="wf-result-changes" id="wfResChanges"></div>
-          <button class="wf-result-btn" id="wfResOk" type="button">Tiếp tục</button>
+          <div style="display:flex;gap:8px;">
+            <button class="wf-result-btn" id="wfResOk" type="button"
+                    style="flex:1;background:rgba(0,0,0,.06);color:#78350f;box-shadow:none;">Đóng</button>
+            <button class="wf-result-btn" id="wfResAgain" type="button"
+                    style="flex:1.4;">🔨 Rèn tiếp</button>
+          </div>
         </div>
       </div>
     `;
     document.body.appendChild(page);
+
     page.querySelector('#wfBack').addEventListener('click', closePage);
     page.querySelector('#wfResOk').addEventListener('click', closeResult);
     page.querySelector('#wfResult').addEventListener('click', e => {
       if (e.target.id === 'wfResult') closeResult();
+    });
+    page.querySelector('#wfResAgain').addEventListener('click', () => {
+      closeResult();
+      setTimeout(() => { if (!S.busy) doForge(); }, 150);
     });
     return page;
   }
@@ -602,15 +590,12 @@
       return;
     }
 
-    // apply energy regen
     const gained = regenEnergy(S.state);
     if (gained > 0) scheduleSave();
 
-    // gold pill
     const gv = $('wfGoldVal');
     if (gv) gv.textContent = fmtGold(S.state.gold);
 
-    // ─── compose tabs
     let tabsHTML = '<nav class="wf-tabs">';
     const tabs = [
       { key: 'forge',       icon: '🔨', label: 'Rèn' },
@@ -636,7 +621,6 @@
 
     body.innerHTML = tabsHTML + contentHTML;
 
-    // wire tabs
     body.querySelectorAll('.wf-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         S.activeTab = btn.dataset.tab;
@@ -645,7 +629,6 @@
       });
     });
 
-    // wire tab-specific buttons
     if (S.activeTab === 'forge'){
       $('wfForgeBtn')?.addEventListener('click', doForge);
     }
@@ -756,7 +739,6 @@
   }
 
   function tierBaseEnh(enh){
-    // first enh value of the tier
     const tier = tierOf(enh);
     for (let i = 0; i <= 15; i++){
       if (tierOf(i) === tier) return i;
@@ -782,7 +764,6 @@
     const tier = tierOf(s.enh);
     const neededMat = materialForTier(tier);
 
-    // ─── Hammers section
     let hammersHTML = '<div class="wf-section"><div class="wf-section-title">🔨 Búa</div>';
     Object.keys(CFG.HAMMERS).forEach(id => {
       const h = CFG.HAMMERS[id];
@@ -810,7 +791,6 @@
     });
     hammersHTML += '</div>';
 
-    // ─── Materials section
     let matsHTML = '<div class="wf-section"><div class="wf-section-title">💎 Vật liệu</div>';
     Object.keys(CFG.MATERIALS).forEach(id => {
       const m = CFG.MATERIALS[id];
@@ -832,7 +812,6 @@
     });
     matsHTML += '</div>';
 
-    // ─── Energy refill
     const refillHTML = `
       <div class="wf-section">
         <div class="wf-section-title">⚡ Năng lượng</div>
@@ -861,7 +840,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     12. TAB: INVENTORY (achievements + sell)
+     12. TAB: INVENTORY
      ═══════════════════════════════════════════════════════ */
   function renderInventoryTab(){
     const s = S.state;
@@ -1015,7 +994,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     15. FORGE ACTION
+     15. FORGE ACTION — v2.1 fixed
      ═══════════════════════════════════════════════════════ */
   async function doForge(){
     if (S.busy) return;
@@ -1027,42 +1006,37 @@
     if (s.gold < CFG.FORGE_GOLD){ toast('Không đủ vàng', 'warning'); return; }
 
     S.busy = true;
+    const hammer = $('wfHammer');
     const forgeBtn = $('wfForgeBtn');
     if (forgeBtn){ forgeBtn.classList.add('forging'); forgeBtn.disabled = true; }
-    const hammer = $('wfHammer');
-    const weapon = $('wfWeaponEmoji');
-    const wrap = $('wfWeaponWrap');
 
-    // ─── deduct ───
     s.energy -= CFG.FORGE_ENERGY;
     s.gold   -= CFG.FORGE_GOLD;
     const matUsed = consumeMaterial(s);
+    const gv = $('wfGoldVal');
+    if (gv) gv.textContent = fmtGold(s.gold);
     scheduleSave();
-    // refresh top pills instantly
-    const gv = $('wfGoldVal'); if (gv) gv.textContent = fmtGold(s.gold);
+
+    let pendingResult = null;
 
     try {
-      // ─── Phase 1: raise hammer ───
       if (hammer){ hammer.classList.remove('striking'); hammer.classList.add('raising'); }
       playSound(180, .1, 'sine');
       await sleep(220);
 
-      // ─── Phase 2: strike ───
       if (hammer){ hammer.classList.remove('raising'); hammer.classList.add('striking'); }
       playSound(120, .08, 'triangle');
       await sleep(160);
 
-      // ─── Phase 3: impact ───
       shakeScreen();
       spawnSparks(8);
       vibrate(30);
 
-      // ─── Compute outcome ───
       const rates = effectiveRates(s);
       const outcome = rollOutcome(rates, s.fails);
       const result = applyOutcome(s, outcome);
 
-      // ─── Phase 4: reveal ───
+      const weapon = $('wfWeaponEmoji');
       if (weapon){
         weapon.classList.remove('shake','shine','shatter');
         if (outcome === 'broken'){
@@ -1077,10 +1051,8 @@
         }
       }
 
-      // ─── achievements ───
       const unlocked = checkAchievements(s);
 
-      // ─── history ───
       s.history.unshift({
         ts: nowMs(),
         outcome,
@@ -1092,40 +1064,35 @@
       });
       if (s.history.length > 50) s.history.length = 50;
 
-      // ─── save ───
       scheduleSave();
 
-      // ─── sounds + vibrate ───
       playForgeSound(outcome);
       if (outcome === 'broken') vibrate([80, 40, 80]);
       else if (outcome === 'great') vibrate([20, 30, 20, 30, 60]);
 
-      // ─── number pop for gold ───
       if (result.goldDelta > 0){
         numberPop(`+${result.goldDelta}🪙`, '#f59e0b');
       }
 
       await sleep(400);
 
-      // ─── show result modal ───
-      showResult(outcome, result, unlocked);
-
-      // ─── render ───
-      render();
+      pendingResult = { outcome, result, unlocked };
     } catch(e){
       log('forge error:', e);
       toast('Lỗi khi rèn', 'error');
     } finally {
+      // ⭐ FIX: busy=false TRƯỚC render để button mới enable ngay
       S.busy = false;
       if (hammer) hammer.classList.remove('raising','striking');
-      if (forgeBtn){ forgeBtn.classList.remove('forging'); }
+      render();
+      if (pendingResult){
+        showResult(pendingResult.outcome, pendingResult.result, pendingResult.unlocked);
+      }
     }
   }
 
-  function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
-
   /* ═══════════════════════════════════════════════════════
-     16. RESULT MODAL
+     16. RESULT MODAL — v2.1 fixed
      ═══════════════════════════════════════════════════════ */
   function showResult(outcome, result, unlocked){
     const overlay = $('wfResult');
@@ -1144,15 +1111,14 @@
     title.className = 'wf-result-title ' + c.cls;
 
     const descMap = {
-      broken:  result.deltaEnh < 0 ? `Vũ khí gãy mất 1 cấp.` : 'Vũ khí đã ở mức thấp nhất.',
+      broken:  result.deltaEnh < 0 ? 'Vũ khí gãy mất 1 cấp.' : 'Vũ khí đã ở mức thấp nhất.',
       damaged: result.deltaEnh < 0 ? 'Vũ khí hư hại, mất 1 cấp.' : 'Vũ khí đã ở mức thấp nhất.',
       hold:    'Không có gì thay đổi.',
-      success: `Vũ khí mạnh hơn! +1 cấp.`,
-      great:   `Bùng nổ! +2 cấp và nhận thêm vàng.`,
+      success: 'Vũ khí mạnh hơn! +1 cấp.',
+      great:   'Bùng nổ! +2 cấp và nhận thêm vàng.',
     };
     $('wfResDesc').textContent = descMap[outcome] || '';
 
-    // chips
     const chips = [];
     if (result.deltaEnh !== 0){
       const cls = result.deltaEnh > 0 ? 'plus-enh' : 'minus-enh';
@@ -1165,9 +1131,31 @@
     }
     $('wfResChanges').innerHTML = chips.join('');
 
+    // Update nút "Rèn tiếp" theo state hiện tại
+    const againBtn = $('wfResAgain');
+    if (againBtn){
+      const s = S.state;
+      const canForgeAgain = !!(s
+        && s.enh < 15
+        && s.energy >= CFG.FORGE_ENERGY
+        && s.gold >= CFG.FORGE_GOLD);
+      againBtn.disabled = !canForgeAgain;
+      againBtn.style.opacity = canForgeAgain ? '' : '.45';
+      if (canForgeAgain){
+        againBtn.textContent = `🔨 Rèn tiếp (🪙${CFG.FORGE_GOLD} · ⚡${CFG.FORGE_ENERGY})`;
+      } else if (s && s.enh >= 15){
+        againBtn.textContent = '🏆 Đã MAX';
+      } else if (s && s.energy < CFG.FORGE_ENERGY){
+        againBtn.textContent = '⚡ Hết năng lượng';
+      } else if (s && s.gold < CFG.FORGE_GOLD){
+        againBtn.textContent = '🪙 Thiếu vàng';
+      } else {
+        againBtn.textContent = '🔨 Rèn tiếp';
+      }
+    }
+
     overlay.classList.add('show');
 
-    // achievements toast (after close)
     if (unlocked && unlocked.length){
       setTimeout(() => {
         unlocked.forEach(u => {
@@ -1230,7 +1218,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     18. SELL ACTION
+     18. SELL
      ═══════════════════════════════════════════════════════ */
   function doSell(){
     const s = S.state;
@@ -1248,7 +1236,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     19. OPEN / CLOSE
+     19. OPEN / CLOSE — v2.1 merge logic
      ═══════════════════════════════════════════════════════ */
   async function openPage(){
     ensurePage();
@@ -1264,38 +1252,66 @@
       return;
     }
 
-    // load state
     page.classList.add('show');
     page.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
-    render(); // show loading
+    render();
 
-    // try remote first
     const remote = await pullRemote();
+    const local  = loadLocal(S.user.id);
+
+    // ⭐ v2.1: MERGE logic — bảo toàn progress + không mất grant từ server
     if (remote && remote.state){
-      const local = loadLocal(S.user.id);
-      // prefer whichever is more advanced (higher total_forges)
-      if (local && (local.total_forges || 0) > (remote.state.total_forges || 0)){
-        S.state = local;
+      if (local){
+        // Chọn base = bên có nhiều forges hơn (giữ tiến trình)
+        const base = (local.total_forges || 0) >= (remote.state.total_forges || 0)
+          ? { ...local }
+          : { ...remote.state };
+
+        // Merge: lấy MAX cho các field tài nguyên (admin có thể grant server-side)
+        base.gold         = Math.max(local.gold         || 0, remote.state.gold         || 0);
+        base.energy       = Math.max(local.energy       || 0, remote.state.energy       || 0);
+        base.best_power   = Math.max(local.best_power   || 0, remote.state.best_power   || 0);
+        base.total_gold_earned = Math.max(local.total_gold_earned || 0, remote.state.total_gold_earned || 0);
+
+        // Merge materials (lấy MAX từng loại)
+        const allMats = new Set([
+          ...Object.keys(local.materials || {}),
+          ...Object.keys(remote.state.materials || {}),
+        ]);
+        base.materials = {};
+        allMats.forEach(id => {
+          base.materials[id] = Math.max(
+            (local.materials && local.materials[id]) || 0,
+            (remote.state.materials && remote.state.materials[id]) || 0
+          );
+        });
+
+        // Merge achievements (union)
+        base.achievements = Object.assign(
+          {},
+          remote.state.achievements || {},
+          local.achievements || {}
+        );
+
+        S.state = normalizeState(base);
       } else {
         S.state = remote.state;
-        saveLocal(S.user.id, S.state);
       }
+      saveLocal(S.user.id, S.state);
+    } else if (local){
+      S.state = local;
     } else {
-      S.state = loadLocal(S.user.id) || defaultState();
+      S.state = defaultState();
     }
 
-    // apply energy regen immediately
     regenEnergy(S.state);
 
-    // track display name for leaderboard
     const dn = S.user.displayName || S.user.username || '';
     if (dn) S.state.display_name = dn;
 
-    // check achievements on load (in case user hadn't been checked before)
     checkAchievements(S.state);
     scheduleSave();
-
     render();
   }
 
@@ -1310,7 +1326,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     20. SAVE (debounced + local)
+     20. SAVE
      ═══════════════════════════════════════════════════════ */
   function scheduleSave(){
     if (!S.user || !S.state) return;
@@ -1319,10 +1335,9 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     21. BOOT — bind triggers
+     21. BOOT
      ═══════════════════════════════════════════════════════ */
   function bindTriggers(){
-    // button in #secondaryNav
     const sec = document.getElementById('weaponBtn');
     if (sec && !sec.__wfBound){
       sec.__wfBound = true;
@@ -1332,19 +1347,17 @@
         openPage();
       });
     }
-    // menu item (data-target="weaponBtn") — handled by menu.js proxy, no-op needed
   }
 
   function boot(){
     ensurePage();
     bindTriggers();
-    // Re-bind in case menu item appears later
     let tries = 0;
     const t = setInterval(() => {
       bindTriggers();
       if (++tries > 20) clearInterval(t);
     }, 300);
-    log('v2.0 ready ✓');
+    log('v2.1 ready ✓ (1 energy/lần, rèn liên tục, merge grant)');
   }
 
   if (document.readyState === 'loading'){
@@ -1367,7 +1380,6 @@
       S.state = defaultState();
       render();
     },
-    // debug
     _S: S,
   };
 })();
