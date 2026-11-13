@@ -16,27 +16,24 @@
 <meta name="application-name" content="Đảo Mèo">
 <meta name="description" content="Đảo Mèo — Daily Mission, Checklist & Chấm công">
 
-<!-- ═══ TỐI ƯU: Preconnect sớm cho mọi origin quan trọng ═══ -->
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
 <link rel="preconnect" href="https://tumjcsaexddioecwjolp.supabase.co" crossorigin>
 <link rel="dns-prefetch" href="https://tumjcsaexddioecwjolp.supabase.co">
 <link rel="dns-prefetch" href="https://tikwm.com">
+<link rel="dns-prefetch" href="https://api.dicebear.com">
 
 <title>S Rank — Daily Mission</title>
 
-<!-- ═══ TỐI ƯU: Preload file quan trọng nhất ═══ -->
 <link rel="preload" href="css/main.css" as="style" fetchpriority="high">
 <link rel="preload" href="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" as="script" crossorigin>
 
 <link rel="stylesheet" href="css/main.css">
 <link rel="stylesheet" href="css/menu.css">
 <link rel="stylesheet" href="css/shop.css">
-<!-- ⚔️ WEAPON: CSS inject từ js/weapon/css.js — không cần link file riêng -->
 
 <style id="landingCourtForce">
 
-/* ═══ BIRTHDAY FEED (Y hệt Live Spin) ═══ */
 .birthday-feed-container {
   display: block !important;
   margin: 4px auto 16px !important;
@@ -414,7 +411,7 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
   </nav>
   <nav id="secondaryNav" aria-label="Công cụ">
     <button id="attendanceBtn" type="button">🗓 Chấm công</button>
-    <button id="weaponBtn" type="button">⚔ Vũ khí</button><!-- ⚔️ WEAPON -->
+    <button id="weaponBtn" type="button">⚔ Vũ khí</button>
   </nav>
 
   <section id="adminPage" aria-label="Cài đặt Admin">
@@ -598,11 +595,6 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
   </section>
 </div>
 
-<!-- #shopPage được js/shop.js tự tạo khi boot -->
-<!-- #weaponPage được js/weapon/index.js tự tạo khi boot ⚔️ WEAPON -->
-<!-- #spinFeed được js/spin-feed.js tự tạo khi boot -->
-<!-- Tab Data được js/admin-data.js tự tạo khi boot -->
-
 <section id="attendancePage" aria-label="Lịch chấm công">
   <div class="att-page-inner"><div class="att-shell">
     <header class="att-head">
@@ -687,9 +679,6 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
   <button class="att-multi-action clear" data-multi-status="" type="button">Xóa</button>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════
-     ⚡ TẤT CẢ script đều có defer — tải song song
-     ══════════════════════════════════════════════════════════ -->
 <script defer src="js/config.js"></script>
 <script defer src="js/role.js"></script>
 <script defer src="js/toast.js"></script>
@@ -720,7 +709,7 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
 <script defer src="js/shop-admin.js"></script>
 <script defer src="js/shop-requests.js"></script>
 
-<!-- ⚔️ WEAPON FORGE v4.0 MODULAR — 16 files, load order BẮT BUỘC -->
+<!-- ⚔️ WEAPON FORGE v5.1 MODULAR (17 files) -->
 <script defer src="js/weapon/config.js"></script>
 <script defer src="js/weapon/utils.js"></script>
 <script defer src="js/weapon/css.js"></script>
@@ -728,6 +717,8 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
 <script defer src="js/weapon/api.js"></script>
 <script defer src="js/weapon/modals.js"></script>
 <script defer src="js/weapon/tab-forge.js"></script>
+<script defer src="js/weapon/character-library.js"></script>
+<script defer src="js/weapon/tab-character.js"></script>
 <script defer src="js/weapon/tab-shop.js"></script>
 <script defer src="js/weapon/tab-quest.js"></script>
 <script defer src="js/weapon/tab-pet.js"></script>
@@ -737,16 +728,12 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
 <script defer src="js/weapon/battle.js"></script>
 <script defer src="js/weapon/realtime.js"></script>
 <script defer src="js/weapon/index.js"></script>
-<script defer src="js/weapon/debug.js"></script><!-- ⚔️ DEBUG -->
 <!-- ⚔️ WEAPON END -->
 
 <script defer src="js/spin-feed.js"></script>
 <script defer src="js/admin-data.js"></script>
 <script defer src="js/debug-menu.js"></script>
 
-<!-- ══════════════════════════════════════════════════════════
-     TỐI ƯU: scroll-top chạy sau load, không block
-     ══════════════════════════════════════════════════════════ -->
 <script>
 (function(){
   "use strict";
@@ -764,9 +751,6 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
 })();
 </script>
 
-<!-- ══════════════════════════════════════════════════════════
-     TỐI ƯU LỚN: Version check cuối body
-     ══════════════════════════════════════════════════════════ -->
 <script>
 (function(){
   "use strict";
@@ -878,7 +862,7 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
       <div class="menu-section-title"><span>🎀</span> Công cụ</div>
       <div class="menu-grid">
         <button class="menu-item" data-target="attendanceBtn" type="button"><span class="menu-item-icon">🗓</span><span class="menu-item-label">Chấm công</span></button>
-        <button class="menu-item" data-target="weaponBtn" type="button"><span class="menu-item-icon">⚔️</span><span class="menu-item-label">Vũ khí</span></button><!-- ⚔️ WEAPON -->
+        <button class="menu-item" data-target="weaponBtn" type="button"><span class="menu-item-icon">⚔️</span><span class="menu-item-label">Vũ khí</span></button>
         <button class="menu-item" data-target="displayNameBtn" type="button"><span class="menu-item-icon">🎴</span><span class="menu-item-label">Đổi tên hiển thị</span></button>
       </div>
     </div>
