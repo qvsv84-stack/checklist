@@ -1,6 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — MODULE #16: INDEX (boot + render + public API) v5.1
-   - v5.1: thêm tab character
+   WEAPON FORGE — MODULE #16: INDEX (v5.5 — có World tab)
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -31,9 +30,11 @@
   const { nowMs, fmtGold, esc, toast } = U;
   const { tierOf, powerOf, regenEnergy, checkAchievements } = C;
 
+  /* ═══ TABS — 12 tabs, có world ═══ */
   const TABS = [
     { key:'forge',     icon:'🔨', label:'Rèn' },
     { key:'character', icon:'👤', label:'Nhân vật' },
+    { key:'world',     icon:'🌍', label:'Thế giới' },
     { key:'market',    icon:'🏪', label:'Chợ' },
     { key:'inventory', icon:'🎒', label:'Kho' },
     { key:'quest',     icon:'📜', label:'Quest',   badge:true },
@@ -99,6 +100,11 @@
     const body = document.getElementById('wfBody');
     if (!body) return;
 
+    /* Cleanup World khi đổi tab */
+    if (window.__WF.tabWorld?.isMounted() && S.activeTab !== 'world'){
+      window.__WF.tabWorld.closeWorld();
+    }
+
     if (!S.user){
       body.innerHTML = renderLoginWall();
       body.querySelector('#wfLoginBtn')?.addEventListener('click', () => {
@@ -132,6 +138,7 @@
     switch (S.activeTab){
       case 'forge':     content = TF.renderForgeTab(); break;
       case 'character': content = window.__WF.tabCharacter?.renderCharacterTab() || ''; break;
+      case 'world':     content = window.__WF.tabWorld?.renderWorldTab() || '<div class="wf-history-empty">Tab World chưa sẵn sàng</div>'; break;
       case 'market':    content = TS.renderMarketTab(); break;
       case 'inventory': content = TS.renderInventoryTab(); break;
       case 'quest':     content = TQ.renderQuestTab(); break;
@@ -197,6 +204,9 @@
     }
     if (t === 'character'){
       window.__WF.tabCharacter?.wireCharacter(body);
+    }
+    if (t === 'world'){
+      window.__WF.tabWorld?.wireWorld();
     }
     if (t === 'market'){
       body.querySelectorAll('[data-buy-mat]').forEach(b => {
@@ -288,6 +298,9 @@
     page.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
 
+    /* Cleanup World */
+    window.__WF.tabWorld?.closeWorld();
+
     TF.closeResult();
     window.__WF.modals?.removeModal('wsChallengeModal');
     window.__WF.modals?.removeModal('wsGiftModal');
@@ -318,7 +331,7 @@
       bindTriggers();
       if (++tries > 20) clearInterval(t);
     }, 300);
-    U.log('v5.1 modular ready ✓ (11 tabs, có Nhân vật)');
+    U.log('v5.5 modular ready ✓ (12 tabs, có World)');
   }
 
   if (document.readyState === 'loading'){
@@ -380,10 +393,12 @@
       tabForge: TF, tabShop: TS, tabQuest: TQ, tabPet: TP,
       tabBoss: TB, tabArena: TA, tabChat: TC,
       tabCharacter: window.__WF.tabCharacter,
+      tabWorld: window.__WF.tabWorld,
       characterLibrary: window.__WF.characterLibrary,
+      weaponLibrary: window.__WF.weaponLibrary,
       battle: BATTLE, realtime: RT,
     },
   };
 
-  console.log('[WF] index.js ✓ — Weapon Forge v5.1 (character tab)');
+  console.log('[WF] index.js ✓ — Weapon Forge v5.5 (12 tabs, World)');
 })();
