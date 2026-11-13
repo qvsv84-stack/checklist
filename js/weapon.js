@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE v3.0 — Full game + Social (Arena/Chat/Gift/Feed)
+   WEAPON FORGE v3.1 — Full (Forge + Social + PvP Turn-based Combat)
    Self-contained: JS + CSS injected tự động, không cần file CSS riêng
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
@@ -148,7 +148,6 @@
 .wf-login-wall-title{font-size:16px;font-weight:900;color:#78350f}
 .wf-login-wall-sub{font-size:12px;font-weight:700;color:#a06a28;max-width:240px;line-height:1.4}
 .wf-login-btn{padding:12px 28px;border:0;border-radius:999px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-family:inherit;font-size:14px;font-weight:950;box-shadow:0 8px 20px -8px rgba(220,140,20,.6);cursor:pointer}
-/* ═══ SOCIAL ═══ */
 .ws-stats-card{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:12px;background:rgba(255,255,255,.85);border:1px solid rgba(220,180,100,.4);border-radius:14px;margin-bottom:12px}
 .ws-stat-cell{text-align:center}
 .ws-stat-label{font-size:9px;font-weight:900;letter-spacing:.1em;color:#a06a28;text-transform:uppercase;margin-bottom:3px}
@@ -198,7 +197,6 @@
 .ws-fi-text{color:#78350f;font-weight:700;overflow:hidden;text-overflow:ellipsis}
 .ws-fi-text b{color:#a06a28;font-weight:950}
 .ws-fi-time{font-size:10px;color:#a89070;font-variant-numeric:tabular-nums}
-/* Chat */
 .ws-chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 340px);min-height:320px;background:rgba(255,255,255,.5);border:1.5px solid rgba(220,180,100,.4);border-radius:16px;overflow:hidden}
 .ws-chat-list{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
 .ws-chat-list::-webkit-scrollbar{width:4px}
@@ -220,14 +218,12 @@
 .ws-chat-send{padding:9px 16px;border:0;border-radius:10px;background:linear-gradient(180deg,#f59e0b,#d97706);color:#fff;font-family:inherit;font-size:12px;font-weight:950;cursor:pointer;white-space:nowrap}
 .ws-chat-send:disabled{background:#9ca3af;cursor:not-allowed}
 .ws-chat-cooldown{padding:0 12px;font-size:11px;font-weight:900;color:#dc2626;text-align:center;min-height:16px}
-/* Gift */
 .ws-gift-row{display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.7);border:1px solid rgba(220,180,100,.3);border-radius:12px;margin-bottom:6px}
 .ws-gift-av{width:44px;height:44px;border-radius:50%;overflow:hidden;background:linear-gradient(135deg,#fff7d9,#ffd966);display:flex;align-items:center;justify-content:center;color:#7a5410;font-size:15px;font-weight:950;border:2px solid #fff}
 .ws-gift-av img{width:100%;height:100%;object-fit:cover;display:block}
 .ws-gift-body{min-width:0}
 .ws-gift-name{font-size:13px;font-weight:900;color:#78350f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ws-gift-meta{font-size:10.5px;font-weight:700;color:#a06a28;margin-top:1px}
-/* Modal */
 .ws-modal{position:fixed;inset:0;z-index:21300;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(20,15,5,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 .ws-modal.show{display:flex;animation:wfFadeIn .2s ease}
 .ws-modal-card{width:100%;max-width:340px;padding:22px 20px 18px;background:linear-gradient(160deg,#fff,#fffbeb);border-radius:22px;box-shadow:0 24px 60px -20px rgba(80,50,10,.5);animation:wfPopIn .3s cubic-bezier(.34,1.56,.64,1)}
@@ -246,10 +242,60 @@
 .ws-modal-cancel{background:rgba(0,0,0,.06);color:#78350f}
 .ws-modal-confirm{background:linear-gradient(180deg,#f59e0b,#d97706);color:#fff;box-shadow:0 6px 16px -6px rgba(220,140,20,.5)}
 .ws-modal-confirm:disabled{opacity:.5;cursor:not-allowed}
-.ws-modal-result{padding:20px;text-align:center}
-.ws-modal-result-emoji{font-size:56px;line-height:1;margin-bottom:10px;filter:drop-shadow(0 8px 16px rgba(0,0,0,.15))}
-.ws-modal-result-title{font-size:20px;font-weight:950;color:#78350f;margin-bottom:6px}
-.ws-modal-result-sub{font-size:13px;font-weight:700;color:#a06a28;margin-bottom:16px;line-height:1.4}
+.ws-battle{position:fixed;inset:0;z-index:21400;display:none;flex-direction:column;background:radial-gradient(ellipse 100% 40% at 50% 0%,rgba(255,236,180,.4),transparent 60%),linear-gradient(180deg,#1a1512 0%,#2d2420 100%);color:#fff;overflow:hidden}
+.ws-battle.show{display:flex;animation:wfFadeIn .3s ease}
+.ws-battle-head{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;background:rgba(0,0,0,.5);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,200,120,.2);z-index:10}
+.ws-battle-head-btn{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:1.5px solid rgba(255,200,120,.3);border-radius:14px;background:rgba(255,255,255,.08);color:#fcd34d;font-size:20px;font-weight:900;cursor:pointer}
+.ws-battle-title{text-align:center}
+.ws-battle-kicker{display:block;font-size:9px;font-weight:900;letter-spacing:.26em;color:#a06a28;text-transform:uppercase}
+.ws-battle-name{display:block;margin-top:3px;font-size:15px;font-weight:950;color:#fcd34d;letter-spacing:-.01em}
+.ws-battle-arena{flex:1 1 auto;position:relative;overflow:hidden;padding:16px}
+.ws-battle-vs{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:32px;font-weight:950;color:rgba(255,200,120,.15);pointer-events:none;z-index:0}
+.ws-battle-fighters{position:relative;display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:10px;height:100%;max-height:340px;padding-top:110px}
+.ws-fighter{display:flex;flex-direction:column;align-items:center;gap:8px;transition:transform .3s,opacity .3s;z-index:1;position:relative}
+.ws-fighter.dead{opacity:.3;filter:grayscale(1)}
+.ws-fighter.attacking{animation:wsAttack .4s ease}
+.ws-fighter.hurt{animation:wsHurt .4s ease}
+@keyframes wsAttack{0%,100%{transform:translateY(0)}40%{transform:translateY(-20px) scale(1.05)}}
+@keyframes wsHurt{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+.ws-fighter-avatar{width:72px;height:72px;border-radius:50%;overflow:hidden;background:linear-gradient(135deg,#fff7d9,#ffd966);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:950;color:#7a5410;border:3px solid rgba(252,211,77,.5);box-shadow:0 8px 24px rgba(0,0,0,.4);position:relative}
+.ws-fighter-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.ws-fighter-name{font-size:12px;font-weight:950;color:#fff;text-align:center;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ws-fighter-hp{width:100%;max-width:120px;height:8px;background:rgba(0,0,0,.4);border-radius:4px;overflow:hidden;border:1px solid rgba(255,200,120,.3)}
+.ws-fighter-hp-fill{height:100%;background:linear-gradient(90deg,#f59e0b,#dc2626);transition:width .4s cubic-bezier(.16,.9,.25,1)}
+.ws-fighter-hp-text{font-size:11px;font-weight:950;color:#fcd34d;font-variant-numeric:tabular-nums}
+.ws-fighter-turn{position:absolute;top:-8px;right:-8px;width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:950;box-shadow:0 3px 10px rgba(245,158,11,.6);animation:wsTurnPulse 1s ease-in-out infinite}
+@keyframes wsTurnPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+.ws-battle-vs-mark{display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:950;color:#fcd34d;padding-bottom:50px}
+.ws-battle-log{position:absolute;top:12px;left:12px;right:12px;max-height:100px;overflow-y:auto;padding:8px 12px;background:rgba(0,0,0,.5);border:1px solid rgba(255,200,120,.2);border-radius:10px;font-size:11px;font-weight:700;color:#fcd34d;z-index:2}
+.ws-battle-log-item{padding:2px 0;animation:wfSlideIn .3s ease}
+.ws-battle-log-item.crit{color:#fbbf24;font-weight:950}
+.ws-battle-log-item.miss{color:#6b7280}
+.ws-battle-log-item.end{color:#10b981;font-weight:950;font-size:12px}
+.ws-battle-actions{flex-shrink:0;padding:12px 14px calc(12px + env(safe-area-inset-bottom));background:rgba(0,0,0,.6);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid rgba(255,200,120,.2)}
+.ws-battle-turn-info{text-align:center;font-size:12px;font-weight:900;color:#fcd34d;margin-bottom:10px;min-height:16px}
+.ws-battle-turn-info.my{animation:wsTurnPulse 1.5s ease-in-out infinite;color:#10b981}
+.ws-battle-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ws-battle-btn{padding:14px;border:0;border-radius:12px;font-family:inherit;font-size:14px;font-weight:950;color:#fff;cursor:pointer;transition:transform .12s,opacity .15s;text-align:center;line-height:1.2}
+.ws-battle-btn:active:not(:disabled){transform:scale(.96)}
+.ws-battle-btn:disabled{opacity:.4;cursor:not-allowed}
+.ws-battle-btn.strike{background:linear-gradient(180deg,#3b82f6,#1e40af);box-shadow:0 4px 12px -4px rgba(59,130,246,.6)}
+.ws-battle-btn.heavy{background:linear-gradient(180deg,#ef4444,#991b1b);box-shadow:0 4px 12px -4px rgba(239,68,68,.6)}
+.ws-battle-btn.defend{background:linear-gradient(180deg,#6b7280,#374151);box-shadow:0 4px 12px -4px rgba(107,114,128,.6)}
+.ws-battle-btn.heal{background:linear-gradient(180deg,#10b981,#047857);box-shadow:0 4px 12px -4px rgba(16,185,129,.6)}
+.ws-battle-btn small{display:block;font-size:10px;font-weight:700;opacity:.8;margin-top:2px}
+.ws-battle-result{position:fixed;inset:0;z-index:21500;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.ws-battle-result.show{display:flex;animation:wfFadeIn .3s ease}
+.ws-battle-result-card{width:100%;max-width:320px;background:linear-gradient(160deg,#1f1a15,#2d2420);border:2px solid rgba(252,211,77,.5);border-radius:24px;padding:26px 22px 20px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.6)}
+.ws-battle-result-emoji{font-size:64px;line-height:1;margin-bottom:8px;filter:drop-shadow(0 8px 16px rgba(0,0,0,.5))}
+.ws-battle-result-title{font-size:24px;font-weight:950;color:#fcd34d;margin-bottom:6px}
+.ws-battle-result-sub{font-size:14px;font-weight:700;color:#a06a28;margin-bottom:20px;line-height:1.5}
+.ws-battle-result-btn{width:100%;padding:14px;border:0;border-radius:14px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-family:inherit;font-size:15px;font-weight:950;cursor:pointer}
+.ws-battle-list-item{display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:10px;padding:12px;background:linear-gradient(160deg,#fffaf0,#fef3c7);border:1.5px solid #f59e0b;border-radius:14px;margin-bottom:8px;box-shadow:0 4px 12px -8px rgba(220,140,20,.4)}
+.ws-battle-list-item .ws-cc-avatar{width:44px;height:44px;font-size:16px}
+.ws-battle-list-item .ws-cc-body{min-width:0}
+.ws-battle-list-item .ws-cc-name{font-size:13px;font-weight:950;color:#78350f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ws-battle-list-item .ws-cc-meta{font-size:10.5px;font-weight:700;color:#a06a28}
 `;
   if (!document.getElementById('wfStyles')) {
     const st = document.createElement('style');
@@ -269,6 +315,8 @@
     CHAT_COOLDOWN_MS: 10000, CHAT_MAX_LEN: 200,
     GIFT_MIN: 10, GIFT_MAX_PER_TX: 500, GIFT_MAX_PER_DAY: 1000,
     DUEL_MIN: 10, DUEL_MAX: 5000,
+    BATTLE_TURN_TIMEOUT_MS: 60000,
+    BATTLE_POLL_MS: 3000,
 
     TIER_ORDER: ['B','A','S','SS','SSS','VIP'],
     TIERS: {
@@ -280,7 +328,6 @@
       VIP: { name:'Thần Binh',   emoji:'👑', mult:32, enhMax:15 },
     },
     ENH_TO_TIER: ['B','B','B','B','A','A','A','S','S','S','SS','SS','SS','SSS','SSS','VIP'],
-
     MATERIALS: {
       wood:       { name:'Gỗ',        emoji:'🪵', price:5,    bonus:{hold:3} },
       iron:       { name:'Sắt',       emoji:'🔩', price:20,   bonus:{success:5} },
@@ -299,7 +346,6 @@
     BASE_RATES: { broken:5, damaged:15, hold:25, success:45, great:10 },
     PITY_FAILS_FOR_SUCCESS: 10, PITY_FAILS_FOR_GREAT: 20,
     COMBO_BONUS_PER_STACK: 1, COMBO_BONUS_CAP: 25,
-
     ACHIEVEMENTS: {
       first_forge: { icon:'🔨', name:'Bước đầu',    desc:'Rèn lần đầu',   gold:50 },
       forge_10:    { icon:'⚒️', name:'Tay nghề',    desc:'Rèn 10 lần',    gold:100 },
@@ -369,7 +415,6 @@
     return `<div class="${cls}"><span class="ws-av-fb">${ini}</span></div>`;
   }
 
-  /* Audio */
   let _audioCtx = null;
   function playSound(freq, dur, type){
     try {
@@ -432,6 +477,11 @@
     user: null, state: null, busy: false,
     activeTab: 'forge', arenaSubTab: 'incoming',
     chatCooldownUntil: 0,
+    currentBattleId: null,
+    battleState: null,
+    battleChannel: null,
+    battlePollTimer: null,
+    activeBattleData: null,
   };
   const SOC = {
     arena: null, chat: [], feed: [], giftTargets: [],
@@ -440,10 +490,26 @@
   let _remoteAvailable = null;
   let _saveTimer = null;
   let _rtChannel = null;
-  let _chatPollTimer = null;
+
+  const ACTIVE_BATTLE_KEY_PREFIX = '__wf_active_battle_';
+  function saveActiveBattleId(userId, matchId){
+    try {
+      if (!userId) return;
+      if (matchId) localStorage.setItem(ACTIVE_BATTLE_KEY_PREFIX + userId, JSON.stringify({ matchId, at: Date.now() }));
+      else localStorage.removeItem(ACTIVE_BATTLE_KEY_PREFIX + userId);
+    } catch(_){}
+  }
+  function getActiveBattleId(userId){
+    try {
+      if (!userId) return null;
+      const raw = localStorage.getItem(ACTIVE_BATTLE_KEY_PREFIX + userId);
+      if (!raw) return null;
+      const o = JSON.parse(raw);
+      return o?.matchId || null;
+    } catch(_){ return null; }
+  }
 
   function stateKey(uid){ return CFG.LS_PREFIX + (uid||'guest'); }
-
   function defaultState(){
     return {
       v: 1, gold: CFG.START_GOLD, energy: CFG.ENERGY_MAX,
@@ -474,14 +540,10 @@
     return s;
   }
   function loadLocal(uid){
-    try {
-      const raw = localStorage.getItem(stateKey(uid));
-      return raw ? normalizeState(JSON.parse(raw)) : null;
-    } catch(_){ return null; }
+    try { const raw = localStorage.getItem(stateKey(uid)); return raw ? normalizeState(JSON.parse(raw)) : null; }
+    catch(_){ return null; }
   }
-  function saveLocal(uid, s){
-    try { localStorage.setItem(stateKey(uid), JSON.stringify(s)); } catch(_){}
-  }
+  function saveLocal(uid, s){ try { localStorage.setItem(stateKey(uid), JSON.stringify(s)); } catch(_){} }
 
   /* ═══════════════════════════════════════════════════════════════
      4. REMOTE SYNC
@@ -774,15 +836,9 @@
     if (S.activeTab === 'inventory'){
       $('wfSellBtn')?.addEventListener('click', doSell);
     }
-    if (S.activeTab === 'arena'){
-      wireArena(body);
-    }
-    if (S.activeTab === 'chat'){
-      wireChat(body);
-    }
-    if (S.activeTab === 'gift'){
-      wireGift(body);
-    }
+    if (S.activeTab === 'arena') wireArena(body);
+    if (S.activeTab === 'chat') wireChat(body);
+    if (S.activeTab === 'gift') wireGift(body);
   }
 
   function renderLoginWall(){
@@ -805,18 +861,15 @@
     const curTierBase = tierBaseEnh(s.enh);
     const tierProgress = prevTierEnh > curTierBase
       ? Math.min(100, ((s.enh - curTierBase) / (prevTierEnh - curTierBase)) * 100) : 100;
-
     const canForge = s.energy >= CFG.FORGE_ENERGY && s.gold >= CFG.FORGE_GOLD && !S.busy && s.enh < 15;
     const label = s.enh >= 15 ? '🏆 Đã đạt cấp tối đa'
       : s.energy < CFG.FORGE_ENERGY ? '⚡ Hết năng lượng'
       : s.gold < CFG.FORGE_GOLD ? '🪙 Không đủ vàng'
       : '🔨 Rèn vũ khí';
-
     const mid = materialForTier(tier);
     const mat = mid ? CFG.MATERIALS[mid] : null;
     const matQty = mid ? (s.materials[mid]||0) : 0;
     const energyPct = (s.energy / CFG.ENERGY_MAX) * 100;
-
     return `
       <div class="wf-energy-wrap">
         <span class="wf-energy-label">⚡</span>
@@ -947,6 +1000,7 @@
       <div class="ws-subtabs">
         <button class="ws-subtab ${S.arenaSubTab==='incoming'?'active':''}" data-ws-sub="incoming" type="button">⚔️ Lời mời${d.incoming.length?' <span class="ws-subtab-count">'+d.incoming.length+'</span>':''}</button>
         <button class="ws-subtab ${S.arenaSubTab==='players'?'active':''}" data-ws-sub="players" type="button">👥 Đấu thủ</button>
+        <button class="ws-subtab ${S.arenaSubTab==='active'?'active':''}" data-ws-sub="active" type="button">🔥 Đang đấu</button>
         <button class="ws-subtab ${S.arenaSubTab==='history'?'active':''}" data-ws-sub="history" type="button">📜 Lịch sử</button>
       </div>
       <div id="wsArenaContent">${renderArenaContent(d)}</div>
@@ -982,6 +1036,19 @@
           <button class="ws-btn small primary" data-ws-challenge="${p.user_id}" data-ws-name="${esc(p.display_name)}" type="button">Thách</button>
         </div>`).join('');
     }
+    if (S.arenaSubTab === 'active'){
+      const b = S.activeBattleData;
+      if (!b) return '<div class="wf-history-empty">Không có trận đang đấu</div>';
+      const oppName = b.is_challenger ? b.opponent_name : b.challenger_name;
+      return `<div class="ws-battle-list-item">
+        ${renderAvatarHtml(oppName, 'ws-cc-avatar')}
+        <div class="ws-cc-body">
+          <div class="ws-cc-name">vs ${esc(oppName)}</div>
+          <div class="ws-cc-meta">Đang đấu · Cược ${fmtGold(b.wager)}🪙 · Turn ${b.turn_number}</div>
+        </div>
+        <button class="ws-btn small primary" data-ws-rejoin="${b.id}" type="button">Vào</button>
+      </div>`;
+    }
     if (S.arenaSubTab === 'history'){
       if (!d.history.length) return '<div class="wf-history-empty">Chưa có trận nào</div>';
       const meId = S.user?.id;
@@ -1016,8 +1083,11 @@
   }
   function wireArena(body){
     body.querySelectorAll('.ws-subtab').forEach(b => {
-      b.addEventListener('click', () => {
+      b.addEventListener('click', async () => {
         S.arenaSubTab = b.dataset.wsSub;
+        if (S.arenaSubTab === 'active'){
+          S.activeBattleData = await fetchActiveBattle();
+        }
         render();
       });
     });
@@ -1026,6 +1096,7 @@
       content.querySelectorAll('[data-ws-accept]').forEach(b => b.addEventListener('click', () => acceptDuel(b.dataset.wsAccept, b)));
       content.querySelectorAll('[data-ws-reject]').forEach(b => b.addEventListener('click', () => rejectDuel(b.dataset.wsReject, b)));
       content.querySelectorAll('[data-ws-challenge]').forEach(b => b.addEventListener('click', () => openChallengeModal(b.dataset.wsChallenge, b.dataset.wsName)));
+      content.querySelectorAll('[data-ws-rejoin]').forEach(b => b.addEventListener('click', () => openBattle(b.dataset.wsRejoin)));
     }
   }
   function rerenderArena(){
@@ -1041,6 +1112,23 @@
   function rerenderFeed(){
     const feed = $('wsFeedList');
     if (feed) feed.innerHTML = renderFeedList();
+  }
+
+  async function fetchActiveBattle(){
+    const me = S.user; if (!me) return null;
+    const matchId = S.currentBattleId || getActiveBattleId(me.id);
+    if (!matchId) return null;
+    const sb = getSb();
+    if (!sb) return null;
+    try {
+      const res = await sb.rpc('rpc_weapon_battle_state', { p_match_id: matchId });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (!d.ok){ saveActiveBattleId(me.id, null); return null; }
+      if (d.status === 'fighting') return d;
+      saveActiveBattleId(me.id, null);
+      return null;
+    } catch(_){ return null; }
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -1099,12 +1187,6 @@
     list.innerHTML = SOC.chat.map(m => renderChatMsg(m, meId)).join('');
     scrollChatToBottom();
   }
-  function appendChatBubble(list, msg){
-    const meId = S.user?.id;
-    const tmp = document.createElement('div');
-    tmp.innerHTML = renderChatMsg(msg, meId);
-    list.appendChild(tmp.firstElementChild);
-  }
   function scrollChatToBottom(){
     const list = $('wsChatList');
     if (list) setTimeout(() => { list.scrollTop = list.scrollHeight; }, 50);
@@ -1135,7 +1217,6 @@
     if (!msg){ return; }
     if (msg.length > CFG.CHAT_MAX_LEN){ toast('Tối đa ' + CFG.CHAT_MAX_LEN + ' ký tự', 'warning'); return; }
     if (nowMs() < S.chatCooldownUntil){ toast('Đợi chút nữa', 'warning'); return; }
-
     const sb = getSb();
     if (!sb) return;
     inp.disabled = true;
@@ -1143,20 +1224,16 @@
       const myState = S.state;
       const tier = tierOf(myState?.enh || 0);
       const res = await sb.rpc('rpc_weapon_send_chat', {
-        p_message: msg,
-        p_tier: tier,
-        p_enh: myState?.enh || 0,
+        p_message: msg, p_tier: tier, p_enh: myState?.enh || 0,
       });
       if (res.error) throw res.error;
       const d = res.data || {};
       if (!d.ok) throw new Error(d.error || 'Lỗi gửi');
       inp.value = '';
       S.chatCooldownUntil = nowMs() + CFG.CHAT_COOLDOWN_MS;
-      // Refresh chat
       await fetchChat();
       rerenderChat();
       scrollChatToBottom();
-      // Cooldown UI tự chạy
     } catch(e){
       toast('Lỗi: ' + (e.message || 'Không gửi được'), 'error');
       inp.disabled = false;
@@ -1180,10 +1257,7 @@
         </div>
       `).join('');
   }
-  function rerenderGift(){
-    if (S.activeTab !== 'gift') return;
-    render();
-  }
+  function rerenderGift(){ if (S.activeTab === 'gift') render(); }
   function wireGift(body){
     body.querySelectorAll('[data-ws-gift]').forEach(b => {
       b.addEventListener('click', () => openGiftModal(b.dataset.wsGift, b.dataset.wsGiftName));
@@ -1246,7 +1320,7 @@
         if (res.error) throw res.error;
         const d = res.data || {};
         if (!d.ok) throw new Error(d.error || 'Lỗi');
-        toast(`Đã thách ${esc(oppName)} cược ${wager}🪙`, 'success');
+        toast(`Đã thách ${oppName} cược ${wager}🪙`, 'success');
         modal.remove();
         await fetchArena();
         rerenderArena();
@@ -1313,9 +1387,8 @@
         if (res.error) throw res.error;
         const d = res.data || {};
         if (!d.ok) throw new Error(d.error || 'Lỗi');
-        // Update local gold
         if (S.state){ S.state.gold = Math.max(0, S.state.gold - amount); scheduleSave(); }
-        toast(`Đã tặng ${amount}🪙 cho ${esc(toName)}`, 'success');
+        toast(`Đã tặng ${amount}🪙 cho ${toName}`, 'success');
         playSound(880, .1); setTimeout(()=>playSound(1175,.15), 80);
         modal.remove();
         render();
@@ -1328,7 +1401,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     15. ACTIONS: FORGE / MARKET / SELL / DUEL
+     15. ACTIONS: FORGE / MARKET / SELL
      ═══════════════════════════════════════════════════════════════ */
   async function doForge(){
     if (S.busy || !S.state) return;
@@ -1416,7 +1489,6 @@
     } else chips.push(`<span class="wf-result-chip zero-enh">±0 cấp</span>`);
     if (result.goldDelta > 0) chips.push(`<span class="wf-result-chip plus-gold">+${result.goldDelta} 🪙</span>`);
     $('wfResChanges').innerHTML = chips.join('');
-
     const again = $('wfResAgain');
     if (again){
       const s = S.state;
@@ -1489,26 +1561,26 @@
     render();
   }
 
+  /* ═══════════════════════════════════════════════════════════════
+     16. DUEL (challenge + accept + reject)
+     ═══════════════════════════════════════════════════════════════ */
   async function acceptDuel(matchId, btn){
     if (btn) btn.disabled = true;
     const sb = getSb();
     if (!sb) return;
     try {
-      const res = await sb.rpc('rpc_weapon_duel_accept', { p_match_id: matchId });
+      const res = await sb.rpc('rpc_weapon_battle_start', { p_match_id: matchId });
       if (res.error) throw res.error;
       const d = res.data || {};
       if (!d.ok) throw new Error(d.error || 'Lỗi');
-      const iWon = d.you_won;
-      toast(iWon ? `🏆 Thắng! +${d.payout}🪙` : `💔 Thua -${d.wager}🪙`, iWon ? 'success' : 'error');
-      playSound(iWon ? 659 : 330, .2);
-      vibrate(iWon ? [20,30,60] : [80,40,80]);
-      // Refresh state
-      const r = await pullRemote();
-      if (r && r.state){ S.state = r.state; saveLocal(S.user.id, S.state); }
+      if (S.user) saveActiveBattleId(S.user.id, matchId);
+      toast('⚔️ Trận đấu bắt đầu!', 'success');
+      playSound(880, .1, 'triangle'); setTimeout(()=>playSound(1175,.15,'triangle'), 100);
+      vibrate([40,30,40]);
       await fetchArena();
-      render();
+      openBattle(matchId);
     } catch(e){
-      toast('Lỗi: ' + (e.message || 'Không nhận được'), 'error');
+      toast('Lỗi: ' + (e.message || 'Không bắt đầu được'), 'error');
       if (btn) btn.disabled = false;
     }
   }
@@ -1529,7 +1601,340 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     16. SOCIAL DATA FETCHERS
+     17. BATTLE — Turn-based realtime combat
+     ═══════════════════════════════════════════════════════════════ */
+  function ensureBattleScreen(){
+    let b = document.getElementById('wsBattleScreen');
+    if (b) return b;
+    b = document.createElement('div');
+    b.id = 'wsBattleScreen';
+    b.className = 'ws-battle';
+    b.setAttribute('aria-hidden', 'true');
+    b.innerHTML = `
+      <header class="ws-battle-head">
+        <button class="ws-battle-head-btn" id="wsBattleBack" type="button" aria-label="Thoát">←</button>
+        <div class="ws-battle-title">
+          <span class="ws-battle-kicker">ĐẤU TRƯỜNG</span>
+          <span class="ws-battle-name" id="wsBattleWager">—</span>
+        </div>
+        <button class="ws-battle-head-btn" id="wsBattleRefresh" type="button" aria-label="Refresh">↻</button>
+      </header>
+      <div class="ws-battle-arena" id="wsBattleArena">
+        <div class="ws-battle-log" id="wsBattleLog"></div>
+        <div class="ws-battle-vs">VS</div>
+        <div class="ws-battle-fighters">
+          <div class="ws-fighter" id="wsFighterMe">
+            <div class="ws-fighter-avatar" id="wsFighterMeAv">?</div>
+            <div class="ws-fighter-name" id="wsFighterMeName">Bạn</div>
+            <div class="ws-fighter-hp"><div class="ws-fighter-hp-fill" id="wsFighterMeHpBar" style="width:100%"></div></div>
+            <div class="ws-fighter-hp-text" id="wsFighterMeHpText">—</div>
+          </div>
+          <div class="ws-battle-vs-mark">⚔️</div>
+          <div class="ws-fighter" id="wsFighterThem">
+            <div class="ws-fighter-avatar" id="wsFighterThemAv">?</div>
+            <div class="ws-fighter-name" id="wsFighterThemName">Đối thủ</div>
+            <div class="ws-fighter-hp"><div class="ws-fighter-hp-fill" id="wsFighterThemHpBar" style="width:100%"></div></div>
+            <div class="ws-fighter-hp-text" id="wsFighterThemHpText">—</div>
+          </div>
+        </div>
+      </div>
+      <div class="ws-battle-actions">
+        <div class="ws-battle-turn-info" id="wsBattleTurnInfo">Đang tải…</div>
+        <div class="ws-battle-btns">
+          <button class="ws-battle-btn strike" data-bt-action="strike" type="button">⚔️ Strike<small>90-110% dmg · 5% miss</small></button>
+          <button class="ws-battle-btn heavy"  data-bt-action="heavy"  type="button">💥 Heavy<small>130-160% · 15% miss · crit 20%</small></button>
+          <button class="ws-battle-btn defend" data-bt-action="defend" type="button">🛡️ Defend<small>+5% HP</small></button>
+          <button class="ws-battle-btn heal"   data-bt-action="heal"   type="button">💚 Heal<small>+15% HP</small></button>
+        </div>
+      </div>
+      <div class="ws-battle-result" id="wsBattleResult">
+        <div class="ws-battle-result-card">
+          <div class="ws-battle-result-emoji" id="wsBattleResEmoji">🏆</div>
+          <div class="ws-battle-result-title" id="wsBattleResTitle">—</div>
+          <div class="ws-battle-result-sub" id="wsBattleResSub">—</div>
+          <button class="ws-battle-result-btn" id="wsBattleResOk" type="button">Đóng</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(b);
+    b.querySelector('#wsBattleBack').addEventListener('click', () => closeBattle());
+    b.querySelector('#wsBattleRefresh').addEventListener('click', () => refreshBattleState());
+    b.querySelectorAll('[data-bt-action]').forEach(btn => {
+      btn.addEventListener('click', () => doBattleAction(btn.dataset.btAction, btn));
+    });
+    b.querySelector('#wsBattleResOk').addEventListener('click', () => {
+      b.querySelector('#wsBattleResult').classList.remove('show');
+      closeBattle();
+    });
+    return b;
+  }
+
+  async function openBattle(matchId){
+    if (!matchId) return;
+    const b = ensureBattleScreen();
+    S.currentBattleId = matchId;
+    S.battleState = null;
+    if (S.user) saveActiveBattleId(S.user.id, matchId);
+    b.classList.add('show');
+    b.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    // Reset result
+    const resEl = document.getElementById('wsBattleResult');
+    if (resEl) resEl.classList.remove('show');
+    // Reset buttons
+    b.querySelectorAll('[data-bt-action]').forEach(btn => {
+      btn.disabled = true;
+      const map = { strike:'⚔️ Strike<small>90-110% dmg · 5% miss</small>', heavy:'💥 Heavy<small>130-160% · 15% miss · crit 20%</small>', defend:'🛡️ Defend<small>+5% HP</small>', heal:'💚 Heal<small>+15% HP</small>' };
+      if (map[btn.dataset.btAction]) btn.innerHTML = map[btn.dataset.btAction];
+    });
+    await refreshBattleState();
+    subscribeBattleRealtime(matchId);
+    startBattlePoll();
+  }
+
+  function closeBattle(){
+    const b = document.getElementById('wsBattleScreen');
+    if (b){ b.classList.remove('show'); b.setAttribute('aria-hidden', 'true'); }
+    document.body.style.overflow = '';
+    stopBattlePoll();
+    unsubscribeBattleRealtime();
+    // Chỉ clear active battle nếu trận đã kết thúc
+    if (S.battleState?.status !== 'fighting'){
+      if (S.user) saveActiveBattleId(S.user.id, null);
+    }
+    S.currentBattleId = null;
+    S.battleState = null;
+    S.activeBattleData = null;
+    if (S.activeTab === 'arena'){ fetchArena().then(rerenderArena); render(); }
+  }
+
+  function startBattlePoll(){
+    stopBattlePoll();
+    S.battlePollTimer = setInterval(() => {
+      if (document.hidden) return;
+      if (!S.currentBattleId) return;
+      if (S.battleState?.status !== 'fighting') return;
+      refreshBattleState();
+    }, CFG.BATTLE_POLL_MS);
+  }
+  function stopBattlePoll(){
+    if (S.battlePollTimer){ clearInterval(S.battlePollTimer); S.battlePollTimer = null; }
+  }
+
+  function subscribeBattleRealtime(matchId){
+    unsubscribeBattleRealtime();
+    const sb = getSb();
+    if (!sb || !sb.channel) return;
+    try {
+      S.battleChannel = sb.channel('wf-battle-' + matchId)
+        .on('postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'srank_weapon_matches',
+            filter: 'id=eq.' + matchId },
+          payload => onBattleUpdate(payload.new))
+        .subscribe(status => log('battle rt:', status));
+    } catch(e){ log('battle rt sub', e); }
+  }
+  function unsubscribeBattleRealtime(){
+    if (S.battleChannel){
+      try { S.battleChannel.unsubscribe(); } catch(_){}
+      S.battleChannel = null;
+    }
+  }
+
+  function onBattleUpdate(row){
+    if (!row) return;
+    if (row.id !== S.currentBattleId) return;
+    refreshBattleState();
+  }
+
+  async function refreshBattleState(){
+    if (!S.currentBattleId) return;
+    const sb = getSb();
+    if (!sb) return;
+    try {
+      const res = await sb.rpc('rpc_weapon_battle_state', { p_match_id: S.currentBattleId });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (!d.ok) throw new Error(d.error || 'Lỗi');
+      S.battleState = d;
+      renderBattle(d);
+    } catch(e){
+      log('refreshBattleState', e);
+    }
+  }
+
+  function renderBattle(st){
+    const b = document.getElementById('wsBattleScreen');
+    if (!b || !st) return;
+    const me = st.is_challenger
+      ? { id: st.challenger_id, name: st.challenger_name, hp: st.challenger_hp, max: st.challenger_max_hp, atk: st.challenger_atk }
+      : { id: st.opponent_id,   name: st.opponent_name,   hp: st.opponent_hp,   max: st.opponent_max_hp,   atk: st.opponent_atk };
+    const them = st.is_challenger
+      ? { id: st.opponent_id,   name: st.opponent_name,   hp: st.opponent_hp,   max: st.opponent_max_hp,   atk: st.opponent_atk }
+      : { id: st.challenger_id, name: st.challenger_name, hp: st.challenger_hp, max: st.challenger_max_hp, atk: st.challenger_atk };
+
+    const wg = document.getElementById('wsBattleWager');
+    if (wg) wg.textContent = `Cược ${fmtGold(st.wager)}🪙 · Turn ${st.turn_number}`;
+
+    const meAv = document.getElementById('wsFighterMeAv');
+    if (meAv){
+      const url = avatarUrl(me.name);
+      if (url) meAv.innerHTML = `<img src="${escapeUrl(url)}" alt="" onerror="this.style.display='none';this.parentNode.textContent='${initialOf(me.name)}'">`;
+      else meAv.textContent = initialOf(me.name);
+    }
+    const meName = document.getElementById('wsFighterMeName');
+    if (meName) meName.textContent = me.name || 'Bạn';
+    const meHpBar = document.getElementById('wsFighterMeHpBar');
+    const meHpText = document.getElementById('wsFighterMeHpText');
+    const meHpPct = me.max ? Math.max(0, Math.min(100, (me.hp / me.max) * 100)) : 0;
+    if (meHpBar) meHpBar.style.width = meHpPct + '%';
+    if (meHpText) meHpText.textContent = `${me.hp || 0} / ${me.max || 0}`;
+
+    const themAv = document.getElementById('wsFighterThemAv');
+    if (themAv){
+      const url = avatarUrl(them.name);
+      if (url) themAv.innerHTML = `<img src="${escapeUrl(url)}" alt="" onerror="this.style.display='none';this.parentNode.textContent='${initialOf(them.name)}'">`;
+      else themAv.textContent = initialOf(them.name);
+    }
+    const themName = document.getElementById('wsFighterThemName');
+    if (themName) themName.textContent = them.name || 'Đối thủ';
+    const themHpBar = document.getElementById('wsFighterThemHpBar');
+    const themHpText = document.getElementById('wsFighterThemHpText');
+    const themHpPct = them.max ? Math.max(0, Math.min(100, (them.hp / them.max) * 100)) : 0;
+    if (themHpBar) themHpBar.style.width = themHpPct + '%';
+    if (themHpText) themHpText.textContent = `${them.hp || 0} / ${them.max || 0}`;
+
+    const meEl = document.getElementById('wsFighterMe');
+    const themEl = document.getElementById('wsFighterThem');
+    if (meEl) meEl.classList.toggle('dead', (me.hp || 0) <= 0);
+    if (themEl) themEl.classList.toggle('dead', (them.hp || 0) <= 0);
+
+    if (meEl) meEl.querySelector('.ws-fighter-turn')?.remove();
+    if (themEl) themEl.querySelector('.ws-fighter-turn')?.remove();
+    if (st.status === 'fighting'){
+      const myTurn = st.my_turn;
+      if (myTurn) meEl?.insertAdjacentHTML('beforeend', '<div class="ws-fighter-turn">▶</div>');
+      else themEl?.insertAdjacentHTML('beforeend', '<div class="ws-fighter-turn">▶</div>');
+    }
+
+    const ti = document.getElementById('wsBattleTurnInfo');
+    if (ti){
+      if (st.status === 'fighting'){
+        if (st.my_turn){ ti.textContent = '🎯 Lượt của bạn!'; ti.classList.add('my'); }
+        else { ti.textContent = '⏳ Chờ đối thủ…'; ti.classList.remove('my'); }
+      } else if (st.status === 'resolved'){
+        ti.textContent = '✅ Trận đã kết thúc'; ti.classList.remove('my');
+      } else { ti.textContent = ''; }
+    }
+
+    b.querySelectorAll('[data-bt-action]').forEach(btn => {
+      btn.disabled = !(st.status === 'fighting' && st.my_turn);
+    });
+
+    renderBattleLog(st);
+
+    if (st.status === 'resolved'){
+      const iWon = st.winner_id === (st.is_challenger ? st.challenger_id : st.opponent_id);
+      showBattleResult(iWon, st.wager);
+    }
+  }
+
+  function renderBattleLog(st){
+    const el = document.getElementById('wsBattleLog');
+    if (!el || !Array.isArray(st.battle_log)) return;
+    const meId = st.is_challenger ? 'challenger' : 'opponent';
+    const lines = st.battle_log.slice(-8).map(entry => {
+      if (entry.type === 'start') return `<div class="ws-battle-log-item">⚔️ ${esc(entry.msg || 'Trận bắt đầu')}</div>`;
+      if (entry.type === 'end') return `<div class="ws-battle-log-item end">🏆 ${esc(entry.msg || 'Kết thúc')}</div>`;
+      if (entry.type === 'timeout') return `<div class="ws-battle-log-item end">⏱️ ${esc(entry.msg || 'AFK')}</div>`;
+      const who = entry.who === meId ? 'Bạn' : 'Đối thủ';
+      let txt = '';
+      let cls = '';
+      if (entry.type === 'strike' || entry.type === 'heavy'){
+        if (entry.miss){
+          txt = `${who} ${entry.type === 'heavy' ? '💥 Heavy' : '⚔️ Strike'} → trượt!`;
+          cls = 'miss';
+        } else {
+          txt = `${who} ${entry.type === 'heavy' ? '💥 Heavy' : '⚔️ Strike'} → -${entry.dmg} HP`;
+          if (entry.crit){ txt += ' 💥 CRIT!'; cls = 'crit'; }
+        }
+      } else if (entry.type === 'defend'){
+        txt = `${who} 🛡️ Defend (+5% HP)`;
+      } else if (entry.type === 'heal'){
+        txt = `${who} 💚 Heal (+15% HP)`;
+      }
+      return `<div class="ws-battle-log-item ${cls}">${txt}</div>`;
+    }).join('');
+    el.innerHTML = lines;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function showBattleResult(iWon, wager){
+    const el = document.getElementById('wsBattleResult');
+    if (!el) return;
+    if (el.classList.contains('show')) return; // không spam
+    el.querySelector('#wsBattleResEmoji').textContent = iWon ? '🏆' : '💔';
+    el.querySelector('#wsBattleResTitle').textContent = iWon ? 'Chiến thắng!' : 'Thất bại';
+    el.querySelector('#wsBattleResSub').textContent = iWon
+      ? `Bạn nhận lại ${fmtGold(Math.floor(wager * 2 * 0.95))}🪙 (thuế 5%)`
+      : `Bạn mất ${fmtGold(wager)}🪙`;
+    el.classList.add('show');
+    if (iWon){ playSound(659,.15); setTimeout(()=>playSound(880,.2),120); setTimeout(()=>playSound(1047,.25),260); }
+    else { playSound(330,.3,'sawtooth'); }
+    setTimeout(async () => {
+      const r = await pullRemote();
+      if (r && r.state){ S.state = r.state; saveLocal(S.user.id, S.state); }
+      if (S.user) saveActiveBattleId(S.user.id, null);
+    }, 500);
+  }
+
+  async function doBattleAction(action, btn){
+    if (!S.currentBattleId) return;
+    if (S.battleState?.status !== 'fighting' || !S.battleState?.my_turn){
+      toast('Chưa đến lượt', 'warning'); return;
+    }
+    document.querySelectorAll('[data-bt-action]').forEach(b => b.disabled = true);
+    if (btn) btn.textContent = '...';
+
+    const sb = getSb();
+    try {
+      const res = await sb.rpc('rpc_weapon_battle_action', {
+        p_match_id: S.currentBattleId, p_action: action
+      });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (!d.ok) throw new Error(d.error || 'Lỗi');
+
+      const myFighter = document.getElementById('wsFighterMe');
+      const theirFighter = document.getElementById('wsFighterThem');
+      if (action === 'strike' || action === 'heavy'){
+        if (!d.miss){
+          myFighter?.classList.add('attacking');
+          setTimeout(() => {
+            theirFighter?.classList.add('hurt');
+            setTimeout(() => { myFighter?.classList.remove('attacking'); theirFighter?.classList.remove('hurt'); }, 400);
+          }, 150);
+        }
+        if (d.crit) numberPop('💥 CRIT!', '#fbbf24');
+        else if (d.miss) numberPop('Miss', '#6b7280');
+        else if (d.dmg) numberPop(`-${d.dmg}`, '#ef4444');
+      }
+      if (d.crit) playSound(880,.1); else if (!d.miss) playSound(400,.08);
+      if (d.miss) playSound(220,.15,'square');
+      vibrate(d.crit ? [30,20,30] : 20);
+
+      await refreshBattleState();
+    } catch(e){
+      toast('Lỗi: ' + (e.message || 'Không đánh được'), 'error');
+      document.querySelectorAll('[data-bt-action]').forEach(b => b.disabled = false);
+    } finally {
+      const labelMap = { strike:'⚔️ Strike<small>90-110% dmg · 5% miss</small>', heavy:'💥 Heavy<small>130-160% · 15% miss · crit 20%</small>', defend:'🛡️ Defend<small>+5% HP</small>', heal:'💚 Heal<small>+15% HP</small>' };
+      document.querySelectorAll('[data-bt-action]').forEach(b => { if (labelMap[b.dataset.btAction]) b.innerHTML = labelMap[b.dataset.btAction]; });
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     18. SOCIAL DATA FETCHERS
      ═══════════════════════════════════════════════════════════════ */
   async function fetchArena(){
     const sb = getSb();
@@ -1551,10 +1956,7 @@
       const res = await sb.rpc('rpc_weapon_get_chat', { p_limit: 80 });
       if (res.error) throw res.error;
       const d = res.data;
-      if (d && d.ok === true && Array.isArray(d.data)){
-        SOC.chat = d.data;
-        return d.data;
-      }
+      if (d && d.ok === true && Array.isArray(d.data)){ SOC.chat = d.data; return d.data; }
     } catch(e){ log('fetchChat', e.message); }
     return SOC.chat;
   }
@@ -1565,10 +1967,7 @@
       const res = await sb.rpc('rpc_weapon_feed', { p_limit: 30 });
       if (res.error) throw res.error;
       const d = res.data;
-      if (d && d.ok === true && Array.isArray(d.data)){
-        SOC.feed = d.data;
-        return d.data;
-      }
+      if (d && d.ok === true && Array.isArray(d.data)){ SOC.feed = d.data; return d.data; }
     } catch(e){ log('fetchFeed', e.message); }
     return SOC.feed;
   }
@@ -1579,16 +1978,13 @@
       const res = await sb.rpc('rpc_weapon_gift_targets', { p_limit: 50 });
       if (res.error) throw res.error;
       const d = res.data;
-      if (d && d.ok === true && Array.isArray(d.data)){
-        SOC.giftTargets = d.data;
-        return d.data;
-      }
+      if (d && d.ok === true && Array.isArray(d.data)){ SOC.giftTargets = d.data; return d.data; }
     } catch(e){ log('fetchGift', e.message); }
     return SOC.giftTargets;
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     17. BADGES
+     19. BADGES
      ═══════════════════════════════════════════════════════════════ */
   function setBadge(tabKey, count){
     const b = document.querySelector(`.wf-tab[data-tab="${tabKey}"] .wf-tab-badge`);
@@ -1602,7 +1998,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     18. REALTIME
+     20. REALTIME
      ═══════════════════════════════════════════════════════════════ */
   function subscribeRealtime(){
     const sb = getSb();
@@ -1624,7 +2020,6 @@
       try { _rtChannel.unsubscribe(); } catch(_){}
       _rtChannel = null;
     }
-    if (_chatPollTimer){ clearInterval(_chatPollTimer); _chatPollTimer = null; }
   }
   function onNewChat(row){
     if (!row || SOC.chat.some(m => m.id === row.id)) return;
@@ -1651,18 +2046,33 @@
     if (S.activeTab === 'arena') fetchArena().then(rerenderArena);
   }
   function onMatchUpdate(row){
-    if (!row || row.status !== 'resolved') return;
+    if (!row) return;
     const me = S.user;
     if (!me || (row.challenger_id !== me.id && row.opponent_id !== me.id)) return;
-    const iWon = row.winner_id === me.id;
-    setTimeout(async () => {
-      toast(iWon ? '🏆 Bạn thắng duel!' : '💔 Bạn thua duel', iWon ? 'success' : 'error');
-      const r = await pullRemote();
-      if (r && r.state){ S.state = r.state; saveLocal(me.id, S.state); }
-      await fetchArena();
-      if (S.activeTab === 'arena') rerenderArena();
-      if (S.activeTab === 'forge' || S.activeTab === 'inventory') render();
-    }, 400);
+
+    if (row.status === 'fighting'){
+      if (!S.currentBattleId || S.currentBattleId !== row.id){
+        if (S.user) saveActiveBattleId(S.user.id, row.id);
+        toast('⚔️ Đối thủ đã chấp nhận — vào trận!', 'success');
+        playSound(880, .1);
+        const weaponPageOpen = document.getElementById('weaponPage')?.classList.contains('show');
+        if (weaponPageOpen && !S.currentBattleId){
+          setTimeout(() => { if (!S.currentBattleId) openBattle(row.id); }, 800);
+        }
+        if (S.activeTab === 'arena') fetchArena().then(rerenderArena);
+      }
+    } else if (row.status === 'resolved'){
+      if (S.currentBattleId === row.id){
+        refreshBattleState();
+      } else {
+        const iWon = row.winner_id === me.id;
+        toast(iWon ? '🏆 Bạn thắng duel!' : '💔 Bạn thua duel', iWon ? 'success' : 'error');
+        if (S.user) saveActiveBattleId(S.user.id, null);
+        pullRemote().then(r => {
+          if (r && r.state){ S.state = r.state; saveLocal(me.id, S.state); render(); }
+        });
+      }
+    }
   }
   function onNewFeed(row){
     if (!row || SOC.feed.some(f => f.id === row.id)) return;
@@ -1672,13 +2082,12 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     19. OPEN / CLOSE
+     21. OPEN / CLOSE
      ═══════════════════════════════════════════════════════════════ */
   async function openPage(){
     ensurePage();
     const page = $('weaponPage');
     if (!page) return;
-
     S.user = getUser();
     if (!S.user){
       page.classList.add('show');
@@ -1687,7 +2096,6 @@
       render();
       return;
     }
-
     page.classList.add('show');
     page.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
@@ -1718,7 +2126,6 @@
     } else {
       S.state = defaultState();
     }
-
     regenEnergy(S.state);
     const dn = S.user.displayName || S.user.username || '';
     if (dn) S.state.display_name = dn;
@@ -1726,11 +2133,19 @@
     scheduleSave();
     render();
 
-    // Boot social
     subscribeRealtime();
     fetchArena();
     fetchFeed();
     fetchChat().then(() => { if (S.activeTab === 'chat') rerenderChat(); });
+
+    // Check if có battle đang fighting → hiện "Đang đấu"
+    const activeId = getActiveBattleId(S.user.id);
+    if (activeId){
+      const activeData = await fetchActiveBattle();
+      if (activeData){
+        S.activeBattleData = activeData;
+      }
+    }
   }
   function closePage(){
     const page = $('weaponPage');
@@ -1741,12 +2156,13 @@
     closeResult();
     removeModal('wsChallengeModal');
     removeModal('wsGiftModal');
+    closeBattle();
     unsubscribeRealtime();
     if (S.state && S.user) saveLocal(S.user.id, S.state);
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     20. BOOT
+     22. BOOT
      ═══════════════════════════════════════════════════════════════ */
   function bindTriggers(){
     const btn = document.getElementById('weaponBtn');
@@ -1763,13 +2179,13 @@
     bindTriggers();
     let tries = 0;
     const t = setInterval(() => { bindTriggers(); if (++tries > 20) clearInterval(t); }, 300);
-    log('v3.0 ready ✓');
+    log('v3.1 ready ✓ (PvP turn-based combat)');
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
   else boot();
 
   /* ═══════════════════════════════════════════════════════════════
-     21. API
+     23. API
      ═══════════════════════════════════════════════════════════════ */
   window.WeaponForge = {
     open: openPage, close: closePage,
@@ -1777,6 +2193,7 @@
     reset: () => {
       if (!S.user) return;
       localStorage.removeItem(stateKey(S.user.id));
+      localStorage.removeItem(ACTIVE_BATTLE_KEY_PREFIX + S.user.id);
       S.state = defaultState();
       render();
     },
@@ -1787,6 +2204,7 @@
       render();
     },
     rerender: render,
+    openBattle: (id) => openBattle(id),
     _S: S, _SOC: SOC,
   };
 })();
