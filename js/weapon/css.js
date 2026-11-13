@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — MODULE #3: CSS INJECT (v5.2 — full body character)
+   WEAPON FORGE — MODULE #3: CSS INJECT (v5.3 — AutoSprite weapon)
    ───────────────────────────────────────────────────────────────────────
-   v5.2:
-     - .wf-character-sprite: 76×100 (full body tỉ lệ 3:4)
-     - image-rendering: pixelated cho pixel art
-     - object-position: bottom để chân chạm đáy
+   v5.3:
+     - .wf-weapon-sprite-wrap: container 128×128
+     - .wf-weapon-sprite: animated spritesheet 16 frame
+     - .wf-weapon-emoji-fallback: fallback khi CDN fail
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -49,12 +49,15 @@
 @keyframes wfHammerRaise{to{transform:rotate(-62deg) translateY(-8px) scale(1.15)}}
 @keyframes wfHammerStrike{from{transform:rotate(-62deg) translateY(-8px) scale(1.15)}to{transform:rotate(35deg) translateY(8px) scale(1)}}
 .wf-weapon-wrap{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:6px}
-.wf-weapon{font-size:84px;line-height:1;filter:drop-shadow(0 12px 20px rgba(120,80,20,.35));transition:transform .4s cubic-bezier(.34,1.56,.64,1),filter .4s}
-.wf-weapon.shake{animation:wfShake .4s ease}
+.wf-weapon-sprite-wrap{position:relative;width:128px;height:128px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 12px 20px rgba(120,80,20,.35))}
+.wf-weapon-sprite{width:100%;height:100%;background-image:var(--weapon-url);background-size:calc(128px * var(--cols)) calc(128px * var(--rows));background-position:0 0;image-rendering:pixelated;image-rendering:-moz-crisp-edges;animation:wfWeaponIdle 1.6s steps(var(--frames)) infinite;will-change:background-position}
+@keyframes wfWeaponIdle{0%{background-position:0 0}100%{background-position:calc(-128px * (var(--cols) - 1)) calc(-128px * (var(--rows) - 1))}}
+.wf-weapon-emoji-fallback{font-size:64px;line-height:1}
+.wf-weapon-sprite-wrap.shake{animation:wfShake .4s ease}
+.wf-weapon-sprite-wrap.shine{animation:wfShine .8s ease}
+.wf-weapon-sprite-wrap.shatter{animation:wfShatter .6s ease forwards}
 @keyframes wfShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px) rotate(-4deg)}40%{transform:translateX(8px) rotate(4deg)}60%{transform:translateX(-5px) rotate(-2deg)}80%{transform:translateX(5px) rotate(2deg)}}
-.wf-weapon.shine{animation:wfShine .8s ease}
 @keyframes wfShine{0%{transform:scale(1)}40%{transform:scale(1.3);filter:drop-shadow(0 0 30px rgba(255,215,0,.95)) drop-shadow(0 0 60px rgba(255,180,0,.55))}100%{transform:scale(1)}}
-.wf-weapon.shatter{animation:wfShatter .6s ease forwards}
 @keyframes wfShatter{0%{transform:scale(1) rotate(0)}40%{transform:scale(1.15) rotate(-8deg);opacity:1}100%{transform:scale(.4) rotate(180deg);opacity:0}}
 .wf-tier-badge{padding:3px 10px;border-radius:999px;font-size:10px;font-weight:950;letter-spacing:.06em;text-transform:uppercase;box-shadow:0 2px 6px rgba(0,0,0,.15)}
 .wf-tier-badge.tier-B{background:linear-gradient(135deg,#e8eef3,#c8d0d8);color:#4a5460}
@@ -391,5 +394,5 @@
 
   window.__WF.css = { injected: true };
 
-  console.log('[WF] css.js ✓ (v5.2 — full body character sprite)');
+  console.log('[WF] css.js ✓ (v5.3 — AutoSprite weapon sprite)');
 })();
