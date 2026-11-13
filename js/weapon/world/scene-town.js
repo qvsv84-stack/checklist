@@ -1,9 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE WORLD — SCENE TOWN (v1.2 — bind custom methods)
+   WEAPON FORGE WORLD — SCENE TOWN (v1.3 — fix goToTab + reset state)
    ───────────────────────────────────────────────────────────────────────
-   v1.2 FIX: Bind custom methods vào Scene instance trong init().
-   Phaser 3 chỉ copy init/preload/create/update từ config object.
-   Custom methods (_makeTreeTexture, _drawGround, ...) cần bind thủ công.
+   v1.3 FIX:
+     - goToTab() gọi tabWorld.closeWorld() thay vì World.unmount() trực tiếp
+       → reset _mounted flag → mở lại World tab được
+     - Fallback nếu tabWorld chưa có
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -17,14 +18,8 @@
   const NPC = window.__WF.npc;
   const MP = window.__WF.multiplayer;
 
-  if (!World){
-    console.error('[WF-Town] world engine chưa load');
-    return;
-  }
-  if (!Tileset || !Player || !NPC || !Joystick){
-    console.error('[WF-Town] thiếu module');
-    return;
-  }
+  if (!World){ console.error('[WF-Town] world engine chưa load'); return; }
+  if (!Tileset || !Player || !NPC || !Joystick){ console.error('[WF-Town] thiếu module'); return; }
 
   const WORLD_COLS = 25;
   const WORLD_ROWS = 18;
@@ -33,23 +28,15 @@
   const SAVE_KEY = '__wf_town_pos_v1';
   const SAVE_INTERVAL_MS = 2000;
 
-  function log(...a){
-    try { console.log('[WF-Town]', ...a); } catch(_){}
-  }
+  function log(...a){ try { console.log('[WF-Town]', ...a); } catch(_){} }
 
-  /* ═══════════════════════════════════════════════════════════════
-     SCENE CONFIG — với bind fix
-     ═══════════════════════════════════════════════════════════════ */
   const TownScene = {
     key: 'Town',
 
-    /* ─── INIT — bind custom methods vào this ─── */
     init: function(){
       this._lastSave = 0;
       this._shutdownFired = false;
 
-      /* ⭐ FIX: Phaser chỉ copy init/preload/create/update từ config.
-         Custom methods phải tự bind vào Scene instance. */
       const self = TownScene;
       this._makeTreeTexture = self._makeTreeTexture.bind(this);
       this._drawGround      = self._drawGround.bind(this);
@@ -64,7 +51,6 @@
       log('init() — bound 9 custom methods');
     },
 
-    /* ─── CREATE ─── */
     create: function(){
       log('Creating scene...');
 
@@ -77,7 +63,6 @@
       this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
       this.cameras.main.setBackgroundColor('#1a2818');
 
-      // Joystick
       try {
         const canvas = this.sys.game.canvas;
         const parentEl = canvas && canvas.parentElement;
@@ -114,7 +99,6 @@
       log('Scene ready ✓');
     },
 
-    /* ─── UPDATE ─── */
     update: function(_time, delta){
       try {
         Player.update(delta);
@@ -130,9 +114,6 @@
       } catch(e){}
     },
 
-    /* ═══════════════════════════════════════════════════════════════
-       CUSTOM METHODS (sẽ được bind trong init)
-       ═══════════════════════════════════════════════════════════════ */
     _makeTreeTexture: function(){
       if (this.textures.exists('tree')) return;
       const g = this.make.graphics({ add: false });
@@ -233,12 +214,24 @@
       const cx = Math.floor(WORLD_COLS / 2);
       const self = this;
 
+      /* ⭐ FIX: goToTab dùng tabWorld.closeWorld() để reset state */
       function goToTab(tab){
         return function(){
           log('Interact →', tab);
-          self._cleanup();
-          if (World.isReady()) World.unmount();
-          if (window.__WF.index?.goto) window.__WF.index.goto(tab);
+
+          // Ưu tiên closeWorld() — reset _mounted flag
+          if (window.__WF.tabWorld && typeof window.__WF.tabWorld.closeWorld === 'function'){
+            window.__WF.tabWorld.closeWorld();
+          } else {
+            // Fallback: unmount trực tiếp (chỉ dùng khi tabWorld chưa load)
+            try { self._cleanup(); } catch(_){}
+            if (World.isReady()) World.unmount();
+          }
+
+          // Chuyển tab
+          if (window.__WF.index && typeof window.__WF.index.goto === 'function'){
+            window.__WF.index.goto(tab);
+          }
         };
       }
 
@@ -331,31 +324,19 @@
       hint.setDepth(10000);
       hint.setAlpha(0);
 
+      this.tweens.add({ targets: [text, hint], alpha: 1, duration: 400, ease: 'Sine.Out' });
       this.tweens.add({
         targets: [text, hint],
-        alpha: 1,
-        duration: 400,
-        ease: 'Sine.Out',
-      });
-      this.tweens.add({
-        targets: [text, hint],
-        alpha: 0,
-        y: '-=40',
-        duration: 400,
-        delay: 2200,
-        ease: 'Sine.In',
-        onComplete: () => {
-          text.destroy();
-          hint.destroy();
-        },
+        alpha: 0, y: '-=40',
+        duration: 400, delay: 2200, ease: 'Sine.In',
+        onComplete: () => { text.destroy(); hint.destroy(); },
       });
     },
 
     _savePos: function(x, y){
       try {
         localStorage.setItem(SAVE_KEY, JSON.stringify({
-          x: Math.round(x),
-          y: Math.round(y),
+          x: Math.round(x), y: Math.round(y),
         }));
       } catch(_){}
     },
@@ -392,19 +373,11 @@
     },
   };
 
-  /* ═══════════════════════════════════════════════════════════════
-     REGISTER
-     ═══════════════════════════════════════════════════════════════ */
   World.registerScene('Town', TownScene);
 
   window.__WF.sceneTown = {
-    TownScene,
-    WORLD_W,
-    WORLD_H,
-    WORLD_COLS,
-    WORLD_ROWS,
-    SAVE_KEY,
+    TownScene, WORLD_W, WORLD_H, WORLD_COLS, WORLD_ROWS, SAVE_KEY,
   };
 
-  log('scene-town.js v1.2 ✓ (bind custom methods in init)');
+  log('scene-town.js v1.3 ✓ (goToTab resets state)');
 })();
