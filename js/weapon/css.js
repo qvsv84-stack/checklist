@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — MODULE #3: CSS INJECT (v5.3 — AutoSprite weapon)
+   WEAPON FORGE — MODULE #3: CSS INJECT (v5.4 — fix weapon animation)
    ───────────────────────────────────────────────────────────────────────
-   v5.3:
-     - .wf-weapon-sprite-wrap: container 128×128
-     - .wf-weapon-sprite: animated spritesheet 16 frame
-     - .wf-weapon-emoji-fallback: fallback khi CDN fail
+   v5.4:
+     - FIX: bỏ @keyframes wfWeaponIdle gây glitch chuyển động
+     - .wf-weapon-sprite: static frame, background-size dùng %
+     - Weapon hiển thị tĩnh, ổn định
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -50,8 +50,7 @@
 @keyframes wfHammerStrike{from{transform:rotate(-62deg) translateY(-8px) scale(1.15)}to{transform:rotate(35deg) translateY(8px) scale(1)}}
 .wf-weapon-wrap{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:6px}
 .wf-weapon-sprite-wrap{position:relative;width:128px;height:128px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 12px 20px rgba(120,80,20,.35))}
-.wf-weapon-sprite{width:100%;height:100%;background-image:var(--weapon-url);background-size:calc(128px * var(--cols)) calc(128px * var(--rows));background-position:0 0;image-rendering:pixelated;image-rendering:-moz-crisp-edges;animation:wfWeaponIdle 1.6s steps(var(--frames)) infinite;will-change:background-position}
-@keyframes wfWeaponIdle{0%{background-position:0 0}100%{background-position:calc(-128px * (var(--cols) - 1)) calc(-128px * (var(--rows) - 1))}}
+.wf-weapon-sprite{width:100%;height:100%;background-image:var(--weapon-url);background-size:calc(var(--cols) * 100%) calc(var(--rows) * 100%);background-position:0 0;background-repeat:no-repeat;image-rendering:pixelated;image-rendering:-moz-crisp-edges}
 .wf-weapon-emoji-fallback{font-size:64px;line-height:1}
 .wf-weapon-sprite-wrap.shake{animation:wfShake .4s ease}
 .wf-weapon-sprite-wrap.shine{animation:wfShine .8s ease}
@@ -394,5 +393,5 @@
 
   window.__WF.css = { injected: true };
 
-  console.log('[WF] css.js ✓ (v5.3 — AutoSprite weapon sprite)');
+  console.log('[WF] css.js ✓ (v5.4 — weapon static, no glitch)');
 })();
