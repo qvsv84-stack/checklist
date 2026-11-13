@@ -1,9 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — MODULE #7: TAB FORGE
-   - renderForgeTab: stage, weapon, stats, forge button
-   - doForge: 4 phase animation + outcome + save + hooks
-   - showResult: kết quả popup với 2 nút (Đóng / Rèn tiếp)
-   - Load: #7 (sau modals)
+   WEAPON FORGE — MODULE #7: TAB FORGE (v5.0 — cap 100)
+   ───────────────────────────────────────────────────────────────────────
+   CHANGELOG v5.0:
+     - Check `s.enh >= CFG.MAX_ENH` (thay vì 15) ở mọi chỗ
+     - Progress label hiển thị XXX / 100
+     - Result modal 2 nút (Đóng + Rèn tiếp)
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -16,6 +17,7 @@
   if (!C || !U || !ST || !API) { console.error('[WF] tab-forge.js thiếu dependency'); return; }
 
   const CFG = C.CFG;
+  const MAX_ENH = C.MAX_ENH;
   const S = ST.S;
   const {
     tierOf, powerOf, effectiveRates, rollOutcome, applyOutcome,
@@ -42,12 +44,13 @@
       ? Math.min(100, ((s.enh - curTierBase) / (prevTierEnh - curTierBase)) * 100)
       : 100;
 
+    const isMax = s.enh >= MAX_ENH;
     const canForge = s.energy >= CFG.FORGE_ENERGY
       && s.gold >= CFG.FORGE_GOLD
       && !S.busy
-      && s.enh < 15;
+      && !isMax;
 
-    const label = s.enh >= 15 ? '🏆 Đã đạt cấp tối đa'
+    const label = isMax ? '🏆 Đã đạt cấp tối đa'
       : s.energy < CFG.FORGE_ENERGY ? '⚡ Hết năng lượng'
       : s.gold < CFG.FORGE_GOLD ? '🪙 Không đủ vàng'
       : '🔨 Rèn vũ khí';
@@ -73,7 +76,7 @@
           </div>
           <div class="wf-weapon-name">${esc(ti.name)}</div>
           <div class="wf-progress"><div class="wf-progress-fill" style="width:${tierProgress}%"></div></div>
-          <div class="wf-progress-label">${s.enh>=15?'MAX':`${s.enh} / ${prevTierEnh}`}</div>
+          <div class="wf-progress-label">${isMax ? 'MAX' : `${s.enh} / ${prevTierEnh}`}</div>
         </div>
       </div>
       <div class="wf-stats">
@@ -103,7 +106,7 @@
   async function doForge(){
     if (S.busy || !S.state) return;
     const s = S.state;
-    if (s.enh >= 15){ toast('MAX', 'warning'); return; }
+    if (s.enh >= MAX_ENH){ toast('Đã đạt cấp tối đa', 'warning'); return; }
     if (s.energy < CFG.FORGE_ENERGY){ toast('Hết năng lượng', 'warning'); return; }
     if (s.gold < CFG.FORGE_GOLD){ toast('Không đủ vàng', 'warning'); return; }
 
@@ -241,14 +244,15 @@
     const again = document.getElementById('wfResAgain');
     if (again){
       const s = S.state;
+      const isMax = s && s.enh >= MAX_ENH;
       const can = !!(s
-        && s.enh < 15
+        && !isMax
         && s.energy >= CFG.FORGE_ENERGY
         && s.gold >= CFG.FORGE_GOLD);
       again.disabled = !can;
       again.style.opacity = can ? '' : '.45';
       again.textContent = can ? `🔨 Rèn tiếp (🪙${CFG.FORGE_GOLD} · ⚡${CFG.FORGE_ENERGY})`
-        : s?.enh >= 15 ? '🏆 Đã MAX'
+        : isMax ? '🏆 Đã MAX'
         : s?.energy < CFG.FORGE_ENERGY ? '⚡ Hết năng lượng'
         : '🪙 Thiếu vàng';
     }
@@ -276,5 +280,5 @@
     closeResult,
   };
 
-  console.log('[WF] tab-forge.js ✓');
+  console.log('[WF] tab-forge.js ✓ (v5.0 — cap 100)');
 })();
