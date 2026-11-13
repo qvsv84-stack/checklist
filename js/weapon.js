@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE v3.1 — Full (Forge + Social + PvP Turn-based Combat)
-   Self-contained: JS + CSS injected tự động, không cần file CSS riêng
+   WEAPON FORGE v4.0 — Full (Forge + Social + PvP + Quest + Season + Pet + Boss)
+   Self-contained: JS + CSS injected tự động
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -43,7 +43,7 @@
 .wf-weapon.shake{animation:wfShake .4s ease}
 @keyframes wfShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px) rotate(-4deg)}40%{transform:translateX(8px) rotate(4deg)}60%{transform:translateX(-5px) rotate(-2deg)}80%{transform:translateX(5px) rotate(2deg)}}
 .wf-weapon.shine{animation:wfShine .8s ease}
-@keyframes wfShine{0%{transform:scale(1);filter:drop-shadow(0 12px 20px rgba(120,80,20,.35))}40%{transform:scale(1.3);filter:drop-shadow(0 0 30px rgba(255,215,0,.95)) drop-shadow(0 0 60px rgba(255,180,0,.55))}100%{transform:scale(1);filter:drop-shadow(0 12px 20px rgba(120,80,20,.35))}}
+@keyframes wfShine{0%{transform:scale(1)}40%{transform:scale(1.3);filter:drop-shadow(0 0 30px rgba(255,215,0,.95)) drop-shadow(0 0 60px rgba(255,180,0,.55))}100%{transform:scale(1)}}
 .wf-weapon.shatter{animation:wfShatter .6s ease forwards}
 @keyframes wfShatter{0%{transform:scale(1) rotate(0)}40%{transform:scale(1.15) rotate(-8deg);opacity:1}100%{transform:scale(.4) rotate(180deg);opacity:0}}
 .wf-tier-badge{padding:3px 10px;border-radius:999px;font-size:10px;font-weight:950;letter-spacing:.06em;text-transform:uppercase;box-shadow:0 2px 6px rgba(0,0,0,.15)}
@@ -75,7 +75,7 @@
 .wf-forge-btn .wf-cost-tag{padding:3px 9px;border-radius:999px;background:rgba(0,0,0,.18);font-size:11px;font-variant-numeric:tabular-nums}
 .wf-tabs{display:flex;gap:4px;padding:4px;margin:14px 0 12px;background:rgba(255,255,255,.7);border:1px solid rgba(220,180,100,.4);border-radius:14px;overflow-x:auto;scrollbar-width:none}
 .wf-tabs::-webkit-scrollbar{display:none}
-.wf-tab{flex:1 0 auto;min-width:60px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 10px;border:0;border-radius:10px;background:transparent;color:#a06a28;font-family:inherit;font-size:10.5px;font-weight:900;cursor:pointer;transition:background .15s,color .15s}
+.wf-tab{flex:1 0 auto;min-width:58px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 8px;border:0;border-radius:10px;background:transparent;color:#a06a28;font-family:inherit;font-size:10px;font-weight:900;cursor:pointer;transition:background .15s,color .15s}
 .wf-tab:active{transform:scale(.95)}
 .wf-tab.active{background:linear-gradient(180deg,#fcd34d,#f59e0b);color:#4a2a00;box-shadow:0 3px 10px -4px rgba(220,150,30,.6)}
 .wf-tab-icon{font-size:16px;line-height:1;position:relative}
@@ -292,10 +292,86 @@
 .ws-battle-result-sub{font-size:14px;font-weight:700;color:#a06a28;margin-bottom:20px;line-height:1.5}
 .ws-battle-result-btn{width:100%;padding:14px;border:0;border-radius:14px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-family:inherit;font-size:15px;font-weight:950;cursor:pointer}
 .ws-battle-list-item{display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:10px;padding:12px;background:linear-gradient(160deg,#fffaf0,#fef3c7);border:1.5px solid #f59e0b;border-radius:14px;margin-bottom:8px;box-shadow:0 4px 12px -8px rgba(220,140,20,.4)}
-.ws-battle-list-item .ws-cc-avatar{width:44px;height:44px;font-size:16px}
-.ws-battle-list-item .ws-cc-body{min-width:0}
-.ws-battle-list-item .ws-cc-name{font-size:13px;font-weight:950;color:#78350f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ws-battle-list-item .ws-cc-meta{font-size:10.5px;font-weight:700;color:#a06a28}
+/* ═══ v4.0: QUEST / SEASON / PET / BOSS ═══ */
+.ws-quest-card{display:grid;grid-template-columns:44px 1fr;gap:10px;padding:12px;background:rgba(255,255,255,.9);border:1.5px solid rgba(220,180,100,.4);border-radius:14px;margin-bottom:8px}
+.ws-quest-card.done{border-color:#22c55e;background:linear-gradient(160deg,#f0fdf4,#dcfce7)}
+.ws-quest-card.claimed{border-color:#9ca3af;background:rgba(200,200,200,.3);opacity:.7}
+.ws-quest-icon{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:11px;font-size:22px;background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1px solid rgba(220,180,100,.3)}
+.ws-quest-body{min-width:0;display:flex;flex-direction:column;gap:6px}
+.ws-quest-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.ws-quest-name{font-size:13px;font-weight:950;color:#78350f;line-height:1.3}
+.ws-quest-reward{font-size:11px;font-weight:950;color:#a06a28;padding:2px 8px;border-radius:8px;background:rgba(245,184,0,.2);white-space:nowrap;flex-shrink:0}
+.ws-quest-progress-bar{height:8px;border-radius:4px;background:rgba(200,150,80,.25);overflow:hidden;position:relative}
+.ws-quest-progress-fill{height:100%;background:linear-gradient(90deg,#fbbf24,#f59e0b);border-radius:4px;transition:width .4s}
+.ws-quest-progress-text{font-size:10.5px;font-weight:900;color:#a06a28;font-variant-numeric:tabular-nums;text-align:right}
+.ws-quest-claim{width:100%;padding:8px;border:0;border-radius:8px;font-family:inherit;font-size:12px;font-weight:950;color:#fff;background:linear-gradient(180deg,#22c55e,#15803d);cursor:pointer;box-shadow:0 3px 8px -3px rgba(34,197,94,.5)}
+.ws-quest-claim:disabled{background:#9ca3af;box-shadow:none;cursor:not-allowed;opacity:.6}
+.ws-season-header{padding:14px 16px;background:linear-gradient(135deg,#312e81,#1e1b4b);border-radius:16px;color:#fff;margin-bottom:12px;position:relative;overflow:hidden}
+.ws-season-header::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 80% 20%,rgba(252,211,77,.2),transparent 50%);pointer-events:none}
+.ws-season-name{font-size:14px;font-weight:950;color:#fcd34d;margin-bottom:6px;position:relative}
+.ws-season-tier-num{font-size:32px;font-weight:950;color:#fff;line-height:1;margin-bottom:4px;position:relative;font-variant-numeric:tabular-nums}
+.ws-season-tier-num small{font-size:14px;color:rgba(255,255,255,.6);margin-left:4px}
+.ws-season-xp-bar{height:8px;border-radius:4px;background:rgba(255,255,255,.15);overflow:hidden;margin-bottom:6px;position:relative}
+.ws-season-xp-fill{height:100%;background:linear-gradient(90deg,#fcd34d,#f59e0b);border-radius:4px;transition:width .4s}
+.ws-season-xp-text{font-size:10.5px;font-weight:900;color:#a06a28;position:relative}
+.ws-season-track{display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;scrollbar-width:thin}
+.ws-season-track::-webkit-scrollbar{height:4px}
+.ws-season-track::-webkit-scrollbar-thumb{background:rgba(200,150,80,.35);border-radius:2px}
+.ws-season-tier{flex:0 0 100px;padding:12px 10px;background:rgba(255,255,255,.9);border:2px solid rgba(220,180,100,.4);border-radius:14px;text-align:center;position:relative;transition:transform .12s}
+.ws-season-tier.unlocked{border-color:#f59e0b;background:linear-gradient(160deg,#fffbeb,#fef3c7);box-shadow:0 0 0 2px rgba(245,158,11,.2)}
+.ws-season-tier.claimed{opacity:.5;border-color:#9ca3af}
+.ws-season-tier-num-small{font-size:11px;font-weight:950;color:#a06a28;margin-bottom:6px}
+.ws-season-tier-icon{font-size:26px;line-height:1;margin-bottom:4px}
+.ws-season-tier-reward{font-size:10px;font-weight:900;color:#78350f;line-height:1.3}
+.ws-season-tier-btn{width:100%;margin-top:6px;padding:5px;border:0;border-radius:6px;font-family:inherit;font-size:10px;font-weight:950;color:#fff;background:linear-gradient(180deg,#22c55e,#15803d);cursor:pointer}
+.ws-season-tier-btn:disabled{background:#9ca3af;cursor:not-allowed}
+.ws-season-tier.premium{background:linear-gradient(160deg,#4c1d95,#2e1065);border-color:#a855f7}
+.ws-season-tier.premium .ws-season-tier-num-small{color:#c4b5fd}
+.ws-season-tier.premium .ws-season-tier-reward{color:#e9d5ff}
+.ws-season-tier.premium.unlocked{border-color:#a855f7;box-shadow:0 0 0 2px rgba(168,85,247,.3)}
+.ws-season-lock{font-size:20px;line-height:1}
+.ws-pet-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ws-pet-card{padding:14px 12px;background:rgba(255,255,255,.9);border:2px solid rgba(220,180,100,.4);border-radius:14px;text-align:center;position:relative;transition:transform .12s}
+.ws-pet-card:active{transform:scale(.97)}
+.ws-pet-card.active{border-color:#f59e0b;background:linear-gradient(160deg,#fffbeb,#fef3c7);box-shadow:0 0 0 2px rgba(245,158,11,.3)}
+.ws-pet-card.locked{opacity:.55;filter:grayscale(.7)}
+.ws-pet-emoji{font-size:44px;line-height:1;margin-bottom:6px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.15))}
+.ws-pet-name{font-size:12px;font-weight:950;color:#78350f;margin-bottom:2px}
+.ws-pet-level{font-size:10.5px;font-weight:900;color:#a06a28;margin-bottom:4px}
+.ws-pet-xp{height:6px;border-radius:3px;background:rgba(200,150,80,.25);overflow:hidden;margin-bottom:6px}
+.ws-pet-xp-fill{height:100%;background:linear-gradient(90deg,#fbbf24,#f59e0b);border-radius:3px;transition:width .4s}
+.ws-pet-desc{font-size:9.5px;font-weight:700;color:#a06a28;line-height:1.3;margin-bottom:8px;min-height:22px}
+.ws-pet-actions{display:flex;gap:4px}
+.ws-pet-btn{flex:1;padding:6px 4px;border:0;border-radius:6px;font-family:inherit;font-size:10px;font-weight:950;color:#fff;cursor:pointer;background:linear-gradient(180deg,#f59e0b,#d97706)}
+.ws-pet-btn:active{transform:scale(.95)}
+.ws-pet-btn:disabled{background:#9ca3af;cursor:not-allowed;opacity:.6}
+.ws-pet-btn.green{background:linear-gradient(180deg,#22c55e,#15803d)}
+.ws-pet-active-badge{position:absolute;top:-8px;right:-8px;padding:3px 8px;border-radius:8px;background:#f59e0b;color:#fff;font-size:9px;font-weight:950;box-shadow:0 3px 8px rgba(245,158,11,.5)}
+.ws-boss-card{padding:16px;background:linear-gradient(160deg,#450a0a,#1e1b4b);border:2px solid #7f1d1d;border-radius:18px;color:#fff;position:relative;overflow:hidden;margin-bottom:12px}
+.ws-boss-card::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 0%,rgba(239,68,68,.3),transparent 60%);pointer-events:none}
+.ws-boss-card.defeated{border-color:#22c55e;background:linear-gradient(160deg,#14532d,#1e1b4b)}
+.ws-boss-top{display:flex;align-items:center;gap:12px;margin-bottom:12px;position:relative}
+.ws-boss-emoji{font-size:52px;line-height:1;filter:drop-shadow(0 4px 12px rgba(239,68,68,.5))}
+.ws-boss-info{flex:1;min-width:0}
+.ws-boss-name{font-size:16px;font-weight:950;color:#fca5a5;margin-bottom:3px;line-height:1.2}
+.ws-boss-card.defeated .ws-boss-name{color:#86efac}
+.ws-boss-level{font-size:11px;font-weight:900;color:rgba(255,255,255,.7)}
+.ws-boss-hp-bar{height:14px;border-radius:7px;background:rgba(0,0,0,.5);overflow:hidden;position:relative;border:1px solid rgba(255,255,255,.2);margin-bottom:6px}
+.ws-boss-hp-fill{height:100%;background:linear-gradient(90deg,#dc2626,#991b1b);border-radius:7px;transition:width .5s cubic-bezier(.16,.9,.25,1);position:relative}
+.ws-boss-hp-fill::after{content:'';position:absolute;top:0;right:0;bottom:0;width:30px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.4));animation:wfBarShine 2s ease-in-out infinite}
+@keyframes wfBarShine{0%,100%{opacity:.3}50%{opacity:1}}
+.ws-boss-hp-text{font-size:11px;font-weight:950;color:#fca5a5;text-align:center;font-variant-numeric:tabular-nums;margin-bottom:12px;position:relative}
+.ws-boss-card.defeated .ws-boss-hp-text{color:#86efac}
+.ws-boss-actions{display:flex;gap:8px;position:relative}
+.ws-boss-btn{flex:1;padding:12px;border:0;border-radius:10px;font-family:inherit;font-size:13px;font-weight:950;color:#fff;cursor:pointer;background:linear-gradient(135deg,#ef4444,#991b1b);box-shadow:0 4px 12px -4px rgba(239,68,68,.6);transition:transform .12s}
+.ws-boss-btn:active:not(:disabled){transform:scale(.96)}
+.ws-boss-btn:disabled{background:#6b7280;box-shadow:none;cursor:not-allowed;opacity:.6}
+.ws-boss-btn.green{background:linear-gradient(180deg,#22c55e,#15803d);box-shadow:0 4px 12px -4px rgba(34,197,94,.6)}
+.ws-boss-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:12px;position:relative}
+.ws-boss-stat{padding:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:10px;text-align:center}
+.ws-boss-stat-label{font-size:9px;font-weight:900;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
+.ws-boss-stat-value{font-size:14px;font-weight:950;color:#fca5a5;font-variant-numeric:tabular-nums}
+.ws-boss-stat-value.pos{color:#86efac}
 `;
   if (!document.getElementById('wfStyles')) {
     const st = document.createElement('style');
@@ -315,8 +391,10 @@
     CHAT_COOLDOWN_MS: 10000, CHAT_MAX_LEN: 200,
     GIFT_MIN: 10, GIFT_MAX_PER_TX: 500, GIFT_MAX_PER_DAY: 1000,
     DUEL_MIN: 10, DUEL_MAX: 5000,
-    BATTLE_TURN_TIMEOUT_MS: 60000,
-    BATTLE_POLL_MS: 3000,
+    BATTLE_TURN_TIMEOUT_MS: 60000, BATTLE_POLL_MS: 3000,
+    BOSS_POLL_MS: 5000, BOSS_ATTACK_COOLDOWN_MS: 10000,
+    PET_MAX_LEVEL: 20, PET_XP_PER_LEVEL: 100,
+    SEASON_MAX_TIER: 30, SEASON_XP_PER_TIER: 1000,
 
     TIER_ORDER: ['B','A','S','SS','SSS','VIP'],
     TIERS: {
@@ -360,6 +438,13 @@
       sell_10:     { icon:'💰', name:'Thương nhân', desc:'Bán 10 vũ khí', gold:200 },
       reach_vip:   { icon:'🏆', name:'Thần Binh',   desc:'Đạt VIP',       gold:5000 },
     },
+    PETS: {
+      dragon:  { name:'Rồng Con',     emoji:'🐲', price:2000, desc:'+1% dmg battle / level', buff:'atk' },
+      phoenix: { name:'Phượng Hoàng', emoji:'🦅', price:3000, desc:'+2% HP regen / turn',    buff:'regen' },
+      wolf:    { name:'Sói Xám',      emoji:'🐺', price:1500, desc:'+1% crit / level',       buff:'crit' },
+      turtle:  { name:'Rùa Cổ',       emoji:'🐢', price:1000, desc:'+5% max HP battle',      buff:'hp' },
+    },
+    SEASON_XP: { forge: 5, forge_great: 15, duel_win: 50, boss_hit: 10, quest_claim: 20, chat: 2, gift: 3 },
   };
 
   /* ═══════════════════════════════════════════════════════════════
@@ -377,9 +462,6 @@
 
   function toast(msg, type){
     try { window.Toast?.show?.(msg, { type: type || 'info', duration: 2600 }); } catch(_){}
-  }
-  function setStatus(m){
-    try { window.SRank?.setStatus?.(m); } catch(_){}
   }
   function getSb(){ return window.__sb || null; }
   function getUser(){
@@ -477,32 +559,38 @@
     user: null, state: null, busy: false,
     activeTab: 'forge', arenaSubTab: 'incoming',
     chatCooldownUntil: 0,
-    currentBattleId: null,
-    battleState: null,
-    battleChannel: null,
-    battlePollTimer: null,
+    currentBattleId: null, battleState: null,
+    battleChannel: null, battlePollTimer: null,
     activeBattleData: null,
+    bossAttacking: false,
   };
   const SOC = {
     arena: null, chat: [], feed: [], giftTargets: [],
     pendingChallenges: 0, unreadChat: 0,
+    quests: null, questsDayKey: '',
+    season: null, seasonProgress: null,
+    pets: [],
+    boss: null, bossMy: null, bossTotal: 0,
+    unclaimedQuests: 0, unclaimedSeason: 0, claimableBoss: false,
   };
   let _remoteAvailable = null;
   let _saveTimer = null;
   let _rtChannel = null;
+  let _bossRtChannel = null;
+  let _bossPollTimer = null;
 
-  const ACTIVE_BATTLE_KEY_PREFIX = '__wf_active_battle_';
+  const ACTIVE_BATTLE_KEY = '__wf_active_battle_';
   function saveActiveBattleId(userId, matchId){
     try {
       if (!userId) return;
-      if (matchId) localStorage.setItem(ACTIVE_BATTLE_KEY_PREFIX + userId, JSON.stringify({ matchId, at: Date.now() }));
-      else localStorage.removeItem(ACTIVE_BATTLE_KEY_PREFIX + userId);
+      if (matchId) localStorage.setItem(ACTIVE_BATTLE_KEY + userId, JSON.stringify({ matchId, at: Date.now() }));
+      else localStorage.removeItem(ACTIVE_BATTLE_KEY + userId);
     } catch(_){}
   }
   function getActiveBattleId(userId){
     try {
       if (!userId) return null;
-      const raw = localStorage.getItem(ACTIVE_BATTLE_KEY_PREFIX + userId);
+      const raw = localStorage.getItem(ACTIVE_BATTLE_KEY + userId);
       if (!raw) return null;
       const o = JSON.parse(raw);
       return o?.matchId || null;
@@ -595,7 +683,6 @@
   function tierInfo(enh){ return CFG.TIERS[tierOf(enh)]; }
   function powerOf(enh){ return Math.round(tierInfo(enh).mult * (enh+1) * 100) / 100; }
   function sellPrice(enh){ return Math.round(powerOf(enh) * 5); }
-
   function materialForTier(t){
     return { B:'wood', A:'iron', S:'steel', SS:'mythril', SSS:'orichalcum', VIP:'star' }[t] || null;
   }
@@ -705,7 +792,24 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     6. BUILD PAGE
+     6. PROGRESS HOOKS (Quest + Season)
+     ═══════════════════════════════════════════════════════════════ */
+  async function questProgress(type, delta){
+    if (delta == null) delta = 1;
+    if (delta <= 0) return;
+    const sb = getSb(); if (!sb) return;
+    try {
+      await sb.rpc('rpc_wq_update_progress', { p_quest_type: type, p_delta: delta });
+    } catch(_){}
+  }
+  async function seasonAddXP(amount){
+    if (!amount || amount <= 0) return;
+    const sb = getSb(); if (!sb) return;
+    try { await sb.rpc('rpc_ws_add_xp', { p_amount: amount }); } catch(_){}
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     7. BUILD PAGE
      ═══════════════════════════════════════════════════════════════ */
   function ensurePage(){
     let page = $('weaponPage');
@@ -753,14 +857,18 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     7. RENDER MAIN
+     8. RENDER MAIN
      ═══════════════════════════════════════════════════════════════ */
   const TABS = [
     { key:'forge',     icon:'🔨', label:'Rèn' },
     { key:'market',    icon:'🏪', label:'Chợ' },
     { key:'inventory', icon:'🎒', label:'Kho' },
-    { key:'arena',     icon:'⚔️', label:'Đấu trường', badge: true },
-    { key:'chat',      icon:'💬', label:'Chat',      badge: true },
+    { key:'quest',     icon:'📜', label:'Quest',   badge:true },
+    { key:'season',    icon:'🎫', label:'Season',  badge:true },
+    { key:'pet',       icon:'🐾', label:'Pet' },
+    { key:'boss',      icon:'👹', label:'Boss',    badge:true },
+    { key:'arena',     icon:'⚔️', label:'Đấu',     badge:true },
+    { key:'chat',      icon:'💬', label:'Chat',    badge:true },
     { key:'gift',      icon:'🎁', label:'Tặng' },
   ];
 
@@ -778,10 +886,8 @@
       body.innerHTML = '<div class="wf-history-empty">Đang tải…</div>';
       return;
     }
-
     const gained = regenEnergy(S.state);
     if (gained > 0) scheduleSave();
-
     const gv = $('wfGoldVal');
     if (gv) gv.textContent = fmtGold(S.state.gold);
 
@@ -799,6 +905,10 @@
     if (S.activeTab === 'forge') content = renderForgeTab();
     else if (S.activeTab === 'market') content = renderMarketTab();
     else if (S.activeTab === 'inventory') content = renderInventoryTab();
+    else if (S.activeTab === 'quest') content = renderQuestTab();
+    else if (S.activeTab === 'season') content = renderSeasonTab();
+    else if (S.activeTab === 'pet') content = renderPetTab();
+    else if (S.activeTab === 'boss') content = renderBossTab();
     else if (S.activeTab === 'arena') content = renderArenaTab();
     else if (S.activeTab === 'chat') content = renderChatTab();
     else if (S.activeTab === 'gift') content = renderGiftTab();
@@ -808,12 +918,17 @@
     body.querySelectorAll('.wf-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         S.activeTab = btn.dataset.tab;
-        SOC.unreadChat = 0;
+        if (S.activeTab === 'chat') SOC.unreadChat = 0;
         updateBadges();
         render();
-        if (S.activeTab === 'arena'){ fetchArena().then(rerenderArena); fetchFeed().then(rerenderFeed); }
-        if (S.activeTab === 'chat'){ fetchChat().then(rerenderChat); scrollChatToBottom(); }
-        if (S.activeTab === 'gift') fetchGiftTargets().then(rerenderGift);
+        const t = S.activeTab;
+        if (t === 'arena'){ fetchArena().then(rerenderArena); fetchFeed().then(rerenderFeed); }
+        if (t === 'chat'){ fetchChat().then(rerenderChat); scrollChatToBottom(); }
+        if (t === 'gift') fetchGiftTargets().then(rerenderGift);
+        if (t === 'quest') fetchQuests().then(rerenderQuests);
+        if (t === 'season') fetchSeason().then(rerenderSeason);
+        if (t === 'pet') fetchPets().then(rerenderPets);
+        if (t === 'boss'){ fetchBoss().then(rerenderBoss); startBossPoll(); startBossRealtime(); }
       });
     });
 
@@ -824,34 +939,35 @@
   function wireActiveTab(){
     const body = $('wfBody');
     if (!body) return;
-    if (S.activeTab === 'forge'){
-      $('wfForgeBtn')?.addEventListener('click', doForge);
-    }
-    if (S.activeTab === 'market'){
+    const t = S.activeTab;
+    if (t === 'forge'){ $('wfForgeBtn')?.addEventListener('click', doForge); }
+    if (t === 'market'){
       body.querySelectorAll('[data-buy-mat]').forEach(b => b.addEventListener('click', () => doBuyMaterial(b.dataset.buyMat)));
       body.querySelectorAll('[data-buy-hammer]').forEach(b => b.addEventListener('click', () => doBuyHammer(b.dataset.buyHammer)));
       body.querySelectorAll('[data-equip-hammer]').forEach(b => b.addEventListener('click', () => doEquipHammer(b.dataset.equipHammer)));
       $('wfRefillBtn')?.addEventListener('click', doRefillEnergy);
     }
-    if (S.activeTab === 'inventory'){
-      $('wfSellBtn')?.addEventListener('click', doSell);
-    }
-    if (S.activeTab === 'arena') wireArena(body);
-    if (S.activeTab === 'chat') wireChat(body);
-    if (S.activeTab === 'gift') wireGift(body);
+    if (t === 'inventory'){ $('wfSellBtn')?.addEventListener('click', doSell); }
+    if (t === 'quest') wireQuest(body);
+    if (t === 'season') wireSeason(body);
+    if (t === 'pet') wirePet(body);
+    if (t === 'boss') wireBoss(body);
+    if (t === 'arena') wireArena(body);
+    if (t === 'chat') wireChat(body);
+    if (t === 'gift') wireGift(body);
   }
 
   function renderLoginWall(){
     return `<div class="wf-login-wall">
       <div class="wf-login-wall-emoji">⚔️</div>
       <div class="wf-login-wall-title">Cần đăng nhập</div>
-      <div class="wf-login-wall-sub">Đăng nhập để rèn vũ khí và tương tác với người chơi khác.</div>
+      <div class="wf-login-wall-sub">Đăng nhập để rèn vũ khí, làm quest, mùa giải, pet, boss và tương tác với người chơi khác.</div>
       <button class="wf-login-btn" id="wfLoginBtn" type="button">🔐 Đăng nhập</button>
     </div>`;
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     8. TAB: FORGE
+     9. TAB: FORGE
      ═══════════════════════════════════════════════════════════════ */
   function renderForgeTab(){
     const s = S.state;
@@ -902,7 +1018,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     9. TAB: MARKET
+     10. TAB: MARKET
      ═══════════════════════════════════════════════════════════════ */
   function describeBonus(b){
     if (!b || !Object.keys(b).length) return '<span style="opacity:.6">không bonus</span>';
@@ -955,7 +1071,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     10. TAB: INVENTORY
+     11. TAB: INVENTORY
      ═══════════════════════════════════════════════════════════════ */
   function renderInventoryTab(){
     const s = S.state;
@@ -985,7 +1101,473 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     11. TAB: ARENA
+     12. TAB: QUEST
+     ═══════════════════════════════════════════════════════════════ */
+  function renderQuestTab(){
+    if (!SOC.quests) return '<div class="wf-history-empty">Đang tải quest…</div>';
+    if (!SOC.quests.length) return '<div class="wf-history-empty">Không có quest hôm nay</div>';
+    const icons = { forge:'🔨', duel_win:'⚔️', chat:'💬', gift:'🎁', sell:'💰', enh_reach:'⬆️', boss_hit:'👹' };
+    const names = {
+      forge:'Rèn vũ khí', duel_win:'Thắng đấu trường', chat:'Chat',
+      gift:'Tặng vàng', sell:'Bán vũ khí', enh_reach:'Đạt cấp X', boss_hit:'Đánh boss',
+    };
+    return `<div class="wf-section-title">📜 Nhiệm vụ hôm nay · Reset 0h</div>` +
+      SOC.quests.map(q => {
+        const data = q.quest_data || {};
+        const type = (data.type || q.quest_key.split('_')[0]);
+        const icon = icons[type] || '📜';
+        const name = names[type] || q.quest_key;
+        const progress = q.progress || 0;
+        const target = q.target || 1;
+        const pct = Math.min(100, (progress/target)*100);
+        const done = progress >= target && !q.claimed;
+        const claimed = !!q.claimed;
+        const cls = claimed ? 'claimed' : done ? 'done' : '';
+        const gold = data.gold || 0;
+        const mat = data.mat ? CFG.MATERIALS[data.mat] : null;
+        return `
+          <div class="ws-quest-card ${cls}">
+            <div class="ws-quest-icon">${icon}</div>
+            <div class="ws-quest-body">
+              <div class="ws-quest-top">
+                <div class="ws-quest-name">${esc(name)} ${target > 1 ? `(${target} lần)` : ''}</div>
+                <div class="ws-quest-reward">🪙${gold}${mat ? ' + '+mat.emoji : ''}</div>
+              </div>
+              <div class="ws-quest-progress-bar"><div class="ws-quest-progress-fill" style="width:${pct}%"></div></div>
+              <div class="ws-quest-progress-text">${progress} / ${target}</div>
+              ${claimed
+                ? `<button class="ws-quest-claim" disabled>✓ Đã nhận</button>`
+                : done
+                  ? `<button class="ws-quest-claim" data-quest-id="${q.id}" type="button">🎁 Nhận thưởng</button>`
+                  : `<button class="ws-quest-claim" disabled>Chưa hoàn thành</button>`}
+            </div>
+          </div>`;
+      }).join('');
+  }
+  function wireQuest(body){
+    body.querySelectorAll('[data-quest-id]').forEach(btn => {
+      btn.addEventListener('click', () => doQuestClaim(btn.dataset.questId, btn));
+    });
+  }
+  function rerenderQuests(){
+    if (S.activeTab !== 'quest') return;
+    const body = $('wfBody');
+    if (body) render();
+  }
+  async function doQuestClaim(questId, btn){
+    if (btn) btn.disabled = true;
+    const sb = getSb(); if (!sb) return;
+    try {
+      const res = await sb.rpc('rpc_wq_claim', { p_quest_id: Number(questId) });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (!d.ok) throw new Error(d.error || 'Lỗi');
+      toast(`🎁 +${d.gold}🪙${d.mat ? ' +1 '+d.mat : ''}`, 'success');
+      playSound(880, .1); setTimeout(()=>playSound(1175,.15), 80);
+      // Reload state + quests
+      const r = await pullRemote();
+      if (r && r.state){ S.state = r.state; saveLocal(S.user.id, S.state); }
+      await fetchQuests();
+      await seasonAddXP(CFG.SEASON_XP.quest_claim);
+      render();
+    } catch(e){
+      toast('Lỗi: ' + (e.message || 'Không nhận được'), 'error');
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     13. TAB: SEASON
+     ═══════════════════════════════════════════════════════════════ */
+  function seasonTierReward(tier, premium){
+    const gold = (50 + tier * 20) * (premium ? 2 : 1);
+    let mat = 'wood';
+    if (tier >= 20) mat = 'steel';
+    else if (tier >= 10) mat = 'iron';
+    return { gold, mat };
+  }
+  function renderSeasonTab(){
+    if (!SOC.season) return '<div class="wf-history-empty">Không có season đang hoạt động</div>';
+    const season = SOC.season;
+    const prog = SOC.seasonProgress || { xp:0, tier:0, premium:false, claimed_tiers:[], claimed_premium_tiers:[] };
+    const curTier = prog.tier || 0;
+    const xpInTier = prog.xp % CFG.SEASON_XP_PER_TIER;
+    const xpPct = (xpInTier / CFG.SEASON_XP_PER_TIER) * 100;
+    const claimedFree = new Set(Array.isArray(prog.claimed_tiers) ? prog.claimed_tiers : []);
+    const claimedPrem = new Set(Array.isArray(prog.claimed_premium_tiers) ? prog.claimed_premium_tiers : []);
+
+    let tiers = '';
+    for (let t = 1; t <= CFG.SEASON_MAX_TIER; t++){
+      const unlocked = curTier >= t;
+      const cFree = claimedFree.has(t);
+      const cPrem = claimedPrem.has(t);
+      const premUnlocked = unlocked && prog.premium;
+      const freeR = seasonTierReward(t, false);
+      const premR = seasonTierReward(t, true);
+      const icon = t % 5 === 0 ? '🏆' : t % 3 === 0 ? '⭐' : '🎁';
+      tiers += `
+        <div class="ws-season-tier ${unlocked?'unlocked':''} ${cFree?'claimed':''}">
+          <div class="ws-season-tier-num-small">Tier ${t}</div>
+          <div class="ws-season-tier-icon">${icon}</div>
+          <div class="ws-season-tier-reward">🪙${freeR.gold}<br>${CFG.MATERIALS[freeR.mat].emoji}</div>
+          ${unlocked
+            ? (cFree
+              ? `<button class="ws-season-tier-btn" disabled>✓</button>`
+              : `<button class="ws-season-tier-btn" data-season-claim="${t}" data-premium="0" type="button">Nhận</button>`)
+            : `<div class="ws-season-lock">🔒</div>`}
+        </div>
+        <div class="ws-season-tier premium ${premUnlocked?'unlocked':''} ${cPrem?'claimed':''}">
+          <div class="ws-season-tier-num-small">Premium ${t}</div>
+          <div class="ws-season-tier-icon">💎</div>
+          <div class="ws-season-tier-reward">🪙${premR.gold}<br>${CFG.MATERIALS[premR.mat].emoji}</div>
+          ${premUnlocked
+            ? (cPrem
+              ? `<button class="ws-season-tier-btn" disabled>✓</button>`
+              : `<button class="ws-season-tier-btn" data-season-claim="${t}" data-premium="1" type="button">Nhận</button>`)
+            : `<div class="ws-season-lock">🔒</div>`}
+        </div>`;
+    }
+
+    return `
+      <div class="ws-season-header">
+        <div class="ws-season-name">🎫 ${esc(season.name)}</div>
+        <div class="ws-season-tier-num">${curTier}<small>/ ${CFG.SEASON_MAX_TIER}</small></div>
+        <div class="ws-season-xp-bar"><div class="ws-season-xp-fill" style="width:${xpPct}%"></div></div>
+        <div class="ws-season-xp-text">${xpInTier} / ${CFG.SEASON_XP_PER_TIER} XP đến tier ${Math.min(CFG.SEASON_MAX_TIER, curTier+1)}</div>
+      </div>
+      <div class="wf-section-title">🎁 Phần thưởng 30 tier</div>
+      <div class="ws-season-track">${tiers}</div>
+      <div style="font-size:11px;color:#a06a28;font-weight:700;text-align:center;margin-top:8px;">Premium: ×2 thưởng + vật liệu cao cấp</div>
+    `;
+  }
+  function wireSeason(body){
+    body.querySelectorAll('[data-season-claim]').forEach(btn => {
+      btn.addEventListener('click', () => doSeasonClaim(Number(btn.dataset.seasonClaim), btn.dataset.premium === '1', btn));
+    });
+  }
+  function rerenderSeason(){
+    if (S.activeTab !== 'season') return;
+    render();
+  }
+  async function doSeasonClaim(tier, premium, btn){
+    if (btn) btn.disabled = true;
+    const sb = getSb(); if (!sb) return;
+    try {
+      const res = await sb.rpc('rpc_ws_claim_tier', { p_tier: tier, p_premium: premium });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (!d.ok) throw new Error(d.error || 'Lỗi');
+      toast(`🎁 Tier ${tier} · +${d.gold}🪙${d.mat ? ' +1 '+d.mat : ''}`, 'success');
+      playSound(880, .1); setTimeout(()=>playSound(1175,.15), 80);
+      const r = await pullRemote();
+      if (r && r.state){ S.state = r.state; saveLocal(S.user.id, S.state); }
+      await fetchSeason();
+      render();
+    } catch(e){
+      toast('Lỗi: ' + (e.message || 'Không nhận được'), 'error');
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     14. TAB: PET
+     ═══════════════════════════════════════════════════════════════ */
+  function renderPetTab(){
+    const owned = new Map(SOC.pets.map(p => [p.pet_key, p]));
+    let grid = '<div class="ws-pet-grid">';
+    Object.keys(CFG.PETS).forEach(key => {
+      const cfg = CFG.PETS[key];
+      const p = owned.get(key);
+      if (p){
+        const xpInLevel = p.xp % CFG.PET_XP_PER_LEVEL;
+        const xpPct = (xpInLevel / CFG.PET_XP_PER_LEVEL) * 100;
+        const isMax = p.level >= CFG.PET_MAX_LEVEL;
+        grid += `
+          <div class="ws-pet-card ${p.active?'active':''}">
+            ${p.active ? '<div class="ws-pet-active-badge">★ ĐANG DÙNG</div>' : ''}
+            <div class="ws-pet-emoji">${cfg.emoji}</div>
+            <div class="ws-pet-name">${esc(cfg.name)}</div>
+            <div class="ws-pet-level">Lv ${p.level}/${CFG.PET_MAX_LEVEL}${isMax?' · MAX':''}</div>
+            <div class="ws-pet-xp"><div class="ws-pet-xp-fill" style="width:${isMax?100:xpPct}%"></div></div>
+            <div class="ws-pet-desc">${esc(cfg.desc)}</div>
+            <div class="ws-pet-actions">
+              ${p.active
+                ? `<button class="ws-pet-btn" disabled>Đang dùng</button>`
+                : `<button class="ws-pet-btn green" data-pet-active="${p.id}" type="button">Dùng</button>`}
+              ${isMax
+                ? `<button class="ws-pet-btn" disabled>MAX</button>`
+                : `<button class="ws-pet-btn" data-pet-feed="${p.id}" type="button">Cho ăn</button>`}
+            </div>
+          </div>`;
+      } else {
+        grid += `
+          <div class="ws-pet-card locked">
+            <div class="ws-pet-emoji">${cfg.emoji}</div>
+            <div class="ws-pet-name">${esc(cfg.name)}</div>
+            <div class="ws-pet-level">Chưa sở hữu</div>
+            <div class="ws-pet-xp"></div>
+            <div class="ws-pet-desc">${esc(cfg.desc)}</div>
+            <div class="ws-pet-actions">
+              <button class="ws-pet-btn" data-pet-adopt="${key}" type="button" ${S.state.gold >= (cfg.price||0) ? '' : 'disabled'}>🪙${fmtGold(cfg.price||0)}</button>
+            </div>
+          </div>`;
+      }
+    });
+    grid += '</div>';
+    return `<div class="wf-section-title">🐾 Thú cưng chiến đấu</div>` + grid +
+      `<div style="font-size:11px;color:#a06a28;font-weight:700;text-align:center;margin-top:12px;">Cho ăn = 1 vàng → 1 XP · MAX Lv ${CFG.PET_MAX_LEVEL}</div>`;
+  }
+  function wirePet(body){
+    body.querySelectorAll('[data-pet-adopt]').forEach(btn => {
+      btn.addEventListener('click', () => doPetAdopt(btn.dataset.petAdopt, btn));
+    });
+    body.querySelectorAll('[data-pet-active]').forEach(btn => {
+      btn.addEventListener('click', () => doPetSetActive(Number(btn.dataset.petActive), btn));
+    });
+    body.querySelectorAll('[data-pet-feed]').forEach(btn => {
+      btn.addEventListener('click', () => openPetFeedModal(Number(btn.dataset.petFeed)));
+    });
+  }
+  function rerenderPets(){
+    if (S.activeTab !== 'pet') return;
+    render();
+  }
+  async function doPetAdopt(petKey, btn){
+    const cfg = CFG.PETS[petKey];
+    if (!cfg){ return; }
+    if (btn) btn.disabled = true;
+    const sb = getSb(); if (!sb) return;
+    try {
+      const myGold = S.state.gold;
+      if (myGold < cfg.price){ toast('Không đủ vàng', 'warning'); btn.disabled = false; return; }
+      // Trừ vàng local
+      S.state.gold -= cfg.price;
+      saveLocal(S.user.id, S.state);
+      await pushRemote(S.state);
+      const res = await sb.rpc('rpc_wp_adopt', { p_pet_key: petKey });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (!d.ok) throw new Error(d.error || 'Lỗi');
+      toast(`🐾 Nhận nuôi ${cfg.name}!`, 'success');
+      playSound(880, .1); setTimeout(()=>playSound(1175,.15), 80);
+      await fetchPets();
+      render();
+    } catch(e){
+      toast('Lỗi: ' + (e.message || 'Không nhận được'), 'error');
+      if (btn) btn.disabled = false;
+    }
+  }
+  async function doPetSetActive(petId, btn){
+    if (btn) btn.disabled = true;
+    const sb = getSb(); if (!sb) return;
+    try {
+      const res = await sb.rpc('rpc_wp_set_active', { p_pet_id: petId });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (!d.ok) throw new Error(d.error || 'Lỗi');
+      toast(`★ Đã chọn ${CFG.PETS[d.pet_key]?.name || 'pet'}`, 'success');
+      await fetchPets();
+      render();
+    } catch(e){
+      toast('Lỗi', 'error');
+      if (btn) btn.disabled = false;
+    }
+  }
+  function openPetFeedModal(petId){
+    const p = SOC.pets.find(x => x.id === petId);
+    if (!p) return;
+    removeModal('wsPetFeedModal');
+    const myGold = S.state.gold;
+    const cfg = CFG.PETS[p.pet_key];
+    const maxFeed = Math.min(myGold, (CFG.PET_MAX_LEVEL - p.level) * CFG.PET_XP_PER_LEVEL - (p.xp % CFG.PET_XP_PER_LEVEL));
+    if (maxFeed < 10){ toast('Không đủ vàng hoặc đã MAX', 'warning'); return; }
+    const modal = document.createElement('div');
+    modal.id = 'wsPetFeedModal';
+    modal.className = 'ws-modal show';
+    modal.innerHTML = `
+      <div class="ws-modal-card">
+        <div class="ws-modal-title">${cfg.emoji} Cho ăn</div>
+        <div class="ws-modal-sub">Cho <b>${esc(cfg.name)}</b> ăn · 1 vàng = 1 XP<br>Lv ${p.level}/${CFG.PET_MAX_LEVEL} · Bạn có ${fmtGold(myGold)}🪙</div>
+        <label class="ws-modal-label">Số vàng (10-${maxFeed})</label>
+        <input class="ws-modal-input" id="wsFeedInput" type="number" min="10" max="${maxFeed}" value="${Math.min(100, maxFeed)}" step="10">
+        <div class="ws-modal-quick">
+          <button type="button" data-feed="50">50</button>
+          <button type="button" data-feed="100">100</button>
+          <button type="button" data-feed="500">500</button>
+          <button type="button" data-feed="${maxFeed}">MAX</button>
+        </div>
+        <div class="ws-modal-actions">
+          <button class="ws-modal-cancel" type="button">Huỷ</button>
+          <button class="ws-modal-confirm" id="wsFeedConfirm" type="button">Cho ăn</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.querySelectorAll('[data-feed]').forEach(b => {
+      b.addEventListener('click', () => {
+        const inp = modal.querySelector('#wsFeedInput');
+        if (inp) inp.value = b.dataset.feed;
+      });
+    });
+    modal.querySelector('.ws-modal-cancel').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    modal.querySelector('#wsFeedConfirm').addEventListener('click', async () => {
+      const inp = modal.querySelector('#wsFeedInput');
+      const amount = parseInt(inp.value, 10);
+      if (!amount || amount < 10 || amount > maxFeed){ toast('Số vàng không hợp lệ', 'warning'); return; }
+      const btn = modal.querySelector('#wsFeedConfirm');
+      btn.disabled = true; btn.textContent = 'Đang cho ăn…';
+      const sb = getSb(); if (!sb) return;
+      try {
+        const res = await sb.rpc('rpc_wp_feed', { p_pet_id: petId, p_gold: amount });
+        if (res.error) throw res.error;
+        const d = res.data || {};
+        if (!d.ok) throw new Error(d.error || 'Lỗi');
+        S.state.gold = Math.max(0, S.state.gold - amount);
+        saveLocal(S.user.id, S.state);
+        toast(`🍖 ${cfg.name} → Lv ${d.level}`, 'success');
+        playSound(880, .1);
+        modal.remove();
+        await fetchPets();
+        render();
+      } catch(e){
+        toast('Lỗi: ' + (e.message || 'Không cho ăn được'), 'error');
+        btn.disabled = false; btn.textContent = 'Cho ăn';
+      }
+    });
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     15. TAB: BOSS
+     ═══════════════════════════════════════════════════════════════ */
+  function renderBossTab(){
+    if (!SOC.boss){
+      return `<div class="wf-history-empty">Đang tìm boss…<br><button class="ws-btn primary" id="wsBossSpawn" type="button" style="margin-top:12px;">👹 Triệu hồi boss</button></div>`;
+    }
+    const b = SOC.boss;
+    const my = SOC.bossMy || { damage:0, attempts:0, claimed:false, rank:0 };
+    const hpPct = Math.max(0, Math.min(100, (b.current_hp / b.max_hp) * 100));
+    const defeated = b.status === 'defeated';
+    const emoji = { dragon:'🐉', titan:'👹', demon:'😈' }[b.boss_key] || '👹';
+    return `
+      <div class="ws-boss-card ${defeated?'defeated':''}">
+        <div class="ws-boss-top">
+          <div class="ws-boss-emoji">${emoji}</div>
+          <div class="ws-boss-info">
+            <div class="ws-boss-name">${esc(b.boss_name)}</div>
+            <div class="ws-boss-level">Lv ${b.level} · ${defeated?'ĐÃ BỊ ĐÁNH BẠI':'Đang hoạt động'}</div>
+          </div>
+        </div>
+        <div class="ws-boss-hp-bar">
+          <div class="ws-boss-hp-fill" style="width:${hpPct}%"></div>
+        </div>
+        <div class="ws-boss-hp-text">${fmtGold(b.current_hp)} / ${fmtGold(b.max_hp)} HP</div>
+        <div class="ws-boss-actions">
+          ${defeated
+            ? (my.claimed
+              ? `<button class="ws-boss-btn" disabled>✓ Đã nhận thưởng</button>`
+              : my.damage > 0
+                ? `<button class="ws-boss-btn green" id="wsBossClaim" data-boss-id="${b.id}" type="button">🎁 Nhận thưởng</button>`
+                : `<button class="ws-boss-btn" disabled>Không tham gia</button>`)
+            : `<button class="ws-boss-btn" id="wsBossAttack" type="button">⚔️ Đánh boss</button>`}
+        </div>
+        <div class="ws-boss-stats">
+          <div class="ws-boss-stat"><div class="ws-boss-stat-label">Damage</div><div class="ws-boss-stat-value">${fmtGold(my.damage)}</div></div>
+          <div class="ws-boss-stat"><div class="ws-boss-stat-label">Rank</div><div class="ws-boss-stat-value">${my.rank > 0 ? '#'+my.rank : '—'}</div></div>
+          <div class="ws-boss-stat"><div class="ws-boss-stat-label">Tham gia</div><div class="ws-boss-stat-value pos">${SOC.bossTotal}</div></div>
+        </div>
+      </div>
+      ${!defeated ? `<div class="wf-section-title">💡 Cách chơi</div>
+        <div style="padding:12px;background:rgba(255,255,255,.7);border:1px solid rgba(220,180,100,.3);border-radius:12px;font-size:12px;font-weight:700;color:#78350f;line-height:1.5;">
+          • Đánh boss với damage = <b>power × 15</b> (max)<br>
+          • Cooldown 10s giữa các đòn<br>
+          • Boss có 6h để bị đánh bại<br>
+          • Top 1 = 2000🪙 + Mythril, Top 2-3 = 1000🪙 + Thép, Top 4-10 = 500🪙
+        </div>` : ''}
+    `;
+  }
+  function wireBoss(body){
+    body.querySelectorAll('#wsBossAttack').forEach(b => b.addEventListener('click', () => doBossAttack(b)));
+    body.querySelectorAll('#wsBossClaim').forEach(b => b.addEventListener('click', () => doBossClaim(b.dataset.bossId, b)));
+    body.querySelectorAll('#wsBossSpawn').forEach(b => b.addEventListener('click', () => doBossSpawn(b)));
+  }
+  function rerenderBoss(){
+    if (S.activeTab !== 'boss') return;
+    render();
+  }
+  async function doBossAttack(btn){
+    if (S.bossAttacking) return;
+    if (!SOC.boss || SOC.boss.status !== 'active'){ toast('Boss đã chết', 'warning'); return; }
+    if (btn) btn.disabled = true;
+    S.bossAttacking = true;
+    const sb = getSb(); if (!sb) return;
+    try {
+      const myPower = powerOf(S.state.enh);
+      const baseDmg = Math.floor(myPower * 15);
+      const variance = 0.9 + Math.random() * 0.2;
+      const dmg = Math.max(100, Math.floor(baseDmg * variance));
+      const res = await sb.rpc('rpc_wb_attack', { p_damage: dmg });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (!d.ok) throw new Error(d.error || 'Lỗi');
+      toast(`⚔️ -${fmtGold(d.damage)} HP${d.defeated?' · BOSS CHẾT!':''}`, d.defeated ? 'success' : 'info');
+      numberPop(`-${fmtGold(d.damage)} HP`, '#ef4444');
+      if (d.defeated){
+        playSound(523,.1); setTimeout(()=>playSound(659,.1),80); setTimeout(()=>playSound(784,.1),160); setTimeout(()=>playSound(1047,.25),240);
+        vibrate([30,30,30,30,60]);
+      } else {
+        playSound(400,.1);
+        vibrate(20);
+      }
+      await seasonAddXP(CFG.SEASON_XP.boss_hit);
+      await questProgress('boss_hit', 1);
+      await fetchBoss();
+      render();
+    } catch(e){
+      toast('Lỗi: ' + (e.message || 'Không đánh được'), 'error');
+      if (btn) btn.disabled = false;
+    } finally {
+      S.bossAttacking = false;
+    }
+  }
+  async function doBossClaim(bossId, btn){
+    if (btn) btn.disabled = true;
+    const sb = getSb(); if (!sb) return;
+    try {
+      const res = await sb.rpc('rpc_wb_claim_reward', { p_boss_id: bossId });
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (!d.ok) throw new Error(d.error || 'Lỗi');
+      toast(`🎁 #${d.rank} · +${d.gold}🪙${d.mat ? ' +1 '+d.mat : ''}`, 'success');
+      playSound(880, .1); setTimeout(()=>playSound(1175,.15), 80);
+      const r = await pullRemote();
+      if (r && r.state){ S.state = r.state; saveLocal(S.user.id, S.state); }
+      await fetchBoss();
+      render();
+    } catch(e){
+      toast('Lỗi: ' + (e.message || 'Không nhận được'), 'error');
+      if (btn) btn.disabled = false;
+    }
+  }
+  async function doBossSpawn(btn){
+    if (btn) btn.disabled = true;
+    const sb = getSb(); if (!sb) return;
+    try {
+      const res = await sb.rpc('rpc_wb_spawn_boss');
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (!d.ok) throw new Error(d.error || 'Lỗi');
+      toast('👹 Boss xuất hiện!', 'success');
+      await fetchBoss();
+      render();
+    } catch(e){
+      toast('Lỗi: ' + (e.message || 'Không triệu hồi được'), 'error');
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     16. TAB: ARENA
      ═══════════════════════════════════════════════════════════════ */
   function renderArenaTab(){
     if (!SOC.arena) return '<div class="wf-history-empty">Đang tải đấu trường…</div>';
@@ -1085,9 +1667,7 @@
     body.querySelectorAll('.ws-subtab').forEach(b => {
       b.addEventListener('click', async () => {
         S.arenaSubTab = b.dataset.wsSub;
-        if (S.arenaSubTab === 'active'){
-          S.activeBattleData = await fetchActiveBattle();
-        }
+        if (S.arenaSubTab === 'active') S.activeBattleData = await fetchActiveBattle();
         render();
       });
     });
@@ -1113,13 +1693,11 @@
     const feed = $('wsFeedList');
     if (feed) feed.innerHTML = renderFeedList();
   }
-
   async function fetchActiveBattle(){
     const me = S.user; if (!me) return null;
     const matchId = S.currentBattleId || getActiveBattleId(me.id);
     if (!matchId) return null;
-    const sb = getSb();
-    if (!sb) return null;
+    const sb = getSb(); if (!sb) return null;
     try {
       const res = await sb.rpc('rpc_weapon_battle_state', { p_match_id: matchId });
       if (res.error) throw res.error;
@@ -1132,7 +1710,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     12. TAB: CHAT
+     17. TAB: CHAT
      ═══════════════════════════════════════════════════════════════ */
   function renderChatTab(){
     const me = S.user?.id;
@@ -1217,8 +1795,7 @@
     if (!msg){ return; }
     if (msg.length > CFG.CHAT_MAX_LEN){ toast('Tối đa ' + CFG.CHAT_MAX_LEN + ' ký tự', 'warning'); return; }
     if (nowMs() < S.chatCooldownUntil){ toast('Đợi chút nữa', 'warning'); return; }
-    const sb = getSb();
-    if (!sb) return;
+    const sb = getSb(); if (!sb) return;
     inp.disabled = true;
     try {
       const myState = S.state;
@@ -1234,6 +1811,8 @@
       await fetchChat();
       rerenderChat();
       scrollChatToBottom();
+      await questProgress('chat', 1);
+      await seasonAddXP(CFG.SEASON_XP.chat);
     } catch(e){
       toast('Lỗi: ' + (e.message || 'Không gửi được'), 'error');
       inp.disabled = false;
@@ -1241,7 +1820,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     13. TAB: GIFT
+     18. TAB: GIFT
      ═══════════════════════════════════════════════════════════════ */
   function renderGiftTab(){
     if (!SOC.giftTargets.length) return '<div class="wf-history-empty">Chưa có ai</div>';
@@ -1265,7 +1844,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     14. MODALS
+     19. MODALS
      ═══════════════════════════════════════════════════════════════ */
   function removeModal(id){ document.getElementById(id)?.remove(); }
 
@@ -1273,16 +1852,14 @@
     removeModal('wsChallengeModal');
     const myGold = S.state?.gold || 0;
     const maxWager = Math.min(CFG.DUEL_MAX, Math.floor(myGold / 2));
-    if (maxWager < CFG.DUEL_MIN){
-      toast(`Cần ≥ ${CFG.DUEL_MIN*2} vàng để thách`, 'warning'); return;
-    }
+    if (maxWager < CFG.DUEL_MIN){ toast(`Cần ≥ ${CFG.DUEL_MIN*2} vàng để thách`, 'warning'); return; }
     const modal = document.createElement('div');
     modal.id = 'wsChallengeModal';
     modal.className = 'ws-modal show';
     modal.innerHTML = `
       <div class="ws-modal-card">
         <div class="ws-modal-title">⚔️ Thách đấu</div>
-        <div class="ws-modal-sub">Đấu với <b>${esc(oppName)}</b><br>Tỉ lệ thắng dựa trên power hai bên</div>
+        <div class="ws-modal-sub">Đấu với <b>${esc(oppName)}</b><br>HP/ATK dựa trên power hai bên</div>
         <label class="ws-modal-label">Số vàng cược (${CFG.DUEL_MIN}-${maxWager})</label>
         <input class="ws-modal-input" id="wsWagerInput" type="number" min="${CFG.DUEL_MIN}" max="${maxWager}" value="${Math.min(50, maxWager)}" step="10">
         <div class="ws-modal-quick">
@@ -1309,9 +1886,7 @@
     modal.querySelector('#wsChallConfirm').addEventListener('click', async () => {
       const inp = modal.querySelector('#wsWagerInput');
       const wager = parseInt(inp.value, 10);
-      if (!wager || wager < CFG.DUEL_MIN || wager > maxWager){
-        toast(`Cược ${CFG.DUEL_MIN}-${maxWager}`, 'warning'); return;
-      }
+      if (!wager || wager < CFG.DUEL_MIN || wager > maxWager){ toast(`Cược ${CFG.DUEL_MIN}-${maxWager}`, 'warning'); return; }
       const btn = modal.querySelector('#wsChallConfirm');
       btn.disabled = true; btn.textContent = 'Đang gửi…';
       try {
@@ -1334,9 +1909,7 @@
   function openGiftModal(toId, toName){
     removeModal('wsGiftModal');
     const myGold = S.state?.gold || 0;
-    if (myGold < CFG.GIFT_MIN){
-      toast(`Cần ≥ ${CFG.GIFT_MIN} vàng`, 'warning'); return;
-    }
+    if (myGold < CFG.GIFT_MIN){ toast(`Cần ≥ ${CFG.GIFT_MIN} vàng`, 'warning'); return; }
     const maxAmount = Math.min(CFG.GIFT_MAX_PER_TX, myGold);
     const modal = document.createElement('div');
     modal.id = 'wsGiftModal';
@@ -1374,9 +1947,7 @@
       const inp = modal.querySelector('#wsGiftInput');
       const msgInput = modal.querySelector('#wsGiftMsg');
       const amount = parseInt(inp.value, 10);
-      if (!amount || amount < CFG.GIFT_MIN || amount > maxAmount){
-        toast(`Số vàng ${CFG.GIFT_MIN}-${maxAmount}`, 'warning'); return;
-      }
+      if (!amount || amount < CFG.GIFT_MIN || amount > maxAmount){ toast(`Số vàng ${CFG.GIFT_MIN}-${maxAmount}`, 'warning'); return; }
       const btn = modal.querySelector('#wsGiftConfirm');
       btn.disabled = true; btn.textContent = 'Đang gửi…';
       try {
@@ -1393,6 +1964,8 @@
         modal.remove();
         render();
         fetchFeed().then(rerenderFeed);
+        await questProgress('gift', amount);
+        await seasonAddXP(CFG.SEASON_XP.gift);
       } catch(e){
         toast('Lỗi: ' + (e.message || 'Không gửi được'), 'error');
         btn.disabled = false; btn.textContent = 'Tặng ngay';
@@ -1401,7 +1974,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     15. ACTIONS: FORGE / MARKET / SELL
+     20. ACTIONS: FORGE / MARKET / SELL
      ═══════════════════════════════════════════════════════════════ */
   async function doForge(){
     if (S.busy || !S.state) return;
@@ -1422,6 +1995,7 @@
     scheduleSave();
 
     let pending = null;
+    const enhBefore = s.enh;
     try {
       if (hammer){ hammer.classList.remove('striking'); hammer.classList.add('raising'); }
       playSound(180, .1);
@@ -1452,6 +2026,14 @@
       if (result.goldDelta > 0) numberPop(`+${result.goldDelta}🪙`, '#f59e0b');
       await sleep(400);
       pending = { outcome, result, unlocked };
+
+      // ⭐ QUEST + SEASON hooks
+      questProgress('forge', 1);
+      const xp = outcome === 'great' ? CFG.SEASON_XP.forge_great : CFG.SEASON_XP.forge;
+      seasonAddXP(xp);
+      if (result.newEnh > enhBefore && result.newEnh >= 5){
+        questProgress('enh_reach', result.newEnh - enhBefore);
+      }
     } catch(e){
       log('forge error', e);
       toast('Lỗi khi rèn', 'error');
@@ -1559,15 +2141,15 @@
     scheduleSave();
     toast(`+${fmtGold(price)}🪙 ✓`, 'success');
     render();
+    questProgress('sell', 1);
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     16. DUEL (challenge + accept + reject)
+     21. DUEL
      ═══════════════════════════════════════════════════════════════ */
   async function acceptDuel(matchId, btn){
     if (btn) btn.disabled = true;
-    const sb = getSb();
-    if (!sb) return;
+    const sb = getSb(); if (!sb) return;
     try {
       const res = await sb.rpc('rpc_weapon_battle_start', { p_match_id: matchId });
       if (res.error) throw res.error;
@@ -1586,8 +2168,7 @@
   }
   async function rejectDuel(matchId, btn){
     if (btn) btn.disabled = true;
-    const sb = getSb();
-    if (!sb) return;
+    const sb = getSb(); if (!sb) return;
     try {
       const res = await sb.rpc('rpc_weapon_duel_reject', { p_match_id: matchId });
       if (res.error) throw res.error;
@@ -1601,7 +2182,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     17. BATTLE — Turn-based realtime combat
+     22. BATTLE (turn-based)
      ═══════════════════════════════════════════════════════════════ */
   function ensureBattleScreen(){
     let b = document.getElementById('wsBattleScreen');
@@ -1678,10 +2259,8 @@
     b.classList.add('show');
     b.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
-    // Reset result
     const resEl = document.getElementById('wsBattleResult');
     if (resEl) resEl.classList.remove('show');
-    // Reset buttons
     b.querySelectorAll('[data-bt-action]').forEach(btn => {
       btn.disabled = true;
       const map = { strike:'⚔️ Strike<small>90-110% dmg · 5% miss</small>', heavy:'💥 Heavy<small>130-160% · 15% miss · crit 20%</small>', defend:'🛡️ Defend<small>+5% HP</small>', heal:'💚 Heal<small>+15% HP</small>' };
@@ -1698,7 +2277,6 @@
     document.body.style.overflow = '';
     stopBattlePoll();
     unsubscribeBattleRealtime();
-    // Chỉ clear active battle nếu trận đã kết thúc
     if (S.battleState?.status !== 'fighting'){
       if (S.user) saveActiveBattleId(S.user.id, null);
     }
@@ -1707,7 +2285,6 @@
     S.activeBattleData = null;
     if (S.activeTab === 'arena'){ fetchArena().then(rerenderArena); render(); }
   }
-
   function startBattlePoll(){
     stopBattlePoll();
     S.battlePollTimer = setInterval(() => {
@@ -1720,7 +2297,6 @@
   function stopBattlePoll(){
     if (S.battlePollTimer){ clearInterval(S.battlePollTimer); S.battlePollTimer = null; }
   }
-
   function subscribeBattleRealtime(matchId){
     unsubscribeBattleRealtime();
     const sb = getSb();
@@ -1728,8 +2304,7 @@
     try {
       S.battleChannel = sb.channel('wf-battle-' + matchId)
         .on('postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'srank_weapon_matches',
-            filter: 'id=eq.' + matchId },
+          { event: 'UPDATE', schema: 'public', table: 'srank_weapon_matches', filter: 'id=eq.' + matchId },
           payload => onBattleUpdate(payload.new))
         .subscribe(status => log('battle rt:', status));
     } catch(e){ log('battle rt sub', e); }
@@ -1740,17 +2315,14 @@
       S.battleChannel = null;
     }
   }
-
   function onBattleUpdate(row){
     if (!row) return;
     if (row.id !== S.currentBattleId) return;
     refreshBattleState();
   }
-
   async function refreshBattleState(){
     if (!S.currentBattleId) return;
-    const sb = getSb();
-    if (!sb) return;
+    const sb = getSb(); if (!sb) return;
     try {
       const res = await sb.rpc('rpc_weapon_battle_state', { p_match_id: S.currentBattleId });
       if (res.error) throw res.error;
@@ -1758,11 +2330,8 @@
       if (!d.ok) throw new Error(d.error || 'Lỗi');
       S.battleState = d;
       renderBattle(d);
-    } catch(e){
-      log('refreshBattleState', e);
-    }
+    } catch(e){ log('refreshBattleState', e); }
   }
-
   function renderBattle(st){
     const b = document.getElementById('wsBattleScreen');
     if (!b || !st) return;
@@ -1812,8 +2381,7 @@
     if (meEl) meEl.querySelector('.ws-fighter-turn')?.remove();
     if (themEl) themEl.querySelector('.ws-fighter-turn')?.remove();
     if (st.status === 'fighting'){
-      const myTurn = st.my_turn;
-      if (myTurn) meEl?.insertAdjacentHTML('beforeend', '<div class="ws-fighter-turn">▶</div>');
+      if (st.my_turn) meEl?.insertAdjacentHTML('beforeend', '<div class="ws-fighter-turn">▶</div>');
       else themEl?.insertAdjacentHTML('beforeend', '<div class="ws-fighter-turn">▶</div>');
     }
 
@@ -1822,9 +2390,8 @@
       if (st.status === 'fighting'){
         if (st.my_turn){ ti.textContent = '🎯 Lượt của bạn!'; ti.classList.add('my'); }
         else { ti.textContent = '⏳ Chờ đối thủ…'; ti.classList.remove('my'); }
-      } else if (st.status === 'resolved'){
-        ti.textContent = '✅ Trận đã kết thúc'; ti.classList.remove('my');
-      } else { ti.textContent = ''; }
+      } else if (st.status === 'resolved'){ ti.textContent = '✅ Trận đã kết thúc'; ti.classList.remove('my'); }
+      else { ti.textContent = ''; }
     }
 
     b.querySelectorAll('[data-bt-action]').forEach(btn => {
@@ -1838,7 +2405,6 @@
       showBattleResult(iWon, st.wager);
     }
   }
-
   function renderBattleLog(st){
     const el = document.getElementById('wsBattleLog');
     if (!el || !Array.isArray(st.battle_log)) return;
@@ -1858,21 +2424,17 @@
           txt = `${who} ${entry.type === 'heavy' ? '💥 Heavy' : '⚔️ Strike'} → -${entry.dmg} HP`;
           if (entry.crit){ txt += ' 💥 CRIT!'; cls = 'crit'; }
         }
-      } else if (entry.type === 'defend'){
-        txt = `${who} 🛡️ Defend (+5% HP)`;
-      } else if (entry.type === 'heal'){
-        txt = `${who} 💚 Heal (+15% HP)`;
-      }
+      } else if (entry.type === 'defend'){ txt = `${who} 🛡️ Defend (+5% HP)`; }
+      else if (entry.type === 'heal'){ txt = `${who} 💚 Heal (+15% HP)`; }
       return `<div class="ws-battle-log-item ${cls}">${txt}</div>`;
     }).join('');
     el.innerHTML = lines;
     el.scrollTop = el.scrollHeight;
   }
-
   function showBattleResult(iWon, wager){
     const el = document.getElementById('wsBattleResult');
     if (!el) return;
-    if (el.classList.contains('show')) return; // không spam
+    if (el.classList.contains('show')) return;
     el.querySelector('#wsBattleResEmoji').textContent = iWon ? '🏆' : '💔';
     el.querySelector('#wsBattleResTitle').textContent = iWon ? 'Chiến thắng!' : 'Thất bại';
     el.querySelector('#wsBattleResSub').textContent = iWon
@@ -1881,13 +2443,13 @@
     el.classList.add('show');
     if (iWon){ playSound(659,.15); setTimeout(()=>playSound(880,.2),120); setTimeout(()=>playSound(1047,.25),260); }
     else { playSound(330,.3,'sawtooth'); }
+    if (iWon){ questProgress('duel_win', 1); seasonAddXP(CFG.SEASON_XP.duel_win); }
     setTimeout(async () => {
       const r = await pullRemote();
       if (r && r.state){ S.state = r.state; saveLocal(S.user.id, S.state); }
       if (S.user) saveActiveBattleId(S.user.id, null);
     }, 500);
   }
-
   async function doBattleAction(action, btn){
     if (!S.currentBattleId) return;
     if (S.battleState?.status !== 'fighting' || !S.battleState?.my_turn){
@@ -1895,7 +2457,6 @@
     }
     document.querySelectorAll('[data-bt-action]').forEach(b => b.disabled = true);
     if (btn) btn.textContent = '...';
-
     const sb = getSb();
     try {
       const res = await sb.rpc('rpc_weapon_battle_action', {
@@ -1922,7 +2483,6 @@
       if (d.crit) playSound(880,.1); else if (!d.miss) playSound(400,.08);
       if (d.miss) playSound(220,.15,'square');
       vibrate(d.crit ? [30,20,30] : 20);
-
       await refreshBattleState();
     } catch(e){
       toast('Lỗi: ' + (e.message || 'Không đánh được'), 'error');
@@ -1934,11 +2494,10 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     18. SOCIAL DATA FETCHERS
+     23. SOCIAL DATA FETCHERS
      ═══════════════════════════════════════════════════════════════ */
   async function fetchArena(){
-    const sb = getSb();
-    if (!sb || !sb.rpc) return null;
+    const sb = getSb(); if (!sb || !sb.rpc) return null;
     try {
       const res = await sb.rpc('rpc_weapon_arena_data');
       if (res.error) throw res.error;
@@ -1950,8 +2509,7 @@
     } catch(e){ log('fetchArena', e.message); return null; }
   }
   async function fetchChat(){
-    const sb = getSb();
-    if (!sb || !sb.rpc) return [];
+    const sb = getSb(); if (!sb || !sb.rpc) return [];
     try {
       const res = await sb.rpc('rpc_weapon_get_chat', { p_limit: 80 });
       if (res.error) throw res.error;
@@ -1961,8 +2519,7 @@
     return SOC.chat;
   }
   async function fetchFeed(){
-    const sb = getSb();
-    if (!sb || !sb.rpc) return [];
+    const sb = getSb(); if (!sb || !sb.rpc) return [];
     try {
       const res = await sb.rpc('rpc_weapon_feed', { p_limit: 30 });
       if (res.error) throw res.error;
@@ -1972,8 +2529,7 @@
     return SOC.feed;
   }
   async function fetchGiftTargets(){
-    const sb = getSb();
-    if (!sb || !sb.rpc) return [];
+    const sb = getSb(); if (!sb || !sb.rpc) return [];
     try {
       const res = await sb.rpc('rpc_weapon_gift_targets', { p_limit: 50 });
       if (res.error) throw res.error;
@@ -1984,7 +2540,105 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     19. BADGES
+     24. QUEST / SEASON / PET / BOSS FETCHERS
+     ═══════════════════════════════════════════════════════════════ */
+  async function fetchQuests(){
+    const sb = getSb(); if (!sb || !sb.rpc) return;
+    try {
+      const res = await sb.rpc('rpc_wq_get_quests');
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok === true){
+        SOC.quests = Array.isArray(d.data) ? d.data : [];
+        SOC.questsDayKey = d.day_key || '';
+        SOC.unclaimedQuests = SOC.quests.filter(q => !q.claimed && q.progress >= q.target).length;
+        updateBadges();
+      }
+    } catch(e){ log('fetchQuests', e.message); }
+  }
+  async function fetchSeason(){
+    const sb = getSb(); if (!sb || !sb.rpc) return;
+    try {
+      const res = await sb.rpc('rpc_ws_get_season');
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok === true){
+        SOC.season = d.season;
+        SOC.seasonProgress = d.progress;
+        if (d.season && d.progress){
+          const claimedFree = new Set(d.progress.claimed_tiers || []);
+          const claimedPrem = new Set(d.progress.claimed_premium_tiers || []);
+          let unclaimed = 0;
+          for (let t = 1; t <= (d.progress.tier || 0); t++){
+            if (!claimedFree.has(t)) unclaimed++;
+            if (d.progress.premium && !claimedPrem.has(t)) unclaimed++;
+          }
+          SOC.unclaimedSeason = unclaimed;
+        } else SOC.unclaimedSeason = 0;
+        updateBadges();
+      }
+    } catch(e){ log('fetchSeason', e.message); }
+  }
+  async function fetchPets(){
+    const sb = getSb(); if (!sb || !sb.rpc) return;
+    try {
+      const res = await sb.rpc('rpc_wp_get_pets');
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok === true) SOC.pets = Array.isArray(d.data) ? d.data : [];
+    } catch(e){ log('fetchPets', e.message); }
+  }
+  async function fetchBoss(){
+    const sb = getSb(); if (!sb || !sb.rpc) return;
+    try {
+      const res = await sb.rpc('rpc_wb_get_current_boss');
+      if (res.error) throw res.error;
+      const d = res.data || {};
+      if (d.ok === true){
+        SOC.boss = d.boss || null;
+        SOC.bossMy = d.my || null;
+        SOC.bossTotal = d.total_participants || 0;
+        SOC.claimableBoss = !!(SOC.boss && SOC.boss.status === 'defeated' && SOC.bossMy && SOC.bossMy.damage > 0 && !SOC.bossMy.claimed);
+        updateBadges();
+      }
+    } catch(e){ log('fetchBoss', e.message); }
+  }
+  let _bossPollTimerInner = null;
+  function startBossPoll(){
+    stopBossPoll();
+    _bossPollTimerInner = setInterval(() => {
+      if (document.hidden) return;
+      if (S.activeTab !== 'boss') return;
+      fetchBoss().then(rerenderBoss);
+    }, CFG.BOSS_POLL_MS);
+  }
+  function stopBossPoll(){
+    if (_bossPollTimerInner){ clearInterval(_bossPollTimerInner); _bossPollTimerInner = null; }
+    if (_bossPollTimer){ clearInterval(_bossPollTimer); _bossPollTimer = null; }
+  }
+  function startBossRealtime(){
+    const sb = getSb();
+    if (!sb || !sb.channel || _bossRtChannel) return;
+    try {
+      _bossRtChannel = sb.channel('wf-boss-rt')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'srank_weapon_bosses' }, () => {
+          if (S.activeTab === 'boss') fetchBoss().then(rerenderBoss);
+        })
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'srank_weapon_boss_damage' }, () => {
+          if (S.activeTab === 'boss') fetchBoss().then(rerenderBoss);
+        })
+        .subscribe(status => log('boss rt:', status));
+    } catch(e){ log('boss rt sub', e); }
+  }
+  function stopBossRealtime(){
+    if (_bossRtChannel){
+      try { _bossRtChannel.unsubscribe(); } catch(_){}
+      _bossRtChannel = null;
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     25. BADGES
      ═══════════════════════════════════════════════════════════════ */
   function setBadge(tabKey, count){
     const b = document.querySelector(`.wf-tab[data-tab="${tabKey}"] .wf-tab-badge`);
@@ -1995,10 +2649,13 @@
   function updateBadges(){
     setBadge('arena', SOC.pendingChallenges);
     setBadge('chat', SOC.unreadChat);
+    setBadge('quest', SOC.unclaimedQuests);
+    setBadge('season', SOC.unclaimedSeason);
+    setBadge('boss', SOC.claimableBoss ? 1 : 0);
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     20. REALTIME
+     26. REALTIME (social)
      ═══════════════════════════════════════════════════════════════ */
   function subscribeRealtime(){
     const sb = getSb();
@@ -2020,6 +2677,8 @@
       try { _rtChannel.unsubscribe(); } catch(_){}
       _rtChannel = null;
     }
+    stopBossRealtime();
+    stopBossPoll();
   }
   function onNewChat(row){
     if (!row || SOC.chat.some(m => m.id === row.id)) return;
@@ -2027,12 +2686,8 @@
     if (SOC.chat.length > 200) SOC.chat = SOC.chat.slice(-200);
     const me = S.user;
     const isMine = me && row.user_id === me.id;
-    if (S.activeTab === 'chat'){
-      rerenderChat();
-    } else if (!isMine){
-      SOC.unreadChat = Math.min(99, SOC.unreadChat + 1);
-      updateBadges();
-    }
+    if (S.activeTab === 'chat'){ rerenderChat(); }
+    else if (!isMine){ SOC.unreadChat = Math.min(99, SOC.unreadChat + 1); updateBadges(); }
   }
   function onNewMatch(row){
     if (!row) return;
@@ -2049,7 +2704,6 @@
     if (!row) return;
     const me = S.user;
     if (!me || (row.challenger_id !== me.id && row.opponent_id !== me.id)) return;
-
     if (row.status === 'fighting'){
       if (!S.currentBattleId || S.currentBattleId !== row.id){
         if (S.user) saveActiveBattleId(S.user.id, row.id);
@@ -2062,9 +2716,8 @@
         if (S.activeTab === 'arena') fetchArena().then(rerenderArena);
       }
     } else if (row.status === 'resolved'){
-      if (S.currentBattleId === row.id){
-        refreshBattleState();
-      } else {
+      if (S.currentBattleId === row.id) refreshBattleState();
+      else {
         const iWon = row.winner_id === me.id;
         toast(iWon ? '🏆 Bạn thắng duel!' : '💔 Bạn thua duel', iWon ? 'success' : 'error');
         if (S.user) saveActiveBattleId(S.user.id, null);
@@ -2082,7 +2735,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     21. OPEN / CLOSE
+     27. OPEN / CLOSE
      ═══════════════════════════════════════════════════════════════ */
   async function openPage(){
     ensurePage();
@@ -2137,14 +2790,15 @@
     fetchArena();
     fetchFeed();
     fetchChat().then(() => { if (S.activeTab === 'chat') rerenderChat(); });
+    fetchQuests().then(rerenderQuests);
+    fetchSeason().then(rerenderSeason);
+    fetchPets().then(rerenderPets);
+    fetchBoss().then(rerenderBoss);
 
-    // Check if có battle đang fighting → hiện "Đang đấu"
     const activeId = getActiveBattleId(S.user.id);
     if (activeId){
       const activeData = await fetchActiveBattle();
-      if (activeData){
-        S.activeBattleData = activeData;
-      }
+      if (activeData) S.activeBattleData = activeData;
     }
   }
   function closePage(){
@@ -2156,22 +2810,20 @@
     closeResult();
     removeModal('wsChallengeModal');
     removeModal('wsGiftModal');
+    removeModal('wsPetFeedModal');
     closeBattle();
     unsubscribeRealtime();
     if (S.state && S.user) saveLocal(S.user.id, S.state);
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     22. BOOT
+     28. BOOT
      ═══════════════════════════════════════════════════════════════ */
   function bindTriggers(){
     const btn = document.getElementById('weaponBtn');
     if (btn && !btn.__wfBound){
       btn.__wfBound = true;
-      btn.addEventListener('click', e => {
-        e.preventDefault(); e.stopPropagation();
-        openPage();
-      });
+      btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openPage(); });
     }
   }
   function boot(){
@@ -2179,13 +2831,13 @@
     bindTriggers();
     let tries = 0;
     const t = setInterval(() => { bindTriggers(); if (++tries > 20) clearInterval(t); }, 300);
-    log('v3.1 ready ✓ (PvP turn-based combat)');
+    log('v4.0 ready ✓ (quest + season + pet + boss)');
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
   else boot();
 
   /* ═══════════════════════════════════════════════════════════════
-     23. API
+     29. API
      ═══════════════════════════════════════════════════════════════ */
   window.WeaponForge = {
     open: openPage, close: closePage,
@@ -2193,7 +2845,7 @@
     reset: () => {
       if (!S.user) return;
       localStorage.removeItem(stateKey(S.user.id));
-      localStorage.removeItem(ACTIVE_BATTLE_KEY_PREFIX + S.user.id);
+      localStorage.removeItem(ACTIVE_BATTLE_KEY + S.user.id);
       S.state = defaultState();
       render();
     },
@@ -2205,6 +2857,7 @@
     },
     rerender: render,
     openBattle: (id) => openBattle(id),
+    goto: (tab) => { S.activeTab = tab; render(); },
     _S: S, _SOC: SOC,
   };
 })();
