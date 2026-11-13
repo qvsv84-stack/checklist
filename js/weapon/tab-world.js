@@ -1,5 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — TAB WORLD (v1.0)
+   WEAPON FORGE — TAB WORLD (v1.1 — pass scene directly)
+   ───────────────────────────────────────────────────────────────────────
+   v1.1: Truyền TownScene OBJECT trực tiếp vào mount, không qua registry.
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -148,6 +150,18 @@
     }
 
     try {
+      // ⭐ LẤY SCENE OBJECT TRỰC TIẾP — không qua registry
+      const TownScene = window.__WF.sceneTown?.TownScene;
+
+      if (!TownScene){
+        console.error('[WF-TabWorld] scene-town.js chưa load hoặc export sai');
+        console.error('[WF-TabWorld] window.__WF.sceneTown =', window.__WF.sceneTown);
+        throw new Error('scene-town.js chưa load — kiểm tra Network tab');
+      }
+
+      log('TownScene found:', typeof TownScene, TownScene.key || '(no key)');
+
+      // Attach HUD
       WorldUI.attach(_container);
       WorldUI.setLoading(true, 'Đang tải thế giới…');
 
@@ -159,10 +173,10 @@
         }
       });
 
-      log('Mounting World engine…');
+      // ⭐ Mount với scene OBJECT trực tiếp
+      log('Mounting with TownScene object...');
       await World.mount(_mountEl, {
-        scenes: ['Town'],
-        sceneTimeout: 8000,
+        scenes: [TownScene],   // ← OBJECT trực tiếp
       });
 
       log('World engine ready');
@@ -182,7 +196,7 @@
           <div class="wf-world-error">
             <b>⚠️ Không tải được thế giới</b>
             ${escapeHtml(msg)}<br><br>
-            <span style="opacity:.7;font-size:11px">Kiểm tra kết nối mạng và thử lại</span>
+            <span style="opacity:.7;font-size:11px">Kiểm tra console (F12) để xem chi tiết</span>
           </div>
         `;
       }
@@ -244,22 +258,14 @@
       .replace(/'/g, '&#39;');
   }
 
-  function isMounted(){
-    return _mounted;
-  }
+  function isMounted(){ return _mounted; }
 
   function setupAutoCleanup(){
     window.addEventListener('wf:tabChanged', (e) => {
       const tab = e?.detail?.tab;
-      if (tab && tab !== 'world'){
-        closeWorld();
-      }
+      if (tab && tab !== 'world') closeWorld();
     });
-
-    window.addEventListener('wf:pageClosing', () => {
-      closeWorld();
-    });
-
+    window.addEventListener('wf:pageClosing', () => closeWorld());
     document.addEventListener('visibilitychange', () => {
       if (!_mounted) return;
       if (document.hidden){
@@ -279,5 +285,5 @@
     isMounted,
   };
 
-  log('tab-world.js ✓');
+  log('tab-world.js ✓ v1.1 (pass scene object directly)');
 })();
