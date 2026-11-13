@@ -1,9 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — TAB CHARACTER
-   - Grid 20 nhân vật từ character-library
-   - Preview lớn character đang chọn
-   - Tap để chọn → lưu state.character_id
-   - CSS inject tự động
+   WEAPON FORGE — TAB CHARACTER v2.0 (Full Body)
+   - Render grid 22 nhân vật full body
+   - Ragnarok: ảnh PNG trực tiếp
+   - LPC: fetch async, cache
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -22,7 +21,7 @@
   const { esc, toast, playSound } = U;
 
   /* ═══════════════════════════════════════════════════════════════
-     CSS INJECT
+     CSS — avatar full body, không mask tròn
      ═══════════════════════════════════════════════════════════════ */
   function injectCSS(){
     if (document.getElementById('wsCharCSS')) return;
@@ -39,17 +38,17 @@
         margin-bottom: 16px;
       }
       .ws-char-hero-avatar {
-        width: 140px;
-        height: 140px;
+        width: 160px;
+        height: 200px;
         margin: 0 auto 12px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #fff7d9, #ffd966);
+        border-radius: 16px;
+        background: linear-gradient(180deg, #fff7d9 0%, #ffd966 100%);
         border: 3px solid #f59e0b;
         box-shadow: 0 8px 24px -8px rgba(245,158,11,.6),
                     0 0 0 4px rgba(245,158,11,.15);
         overflow: hidden;
         display: flex;
-        align-items: center;
+        align-items: flex-end;
         justify-content: center;
         position: relative;
       }
@@ -57,12 +56,16 @@
         width: 100%;
         height: 100%;
         object-fit: contain;
+        object-position: center bottom;
         display: block;
+        image-rendering: pixelated;
+        image-rendering: -moz-crisp-edges;
       }
       .ws-char-hero-fallback {
-        font-size: 64px;
+        font-size: 72px;
         line-height: 1;
         display: none;
+        padding-bottom: 20px;
       }
       .ws-char-hero-avatar.fallback .ws-char-hero-fallback { display: block; }
       .ws-char-hero-avatar.fallback img { display: none; }
@@ -114,7 +117,7 @@
         flex-direction: column;
         align-items: center;
         gap: 4px;
-        padding: 8px 4px;
+        padding: 6px 4px;
         background: rgba(255,255,255,.9);
         border: 2px solid rgba(220,180,100,.4);
         border-radius: 12px;
@@ -148,11 +151,11 @@
       }
       .ws-char-card-avatar {
         width: 100%;
-        aspect-ratio: 1 / 1;
+        aspect-ratio: 3 / 4;
         border-radius: 10px;
-        background: linear-gradient(135deg, #fff7d9, #ffd966);
+        background: linear-gradient(180deg, #fff7d9 0%, #ffd966 100%);
         display: flex;
-        align-items: center;
+        align-items: flex-end;
         justify-content: center;
         overflow: hidden;
         position: relative;
@@ -161,11 +164,15 @@
         width: 100%;
         height: 100%;
         object-fit: contain;
+        object-position: center bottom;
         display: block;
+        image-rendering: pixelated;
+        image-rendering: -moz-crisp-edges;
       }
       .ws-char-card-fallback {
-        font-size: 32px;
+        font-size: 36px;
         display: none;
+        padding-bottom: 8px;
       }
       .ws-char-card-avatar.fallback .ws-char-card-fallback { display: block; }
       .ws-char-card-avatar.fallback img { display: none; }
@@ -179,6 +186,20 @@
         white-space: nowrap;
         max-width: 100%;
         line-height: 1.2;
+      }
+      .ws-char-loading {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        color: #a06a28;
+        animation: wsCharPulse 1.2s ease-in-out infinite;
+      }
+      @keyframes wsCharPulse {
+        0%, 100% { opacity: .4; }
+        50% { opacity: 1; }
       }
     `;
     document.head.appendChild(st);
@@ -194,22 +215,27 @@
 
   function renderAvatarHtml(char, size){
     if (!char) return '';
-    const url = LIB.getUrl(char, size || 200);
-    return `
-      <img src="${url}" alt="${esc(char.name)}" loading="lazy"
-           onerror="this.parentNode.classList.add('fallback')">
-      <span class="ws-char-hero-fallback">${char.emoji || '👤'}</span>
-    `;
+    const url = LIB.getUrl(char);
+    if (url) {
+      return `<img src="${url}" alt="${esc(char.name)}" loading="lazy"
+                   onerror="this.parentNode.classList.add('fallback')">
+              <span class="ws-char-hero-fallback">${char.emoji || '👤'}</span>`;
+    }
+    // LPC — hiển thị loading, sẽ fetch async
+    return `<div class="ws-char-loading" data-lpc-id="${char.id}">⏳</div>
+            <span class="ws-char-hero-fallback">${char.emoji || '👤'}</span>`;
   }
 
   function renderSmallAvatarHtml(char){
     if (!char) return '';
-    const url = LIB.getUrl(char, 120);
-    return `
-      <img src="${url}" alt="${esc(char.name)}" loading="lazy"
-           onerror="this.parentNode.classList.add('fallback')">
-      <span class="ws-char-card-fallback">${char.emoji || '👤'}</span>
-    `;
+    const url = LIB.getUrl(char);
+    if (url) {
+      return `<img src="${url}" alt="${esc(char.name)}" loading="lazy"
+                   onerror="this.parentNode.classList.add('fallback')">
+              <span class="ws-char-card-fallback">${char.emoji || '👤'}</span>`;
+    }
+    return `<div class="ws-char-loading" data-lpc-id="${char.id}">⏳</div>
+            <span class="ws-char-card-fallback">${char.emoji || '👤'}</span>`;
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -235,17 +261,15 @@
 
     return `
       <div class="ws-char-hero">
-        <div class="ws-char-hero-avatar">${renderAvatarHtml(selected, 300)}</div>
+        <div class="ws-char-hero-avatar" id="wsCharHeroAvatar">${renderAvatarHtml(selected)}</div>
         <div class="ws-char-hero-name">${esc(selected?.name || 'Chưa chọn')}</div>
         <div class="ws-char-hero-class">${esc(selected?.class || '—')}</div>
       </div>
-
       <div class="ws-char-section-title">👥 Chọn nhân vật (${chars.length})</div>
       <div class="ws-char-grid">${cards}</div>
-
       <div style="font-size:11px;color:#a06a28;font-weight:700;text-align:center;margin-top:16px;line-height:1.5;">
-        Ảnh từ <b>DiceBear</b> (miễn phí, CC0)<br>
-        Nhân vật đã chọn sẽ xuất hiện trong tab <b>Rèn</b>
+        <b>Ragnarok Online</b> + <b>LPC</b> (pixel art, CC0)<br>
+        Full body — nhân vật sẽ xuất hiện trong tab <b>Rèn</b>
       </div>
     `;
   }
@@ -264,29 +288,65 @@
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); }
       });
     });
+
+    // Fetch LPC ảnh async
+    resolveLpcImages(body);
   }
 
+  /* ═══════════════════════════════════════════════════════════════
+     RESOLVE LPC ẢNH (async, replace loading → img)
+     ═══════════════════════════════════════════════════════════════ */
+  async function resolveLpcImages(body){
+    const loadings = body.querySelectorAll('.ws-char-loading');
+    if (!loadings.length) return;
+
+    for (const el of loadings){
+      const charId = el.dataset.lpcId;
+      const char = LIB.getById(charId);
+      if (!char) continue;
+
+      try {
+        const url = await LIB.getUrlAsync(char);
+        if (!url) continue;
+
+        const parent = el.parentNode;
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = char.name;
+        img.loading = 'lazy';
+        img.onerror = () => parent.classList.add('fallback');
+        el.replaceWith(img);
+      } catch(e) {
+        console.warn('[WF] LPC resolve failed:', charId, e);
+      }
+    }
+
+    // Re-render hero nếu nhân vật đang chọn là LPC
+    const selected = getSelected();
+    if (selected && selected.job == null && selected._cachedUrl){
+      const heroAvatar = document.getElementById('wsCharHeroAvatar');
+      if (heroAvatar) {
+        heroAvatar.innerHTML = `<img src="${selected._cachedUrl}" alt="${esc(selected.name)}"
+          onerror="this.parentNode.classList.add('fallback')">
+          <span class="ws-char-hero-fallback">${selected.emoji || '👤'}</span>`;
+      }
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     SELECT
+     ═══════════════════════════════════════════════════════════════ */
   function selectCharacter(charId){
     const char = LIB.getById(charId);
-    if (!char){
-      toast('Nhân vật không tồn tại', 'warning');
-      return;
-    }
-    if (!S.state){
-      toast('Đang tải, chờ chút', 'warning');
-      return;
-    }
+    if (!char){ toast('Nhân vật không tồn tại', 'warning'); return; }
+    if (!S.state){ toast('Đang tải, chờ chút', 'warning'); return; }
     if (S.state.character_id === charId) return;
 
     S.state.character_id = charId;
     ST.scheduleSave();
-
     playSound(880, .08);
     setTimeout(() => playSound(1175, .12), 60);
-
     toast(`✨ Đã chọn ${char.name}`, 'success');
-
-    // Re-render tab character
     window.__WF.index?.render?.();
   }
 
@@ -302,5 +362,5 @@
     injectCSS,
   };
 
-  console.log('[WF] tab-character.js ✓');
+  console.log('[WF] tab-character.js v2.0 ✓ (full body)');
 })();
