@@ -1,8 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE WORLD — ENGINE (v2.1 — dimension fallback)
+   WEAPON FORGE WORLD — ENGINE (v2.2 — force CANVAS renderer)
    ───────────────────────────────────────────────────────────────────────
-   v2.1: Không dùng Math.max(1, 0) nữa. Fallback về window size nếu
-         container có 0 size (defensive).
+   v2.2 FIX: Đổi Phaser.AUTO → Phaser.CANVAS
+   - iOS Safari 18.x + Phaser WebGL = canvas rỗng (bug context)
+   - Canvas2D chậm hơn ~20% nhưng render ổn định 100%
+   - Thêm debug log chi tiết canvas state
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -18,12 +20,8 @@
   let _resizeObserver = null;
   let _visibilityHandler = null;
 
-  function log(...a){
-    try { console.log('[WF-World]', ...a); } catch(_){}
-  }
-  function warn(...a){
-    try { console.warn('[WF-World]', ...a); } catch(_){}
-  }
+  function log(...a){ try { console.log('[WF-World]', ...a); } catch(_){} }
+  function warn(...a){ try { console.warn('[WF-World]', ...a); } catch(_){} }
 
   function loadPhaser(){
     if (window.Phaser) return Promise.resolve(window.Phaser);
@@ -43,14 +41,8 @@
       const s = document.createElement('script');
       s.src = PHASER_URL;
       s.async = true;
-      s.onload = () => {
-        log('Phaser loaded:', PHASER_VERSION);
-        resolve(window.Phaser);
-      };
-      s.onerror = () => {
-        _phaserPromise = null;
-        reject(new Error('Phaser load failed (CDN)'));
-      };
+      s.onload = () => { log('Phaser loaded:', PHASER_VERSION); resolve(window.Phaser); };
+      s.onerror = () => { _phaserPromise = null; reject(new Error('Phaser load failed (CDN)')); };
       document.head.appendChild(s);
     });
 
@@ -64,6 +56,31 @@
       if (Town) return Town;
     }
     throw new Error(`Scene "${s}" không tìm thấy`);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     CANVAS INSPECT — log chi tiết state canvas
+     ═══════════════════════════════════════════════════════════════ */
+  function inspectCanvas(label){
+    if (!_game || !_game.canvas) {
+      log(`[${label}] Canvas chưa tồn tại`);
+      return;
+    }
+    const c = _game.canvas;
+    const cs = getComputedStyle(c);
+    log(`[${label}] Canvas:`, {
+      width: c.width,
+      height: c.height,
+      styleW: c.style.width,
+      styleH: c.style.height,
+      display: cs.display,
+      visibility: cs.visibility,
+      opacity: cs.opacity,
+      position: cs.position,
+      zIndex: cs.zIndex,
+      parentId: c.parentElement?.id || '',
+      parentDisplay: c.parentElement ? getComputedStyle(c.parentElement).display : '',
+    });
   }
 
   async function mount(parent, opts){
@@ -89,17 +106,16 @@
     _parent = parent;
     const Phaser = window.Phaser;
 
-    /* ⭐ FIX: Không dùng Math.max(1, 0). Fallback window size. */
     let w = parent.clientWidth;
     let h = parent.clientHeight;
-
     if (!w || w < 10) w = window.innerWidth || 400;
     if (!h || h < 10) h = Math.max(300, (window.innerHeight || 600) - 100);
 
     log('Initial size:', w, 'x', h);
 
+    /* ⭐ FIX v2.2: Đổi AUTO → CANVAS */
     _game = new Phaser.Game({
-      type: Phaser.AUTO,
+      type: Phaser.CANVAS,           // ← FORCE Canvas2D
       parent: parent,
       width: w,
       height: h,
@@ -121,11 +137,18 @@
         antialias: false,
         pixelArt: true,
         transparent: false,
+        clearBeforeRender: true,      // ← force clear canvas mỗi frame
       },
       scene: resolvedScenes,
     });
 
-    /* ⭐ ResizeObserver — chỉ resize khi size hợp lệ > 10px */
+    log('Renderer type:', _game.renderer?.type === Phaser.CANVAS ? 'CANVAS ✓' : 'WEBGL');
+
+    /* Inspect canvas ngay lập tức */
+    setTimeout(() => inspectCanvas('after-init'), 100);
+    setTimeout(() => inspectCanvas('after-500ms'), 500);
+    setTimeout(() => inspectCanvas('after-1500ms'), 1500);
+
     if (typeof ResizeObserver !== 'undefined'){
       _resizeObserver = new ResizeObserver(() => {
         if (!_game || !_parent) return;
@@ -155,24 +178,14 @@
 
   function unmount(){
     if (!_game) return;
-
-    try {
-      _game.destroy(true);
-    } catch(e){
-      warn('destroy error:', e);
-    }
+    try { _game.destroy(true); } catch(e){ warn('destroy error:', e); }
     _game = null;
 
-    if (_resizeObserver){
-      try { _resizeObserver.disconnect(); } catch(_){}
-      _resizeObserver = null;
-    }
-
+    if (_resizeObserver){ try { _resizeObserver.disconnect(); } catch(_){} _resizeObserver = null; }
     if (_visibilityHandler){
       document.removeEventListener('visibilitychange', _visibilityHandler);
       _visibilityHandler = null;
     }
-
     if (_parent){
       try {
         const canvases = _parent.querySelectorAll('canvas');
@@ -180,19 +193,14 @@
       } catch(_){}
       _parent = null;
     }
-
     log('Game destroyed');
   }
 
   function pause(){
-    if (_game && _game.loop) {
-      try { _game.loop.sleep(); } catch(_){}
-    }
+    if (_game && _game.loop) { try { _game.loop.sleep(); } catch(_){} }
   }
   function resume(){
-    if (_game && _game.loop) {
-      try { _game.loop.wake(); } catch(_){}
-    }
+    if (_game && _game.loop) { try { _game.loop.wake(); } catch(_){} }
   }
 
   function isReady(){ return !!_game; }
@@ -216,19 +224,12 @@
   }
 
   window.__WF.world = {
-    mount,
-    unmount,
-    pause,
-    resume,
-    isReady,
-    getGame,
-    getScene,
-    getPlayerData,
-    loadPhaser,
-    PHASER_VERSION,
+    mount, unmount, pause, resume,
+    isReady, getGame, getScene, getPlayerData,
+    loadPhaser, PHASER_VERSION,
     registerScene: function(){ log('registerScene (deprecated)'); },
     getRegisteredScenes: function(){ return []; },
   };
 
-  log('engine.js ✓ v2.1 (dimension fallback)');
+  log('engine.js ✓ v2.2 (CANVAS renderer + canvas inspect)');
 })();
