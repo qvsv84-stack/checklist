@@ -1,9 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — MODULE #3: CSS INJECT
-   - Toàn bộ CSS của weapon page + battle screen
-   - Tự inject <style id="wfStyles"> khi load
-   - Không phụ thuộc module khác
-   - Load: #3
+   WEAPON FORGE — MODULE #3: CSS INJECT (v5.1 — có character sprite)
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -36,8 +32,12 @@
 .wf-energy-track{flex:1;height:6px;border-radius:3px;background:rgba(200,150,80,.25);overflow:hidden}
 .wf-energy-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,#fbbf24,#f59e0b);transition:width .4s}
 .wf-energy-num{font-variant-numeric:tabular-nums;min-width:44px;text-align:right}
-.wf-stage{position:relative;padding:26px 20px 22px;margin-bottom:14px;background:radial-gradient(ellipse 90% 70% at 50% 0%,rgba(255,255,255,.98),transparent 70%),linear-gradient(160deg,#fffbeb 0%,#fef3c7 100%);border:1.5px solid rgba(220,180,100,.5);border-radius:24px;box-shadow:0 12px 30px -14px rgba(160,110,30,.28);display:flex;flex-direction:column;align-items:center;gap:10px;overflow:hidden;min-height:230px}
+.wf-stage{position:relative;padding:26px 20px 22px 112px;margin-bottom:14px;background:radial-gradient(ellipse 90% 70% at 50% 0%,rgba(255,255,255,.98),transparent 70%),linear-gradient(160deg,#fffbeb 0%,#fef3c7 100%);border:1.5px solid rgba(220,180,100,.5);border-radius:24px;box-shadow:0 12px 30px -14px rgba(160,110,30,.28);display:flex;flex-direction:column;align-items:center;gap:10px;overflow:hidden;min-height:230px}
 .wf-stage::before{content:"";position:absolute;inset:-40% -20% auto -20%;height:70%;background:radial-gradient(ellipse at center,rgba(255,200,120,.35),transparent 70%);pointer-events:none}
+.wf-character-sprite{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,#fff7d9,#ffd966);border:2.5px solid #f59e0b;box-shadow:0 4px 12px -4px rgba(245,158,11,.6);overflow:hidden;display:flex;align-items:center;justify-content:center;z-index:3}
+.wf-character-sprite img{width:100%;height:100%;object-fit:contain;display:block}
+.wf-character-fallback{font-size:40px;line-height:1;display:flex;align-items:center;justify-content:center}
+@media (max-width:380px){.wf-stage{padding-left:88px}.wf-character-sprite{width:68px;height:68px;left:8px}.wf-character-fallback{font-size:32px}}
 .wf-hammer{font-size:42px;line-height:1;transform-origin:70% 80%;filter:drop-shadow(0 4px 8px rgba(120,80,20,.3));position:relative;z-index:2}
 .wf-hammer.raising{animation:wfHammerRaise .22s cubic-bezier(.4,0,.6,1) forwards}
 .wf-hammer.striking{animation:wfHammerStrike .16s cubic-bezier(.6,0,.8,1) forwards}
@@ -385,6 +385,5 @@
   document.head.appendChild(st);
 
   window.__WF.css = { injected: true };
-
-  console.log('[WF] css.js ✓');
+  console.log('[WF] css.js ✓ (v5.1 — character sprite CSS)');
 })();
