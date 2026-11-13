@@ -1,5 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — MODULE #7: TAB FORGE (v5.1 — có character sprite)
+   WEAPON FORGE — MODULE #7: TAB FORGE (v5.2 — full body character)
+   ───────────────────────────────────────────────────────────────────────
+   v5.2:
+     - renderCharacterSprite: hỗ trợ full body (Ragnarok + LPC)
+     - LPC fetch async, cache URL
+     - Fallback emoji nếu fail
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
@@ -26,17 +31,41 @@
     shakeScreen, spawnSparks, numberPop,
   } = U;
 
+  /* ═══════════════════════════════════════════════════════════════
+     CHARACTER SPRITE (full body)
+     ═══════════════════════════════════════════════════════════════ */
   function renderCharacterSprite(s){
     const LIB = window.__WF.characterLibrary;
     if (!LIB) return '';
     const char = LIB.getById(s.character_id) || LIB.getDefault();
     if (!char) return '';
-    const url = LIB.getUrl(char, 200);
-    return `<img src="${url}" alt="" loading="lazy"
-                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+
+    const url = LIB.getUrl(char);
+    if (url) {
+      return `<img src="${url}" alt="" loading="lazy"
+                   onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+              <span class="wf-character-fallback" style="display:none">${char.emoji || '👤'}</span>`;
+    }
+
+    // LPC — fetch async
+    if (char.job == null) {
+      LIB.getUrlAsync(char).then(u => {
+        if (!u) return;
+        const el = document.getElementById('wfCharSprite');
+        if (!el) return;
+        el.innerHTML = `<img src="${u}" alt=""
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+          <span class="wf-character-fallback" style="display:none">${char.emoji || '👤'}</span>`;
+      });
+    }
+
+    return `<div style="font-size:24px;color:#a06a28;animation:wfSpin 1s linear infinite">⏳</div>
             <span class="wf-character-fallback" style="display:none">${char.emoji || '👤'}</span>`;
   }
 
+  /* ═══════════════════════════════════════════════════════════════
+     RENDER TAB
+     ═══════════════════════════════════════════════════════════════ */
   function renderForgeTab(){
     const s = S.state;
     const tier = tierOf(s.enh), ti = CFG.TIERS[tier];
@@ -104,6 +133,9 @@
     `;
   }
 
+  /* ═══════════════════════════════════════════════════════════════
+     FORGE ACTION
+     ═══════════════════════════════════════════════════════════════ */
   async function doForge(){
     if (S.busy || !S.state) return;
     const s = S.state;
@@ -130,9 +162,11 @@
       if (hammer){ hammer.classList.remove('striking'); hammer.classList.add('raising'); }
       playSound(180, .1);
       await sleep(220);
+
       if (hammer){ hammer.classList.remove('raising'); hammer.classList.add('striking'); }
       playSound(120, .08, 'triangle');
       await sleep(160);
+
       shakeScreen();
       spawnSparks(8);
       vibrate(30);
@@ -162,6 +196,7 @@
         matUsed,
       });
       if (s.history.length > 50) s.history.length = 50;
+
       ST.scheduleSave();
       playForgeSound(outcome);
 
@@ -190,6 +225,9 @@
     }
   }
 
+  /* ═══════════════════════════════════════════════════════════════
+     RESULT POPUP
+     ═══════════════════════════════════════════════════════════════ */
   function showResult(outcome, result, unlocked){
     const ov = document.getElementById('wfResult');
     if (!ov) return;
@@ -258,9 +296,15 @@
     document.getElementById('wfResult')?.classList.remove('show');
   }
 
+  /* ═══════════════════════════════════════════════════════════════
+     EXPORT
+     ═══════════════════════════════════════════════════════════════ */
   window.__WF.tabForge = {
-    renderForgeTab, doForge, showResult, closeResult,
+    renderForgeTab,
+    doForge,
+    showResult,
+    closeResult,
   };
 
-  console.log('[WF] tab-forge.js ✓ (v5.1 — character sprite)');
+  console.log('[WF] tab-forge.js ✓ (v5.2 — full body character)');
 })();
