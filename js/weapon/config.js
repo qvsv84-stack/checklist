@@ -1,21 +1,56 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   WEAPON FORGE — MODULE #1: CONFIG + MATH
+   WEAPON FORGE — MODULE #1: CONFIG + MATH (v5.0 — ENH CAP 100)
    ───────────────────────────────────────────────────────────────────────
-   - Định nghĩa toàn bộ CFG (constants, tiers, materials, pets, quests...)
-   - Pure math functions: tierOf, powerOf, effectiveRates, applyOutcome...
-   - Không phụ thuộc module khác (chỉ dùng window.__WF namespace)
-   - Load order: #1 (đầu tiên)
+   CHANGELOG v5.0:
+     - MAX_ENH: 100 (thay vì 15)
+     - Tier ranges mới: B 0-14, A 15-29, S 30-49, SS 50-69, SSS 70-89, VIP 90-100
+     - Achievements mở rộng: enh_25, enh_50, enh_75, enh_100
+     - ENH_TO_TIER generate runtime (101 phần tử)
+     - Migration enh cũ 0-15 → 0-100 (xử lý ở state.js)
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   "use strict";
   if (window.__WF && window.__WF.config) return;
-
   window.__WF = window.__WF || {};
+
+  /* ═══════════════════════════════════════════════════════════════
+     MAX ENHANCEMENT
+     ═══════════════════════════════════════════════════════════════ */
+  const MAX_ENH = 100;
+
+  /* ═══════════════════════════════════════════════════════════════
+     TIER RANGES
+     ═══════════════════════════════════════════════════════════════ */
+  const TIER_RANGES = {
+    B:   { min: 0,  max: 14  },
+    A:   { min: 15, max: 29  },
+    S:   { min: 30, max: 49  },
+    SS:  { min: 50, max: 69  },
+    SSS: { min: 70, max: 89  },
+    VIP: { min: 90, max: 100 },
+  };
+
+  function buildEnhToTier(){
+    const arr = new Array(MAX_ENH + 1);
+    for (let i = 0; i <= MAX_ENH; i++){
+      if (i <= 14) arr[i] = 'B';
+      else if (i <= 29) arr[i] = 'A';
+      else if (i <= 49) arr[i] = 'S';
+      else if (i <= 69) arr[i] = 'SS';
+      else if (i <= 89) arr[i] = 'SSS';
+      else arr[i] = 'VIP';
+    }
+    return arr;
+  }
 
   /* ═══════════════════════════════════════════════════════════════
      CONFIG
      ═══════════════════════════════════════════════════════════════ */
   const CFG = {
+    // ─── CAP ───
+    MAX_ENH,
+    TIER_RANGES,
+
     // ─── CURRENCY / ENERGY ───
     START_GOLD: 300, FORGE_GOLD: 10, FORGE_ENERGY: 1,
     ENERGY_MAX: 100, ENERGY_REGEN_MS: 6 * 60 * 1000,
@@ -38,14 +73,14 @@
     // ─── TIERS ───
     TIER_ORDER: ['B','A','S','SS','SSS','VIP'],
     TIERS: {
-      B:   { name:'Gỗ Mục',      emoji:'🪵', mult:1,  enhMax:3  },
-      A:   { name:'Sắt Rỉ',      emoji:'⚔️', mult:2,  enhMax:6  },
-      S:   { name:'Thép Sáng',   emoji:'🗡️', mult:4,  enhMax:9  },
-      SS:  { name:'Lam Ngọc',    emoji:'🔷', mult:8,  enhMax:12 },
-      SSS: { name:'Huyền Thiết', emoji:'🌟', mult:16, enhMax:14 },
-      VIP: { name:'Thần Binh',   emoji:'👑', mult:32, enhMax:15 },
+      B:   { name:'Gỗ Mục',      emoji:'🪵', mult:1,  enhMax:14  },
+      A:   { name:'Sắt Rỉ',      emoji:'⚔️', mult:2,  enhMax:29  },
+      S:   { name:'Thép Sáng',   emoji:'🗡️', mult:4,  enhMax:49  },
+      SS:  { name:'Lam Ngọc',    emoji:'🔷', mult:8,  enhMax:69  },
+      SSS: { name:'Huyền Thiết', emoji:'🌟', mult:16, enhMax:89  },
+      VIP: { name:'Thần Binh',   emoji:'👑', mult:32, enhMax:100 },
     },
-    ENH_TO_TIER: ['B','B','B','B','A','A','A','S','S','S','SS','SS','SS','SSS','SSS','VIP'],
+    ENH_TO_TIER: buildEnhToTier(),
 
     // ─── MATERIALS ───
     MATERIALS: {
@@ -71,20 +106,23 @@
     PITY_FAILS_FOR_SUCCESS: 10, PITY_FAILS_FOR_GREAT: 20,
     COMBO_BONUS_PER_STACK: 1, COMBO_BONUS_CAP: 25,
 
-    // ─── ACHIEVEMENTS ───
+    // ─── ACHIEVEMENTS (v5 — thêm milestone 25/50/75/100) ───
     ACHIEVEMENTS: {
-      first_forge: { icon:'🔨', name:'Bước đầu',    desc:'Rèn lần đầu',   gold:50 },
-      forge_10:    { icon:'⚒️', name:'Tay nghề',    desc:'Rèn 10 lần',    gold:100 },
-      forge_100:   { icon:'🏅', name:'Bậc thầy',    desc:'Rèn 100 lần',   gold:500 },
-      enh_5:       { icon:'✨', name:'Tinh luyện',  desc:'Đạt +5',        gold:100 },
-      enh_10:      { icon:'🌟', name:'Cao thủ',     desc:'Đạt +10',       gold:500 },
-      enh_15:      { icon:'👑', name:'Huyền thoại', desc:'Đạt +15 (VIP)', gold:2000 },
-      combo_5:     { icon:'🔥', name:'Chuỗi 5',     desc:'Combo 5',       gold:100 },
-      combo_10:    { icon:'💥', name:'Chuỗi 10',    desc:'Combo 10',      gold:300 },
-      combo_20:    { icon:'⚡', name:'Bất bại',     desc:'Combo 20',      gold:1000 },
-      broke_5:     { icon:'💔', name:'Xui xẻo',     desc:'Gãy 5 lần',     gold:50 },
-      sell_10:     { icon:'💰', name:'Thương nhân', desc:'Bán 10 vũ khí', gold:200 },
-      reach_vip:   { icon:'🏆', name:'Thần Binh',   desc:'Đạt VIP',       gold:5000 },
+      first_forge: { icon:'🔨', name:'Bước đầu',    desc:'Rèn lần đầu',         gold:50 },
+      forge_10:    { icon:'⚒️', name:'Tay nghề',    desc:'Rèn 10 lần',          gold:100 },
+      forge_100:   { icon:'🏅', name:'Bậc thầy',    desc:'Rèn 100 lần',         gold:500 },
+      enh_5:       { icon:'✨', name:'Tinh luyện',  desc:'Đạt +5',              gold:100 },
+      enh_10:      { icon:'🌟', name:'Cao thủ',     desc:'Đạt +10',             gold:500 },
+      enh_25:      { icon:'🔮', name:'Đại sư',      desc:'Đạt +25',             gold:1000 },
+      enh_50:      { icon:'💠', name:'Tông sư',     desc:'Đạt +50',             gold:3000 },
+      enh_75:      { icon:'🌠', name:'Thánh sư',    desc:'Đạt +75',             gold:8000 },
+      enh_100:     { icon:'👑', name:'Huyền thoại', desc:'Đạt +100 (VIP max)',  gold:20000 },
+      combo_5:     { icon:'🔥', name:'Chuỗi 5',     desc:'Combo 5',             gold:100 },
+      combo_10:    { icon:'💥', name:'Chuỗi 10',    desc:'Combo 10',            gold:300 },
+      combo_20:    { icon:'⚡', name:'Bất bại',     desc:'Combo 20',            gold:1000 },
+      broke_5:     { icon:'💔', name:'Xui xẻo',     desc:'Gãy 5 lần',           gold:50 },
+      sell_10:     { icon:'💰', name:'Thương nhân', desc:'Bán 10 vũ khí',       gold:200 },
+      reach_vip:   { icon:'🏆', name:'Thần Binh',   desc:'Đạt tier VIP',        gold:5000 },
     },
 
     // ─── PETS ───
@@ -106,9 +144,8 @@
   /* ═══════════════════════════════════════════════════════════════
      MATH HELPERS
      ═══════════════════════════════════════════════════════════════ */
-
   function tierOf(enh){
-    return CFG.ENH_TO_TIER[Math.max(0, Math.min(15, enh|0))] || 'B';
+    return CFG.ENH_TO_TIER[Math.max(0, Math.min(MAX_ENH, enh|0))] || 'B';
   }
 
   function tierInfo(enh){
@@ -175,7 +212,7 @@
     else if (outcome === 'hold'){ d = 0; s.combo = 0; s.fails++; }
     else if (outcome === 'success'){ d = +1; s.combo++; s.fails = 0; s.total_success++; }
     else if (outcome === 'great'){ d = +2; gold = 20; s.combo++; s.fails = 0; s.total_success++; }
-    s.enh = Math.max(0, Math.min(15, before + d));
+    s.enh = Math.max(0, Math.min(MAX_ENH, before + d));
     s.gold += gold;
     s.best_combo = Math.max(s.best_combo, s.combo);
     s.total_forges++;
@@ -216,7 +253,10 @@
     ck('forge_100', s.total_forges >= 100);
     ck('enh_5', s.enh >= 5);
     ck('enh_10', s.enh >= 10);
-    ck('enh_15', s.enh >= 15);
+    ck('enh_25', s.enh >= 25);
+    ck('enh_50', s.enh >= 50);
+    ck('enh_75', s.enh >= 75);
+    ck('enh_100', s.enh >= 100);
     ck('combo_5', s.best_combo >= 5);
     ck('combo_10', s.best_combo >= 10);
     ck('combo_20', s.best_combo >= 20);
@@ -228,17 +268,17 @@
 
   function tierBaseEnh(enh){
     const t = tierOf(enh);
-    for (let i = 0; i <= 15; i++) if (tierOf(i) === t) return i;
+    for (let i = 0; i <= MAX_ENH; i++) if (tierOf(i) === t) return i;
     return 0;
   }
 
   function nextTierThreshold(enh){
     const t = tierOf(enh);
     const idx = CFG.TIER_ORDER.indexOf(t);
-    if (idx < 0 || idx >= CFG.TIER_ORDER.length-1) return 15;
+    if (idx < 0 || idx >= CFG.TIER_ORDER.length-1) return MAX_ENH;
     const nt = CFG.TIER_ORDER[idx+1];
-    for (let i = enh+1; i <= 15; i++) if (tierOf(i) === nt) return i;
-    return 15;
+    for (let i = enh+1; i <= MAX_ENH; i++) if (tierOf(i) === nt) return i;
+    return MAX_ENH;
   }
 
   function seasonTierReward(tier, premium){
@@ -254,6 +294,8 @@
      ═══════════════════════════════════════════════════════════════ */
   window.__WF.config = {
     CFG,
+    MAX_ENH,
+    TIER_RANGES,
     tierOf, tierInfo, powerOf, sellPrice,
     materialForTier, currentMaterialBonus, applyBonus,
     effectiveRates, rollOutcome, applyOutcome, consumeMaterial,
@@ -261,5 +303,5 @@
     tierBaseEnh, nextTierThreshold, seasonTierReward,
   };
 
-  console.log('[WF] config.js ✓');
+  console.log('[WF] config.js ✓ (v5.0 — cap 100, 6 tiers)');
 })();
