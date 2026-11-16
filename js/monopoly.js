@@ -1,6 +1,6 @@
 /* =====================================================================
-   CỜ TỶ PHÚ — MONOPOLY (v3.2 — 2 DICE & VIETNAMESE)
-   Double Dice (roll again on double) · Fully translated to VN
+   CỜ TỶ PHÚ — MONOPOLY (v3.3 — FIXED PRICING & DIVERSITY)
+   Fixed Upgrade Pricing · Event Cards · Emergency Sell
    ===================================================================== */
 (function () {
   'use strict';
@@ -139,7 +139,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .center-avatar{width:48px;height:48px;border-radius:50%;flex-shrink:0}
 .center-name{font-family:'Orbitron',sans-serif;font-size:18px;font-weight:900;letter-spacing:1px;text-shadow:0 0 10px currentColor}
 
-/* 2 DICE UI */
 .center-dice-box{display:flex;align-items:center;justify-content:center;gap:20px;margin:10px 0}
 .dice-item{font-size:70px;line-height:1;filter:drop-shadow(0 0 20px rgba(0,240,255,.6));animation:diceIdle 3s ease-in-out infinite}
 .dice-item:nth-child(2){animation-delay:0.5s}
@@ -172,6 +171,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .mp-modal .actions .btn-rent{background:linear-gradient(90deg,#00f0ff,#0055ff);color:#000;box-shadow:0 0 20px rgba(0,240,255,.4)}
 .mp-modal .actions .btn-danger{background:linear-gradient(90deg,#ff2a75,#b000ff);color:#fff;box-shadow:0 0 20px rgba(255,42,117,.4)}
 .mp-modal .actions .btn-skip{background:rgba(255,255,255,.1);color:#a0aabf;border:1px solid rgba(255,255,255,.2)}
+.mp-modal .actions .btn-warning{background:linear-gradient(90deg,#ffcc00,#ff9900);color:#000;box-shadow:0 0 20px rgba(255,204,0,.4)}
 
 .win-card{background:rgba(10,15,28,.95);padding:40px;border-radius:20px;text-align:center;width:min(420px,92%);border:1px solid rgba(0,240,255,.5);box-shadow:0 0 80px rgba(0,240,255,.3);animation:modalPop .4s cubic-bezier(.4,1.4,.6,1);margin:auto}
 .win-card .emoji{font-size:80px;margin-bottom:16px;animation:emojiBounce 1.2s infinite;filter:drop-shadow(0 0 20px rgba(0,240,255,.8))}
@@ -345,12 +345,20 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
   var BOT_NAMES = ['CyberBot', 'NeonViper', 'GlitchKing'];
   var DICE_FACES = ['⚀','⚁','⚂','⚃','⚄','⚅'];
 
-  // VIỆT HÓA SỰ KIỆN
   var MARKET_EVENTS = [
     { type: 'boom', name: 'BÙNG NỔ CRYPTO', desc: 'Thuế tăng 50% trong 3 lượt tới!', color: '#00ff66' },
     { type: 'crash', name: 'SỤP ĐỔ THỊ TRƯỜNG', desc: 'Tất cả nhà giảm 1 cấp!', color: '#ff2a75' },
     { type: 'heist', name: 'ĐÁNH CẮP DỮ LIỆU', desc: 'Người giàu nhất mất 10% tiền chia cho người khác!', color: '#b000ff' },
     { type: 'hack', name: 'HACK HỆ THỐNG', desc: 'Tất cả người chơi nhận $20k!', color: '#ffcc00' }
+  ];
+
+  var EVENT_CARDS = [
+    { title: 'TRÚNG SỐ', desc: 'Bạn nhận được $50,000!', icon: '💰', type: 'gain', amount: 50000 },
+    { title: 'PHẠT THUẾ', desc: 'Bạn bị phạt $20,000!', icon: '💸', type: 'lose', amount: 20000 },
+    { title: 'QUÀ TẶNG', desc: 'Bạn được tặng một căn nhà ngẫu nhiên!', icon: '🎁', type: 'house' },
+    { title: 'VÀO TÙ', desc: 'Bạn bị đưa vào tù 2 lượt!', icon: '🚔', type: 'jail' },
+    { title: 'CHIA SẺ', desc: 'Tất cả người chơi nhận $10,000!', icon: '🤝', type: 'all_gain', amount: 10000 },
+    { title: 'CƯỚP BÓC', desc: 'Bạn lấy 10% tiền của người giàu nhất!', icon: '🏴‍☠️', type: 'steal', percent: 0.1 }
   ];
 
   function initTiles() {
@@ -511,7 +519,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     return ZONES[tile.zone].price * getChainCount(tileIdx);
   }
 
-  /* ============================ MARKET EVENTS ============================ */
   function triggerMarketEvent() {
     var ev = MARKET_EVENTS[rnd(MARKET_EVENTS.length)];
     state.game.global_event = { type: ev.type, turnsLeft: 3 };
@@ -560,6 +567,81 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     dbgEvent('MARKET_EVENT', ev.name);
   }
 
+  /* ============================ EVENT CARDS ============================ */
+  async function drawEventCard(player) {
+    var card = EVENT_CARDS[rnd(EVENT_CARDS.length)];
+    state.game.pending_action = { type: 'event_card', player: player.username, card: card };
+    await commitAndRender();
+    showEventCardModal(player, card);
+  }
+
+  function showEventCardModal(player, card) {
+    $('actionModal').innerHTML =
+      '<h2>' + card.icon + ' ' + card.title + '</h2>' +
+      '<div class="sub">THẺ SỰ KIỆN</div>' +
+      '<div class="prop-info" style="font-size:15px;text-align:center;padding:20px;">' +
+        card.desc +
+      '</div>' +
+      '<div class="actions">' +
+        '<button class="btn btn-primary" id="btnEventOk">TIẾP TỤC</button>' +
+      '</div>';
+    $('actionOverlay').hidden = false;
+    $('btnEventOk').onclick = function () { handleEventCard(player, card); };
+    startDecisionTimeout();
+  }
+
+  async function handleEventCard(player, card) {
+    state.game.pending_action = null;
+    hideActionModal();
+    
+    if (card.type === 'gain') {
+      player.money += card.amount;
+      showMoneyFloat(player.username, card.amount);
+    } else if (card.type === 'lose') {
+      player.money = Math.max(0, player.money - card.amount);
+      showMoneyFloat(player.username, -card.amount);
+    } else if (card.type === 'house') {
+      var props = [];
+      for (var i = 1; i < 28; i++) if (state.game.tiles[i].type === 'prop' && !state.game.tiles[i].owner) props.push(i);
+      if (props.length > 0) {
+        var idx = props[rnd(props.length)];
+        state.game.tiles[idx].owner = player.username;
+        state.game.tiles[idx].level = 1;
+        showMoneyFloat(player.username, 0); // Hiệu ứng
+      } else {
+        player.money += 10000;
+        showMoneyFloat(player.username, 10000);
+      }
+    } else if (card.type === 'jail') {
+      player.pos = 7;
+      player.jail_turns = 2;
+      state.game.is_double = false;
+    } else if (card.type === 'all_gain') {
+      state.game.players.forEach(function(p) {
+        if (!p.bankrupt) {
+          p.money += card.amount;
+          showMoneyFloat(p.username, card.amount);
+        }
+      });
+    } else if (card.type === 'steal') {
+      var richest = null;
+      state.game.players.forEach(function(p) {
+        if (!p.bankrupt && p.username !== player.username && (!richest || p.money > richest.money)) richest = p;
+      });
+      if (richest && richest.money > 0) {
+        var stolen = Math.floor(richest.money * card.percent);
+        richest.money -= stolen;
+        player.money += stolen;
+        showMoneyFloat(richest.username, -stolen);
+        showMoneyFloat(player.username, stolen);
+      }
+    }
+    
+    await commitAndRender();
+    await sleep(400);
+    advanceTurn();
+  }
+
   function renderStaticTiles() {
     var grid = $('boardGrid');
     grid.innerHTML = '';
@@ -601,7 +683,8 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
           }
         }
         
-        var displayPrice = owner ? getBaseValue(i) : ZONES[tile.zone].price;
+        // FIX: Hiển thị tổng giá trị (đã nhân level)
+        var displayPrice = owner ? (getBaseValue(i) * tile.level) : ZONES[tile.zone].price;
         var bandText = fmtShort(displayPrice);
         
         var nameShort = ZONES[tile.zone].short;
@@ -743,7 +826,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var player = currentPlayer();
     if (!player) return;
     state.animating = true;
-    state.game.is_double = false; // Reset double state
+    state.game.is_double = false;
     syncRollBtn();
 
     try {
@@ -872,7 +955,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 
     if (tile.type === 'jail') {
       player.jail_turns = 2;
-      state.game.is_double = false; // Vào tù thì mất lượt, hủy double
+      state.game.is_double = false;
       sfx.lose();
       await commitAndRender();
       await sleep(500);
@@ -881,23 +964,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     }
 
     if (tile.type === 'reward') {
-      var props = [];
-      for (var i = 1; i < 28; i++) if (state.game.tiles[i].type === 'prop') props.push(i);
-      var targetIdx = props[rnd(props.length)];
-      var target = state.game.tiles[targetIdx];
-      if (!target.owner) {
-        target.owner = player.username; target.level = 1;
-        sfx.buy();
-      } else if (target.owner !== player.username) {
-        target.owner = player.username;
-        sfx.buy();
-      } else {
-        player.money += 5000;
-        showMoneyFloat(player.username, 5000);
-      }
-      await commitAndRender();
-      await sleep(600);
-      advanceTurn();
+      await drawEventCard(player);
       return;
     }
 
@@ -1060,12 +1127,10 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
       return;
     }
 
-    // Xử lý Double Dice (đi thêm lượt)
     if (state.game.is_double) {
       state.game.is_double = false;
       state.game.turn_count++;
       
-      // Kiểm tra sự kiện
       if (state.game.turn_count > 0 && state.game.turn_count % 5 === 0) {
         triggerMarketEvent();
       }
@@ -1076,7 +1141,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
             setTimeout(function () { executeRoll(); }, 1000);
         }
       });
-      return; // Không chuyển người chơi
+      return;
     }
 
     state.game.turn_count = (state.game.turn_count || 0) + 1;
@@ -1188,6 +1253,53 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     advanceTurn();
   }
 
+  async function handleEmergencySell() {
+    var pa = state.game.pending_action;
+    if (!pa || pa.type !== 'opponent_tile') return;
+    var player = getPlayer(pa.player);
+    if (!player) return;
+    
+    var myProps = [];
+    state.game.tiles.forEach(function(t, idx) {
+      if (t.type === 'prop' && t.owner === player.username) {
+        var value = getBaseValue(idx) * t.level;
+        myProps.push({ idx: idx, value: value });
+      }
+    });
+    
+    if (myProps.length === 0) {
+      toast('Bạn không có đất để bán!');
+      return;
+    }
+    
+    myProps.sort(function(a, b) { return a.value - b.value; });
+    
+    var soldCount = 0;
+    for (var i = 0; i < myProps.length; i++) {
+      if (player.money >= pa.rentPrice) break;
+      var p = myProps[i];
+      var sellPrice = Math.floor(p.value * 0.5);
+      player.money += sellPrice;
+      state.game.tiles[p.idx].owner = null;
+      state.game.tiles[p.idx].level = 1;
+      soldCount++;
+      showMoneyFloat(player.username, sellPrice);
+    }
+    
+    if (soldCount > 0) {
+      toast('Đã bán ' + soldCount + ' mảnh đất để trả thuế!');
+    }
+    
+    await commitAndRender();
+    await sleep(400);
+    
+    if (player.money >= pa.rentPrice) {
+      handleOpponentAction('rent');
+    } else {
+      handleOpponentAction('bankrupt');
+    }
+  }
+
   function showBuyEmptyModal(player, tileIdx, price) {
     var tile = state.game.tiles[tileIdx];
     var zone = ZONES[tile.zone];
@@ -1249,8 +1361,10 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var owner = getPlayer(tile.owner);
     var canRent = player.money >= rentPrice;
     var canBuy = player.money >= chainValue;
+    var needSell = !canRent && !canBuy;
     var multiplier = chainCount > 1 ? (' × ' + chainCount + ' (chuỗi ' + chainCount + ')') : '';
     var currentBase = getBaseValue(tileIdx);
+    var totalValue = currentBase * tile.level;
     
     var boomHtml = '';
     if (state.game.global_event && state.game.global_event.type === 'boom') {
@@ -1262,6 +1376,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
       '<div class="sub">' + zone.name + ' · Lv.' + tile.level + '</div>' +
       '<div class="prop-info">' +
         '<div class="row"><span>Giá gốc</span><b>' + fmtMoney(currentBase) + multiplier + '</b></div>' +
+        '<div class="row"><span>Tổng giá trị</span><b>' + fmtMoney(totalValue) + '</b></div>' +
         '<div class="row"><span>Mua lại (150%)</span><b>' + fmtMoney(chainValue) + '</b></div>' +
         '<div class="row"><span>Thuê (50%)</span><b>' + fmtMoney(rentPrice) + boomHtml + '</b></div>' +
         '<div class="row"><span>Ví của bạn</span><b>' + fmtMoney(player.money) + '</b></div>' +
@@ -1269,11 +1384,13 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
       '<div class="actions">' +
         '<button class="btn btn-rent" id="btnRent" ' + (canRent ? '' : 'disabled') + '>💸 TRẢ THUÊ</button>' +
         '<button class="btn btn-buy" id="btnBuyOpp" ' + (canBuy ? '' : 'disabled') + '>💰 MUA LẠI</button>' +
+        (needSell ? '<button class="btn btn-warning" id="btnSell">💸 BÁN ĐẤT KHẨN CẤP</button>' : '') +
         '<button class="btn btn-danger" id="btnBankrupt">💀 PHÁ SẢN</button>' +
       '</div>';
     $('actionOverlay').hidden = false;
     if (canRent) $('btnRent').onclick = function () { handleOpponentAction('rent'); };
     if (canBuy) $('btnBuyOpp').onclick = function () { handleOpponentAction('buy'); };
+    if (needSell) $('btnSell').onclick = function () { handleEmergencySell(); };
     $('btnBankrupt').onclick = function () { handleOpponentAction('bankrupt'); };
     startDecisionTimeout();
   }
@@ -1290,6 +1407,8 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
       else if (pa.type === 'opponent_tile') {
         if (state.game.players.find(function (p) { return p.username === pa.player; }).money >= pa.rentPrice) handleOpponentAction('rent');
         else handleOpponentAction('bankrupt');
+      } else if (pa.type === 'event_card') {
+        handleEventCard(getPlayer(pa.player), pa.card);
       }
     }, 30000);
   }
@@ -1485,6 +1604,9 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
       } else if (pa.type === 'opponent_tile') {
         var p = getPlayer(pa.player);
         showOpponentModal(p, pa.tileIdx, pa.chainValue, pa.rentPrice, pa.chainCount);
+      } else if (pa.type === 'event_card') {
+        var p = getPlayer(pa.player);
+        showEventCardModal(p, pa.card);
       }
     } else if (!pa && prevPending) {
       hideActionModal();
@@ -1648,7 +1770,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var elName = $('myDisplayName');
     if (elName) elName.textContent = myUsername;
     bindEvents();
-    dbgEvent('INIT', 'Monopoly v3.2 initialized.');
+    dbgEvent('INIT', 'Monopoly v3.3 initialized.');
   }
 
   function openGame() {
