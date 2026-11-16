@@ -1,5 +1,5 @@
 /* =====================================================================
-   RẮN & THANG — v4.1 (debug panel v2 + busy fix)
+   RẮN & THANG — v4.2 (Extra turn on 6 / Doubles + Auto display_name)
    ===================================================================== */
 (function () {
   'use strict';
@@ -28,7 +28,6 @@ input,select{font-family:inherit}
 .setup{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
 .hero{text-align:center;padding:26px 18px 8px}.hero h1{margin:0 0 8px;font-family:'Baloo 2',cursive;font-size:32px;color:#a78bfa}
 .field{display:flex;flex-direction:column;gap:10px}.field>label{font-size:13px;font-weight:800;color:#8a7aa6;text-transform:uppercase}
-.name-input{width:100%;padding:15px;border-radius:16px;font-size:16px;font-weight:700;border:2px solid rgba(167,139,250,.25);outline:none}
 .play-mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .play-card{display:flex;flex-direction:column;align-items:center;padding:18px 12px;border-radius:18px;background:#fff;border:2px solid rgba(167,139,250,.16);cursor:pointer}
 .play-card.active{border-color:#a78bfa;background:linear-gradient(150deg,#fff0f8,#f2ecff)}
@@ -70,7 +69,7 @@ input,select{font-family:inherit}
 .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);padding:12px 22px;border-radius:999px;background:#3b2b52;color:#fff;font-weight:800;z-index:9500;opacity:0;transition:.3s}
 .toast.show{opacity:1}
 
-/* DEBUG PANEL v2 */
+/* DEBUG PANEL */
 #debugPanel{position:fixed;top:56px;right:8px;z-index:9800;width:min(420px,calc(100vw - 16px));max-height:calc(100vh - 72px);overflow-y:auto;background:rgba(12,8,24,.98);color:#d0f5d0;padding:12px;border-radius:14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.5;border:1px solid rgba(0,255,0,.4);box-shadow:0 20px 60px rgba(0,0,0,.8)}
 #debugPanel .dbg-head{display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid rgba(0,255,0,.3);font-weight:900;font-size:12px;color:#00ff88}
 #debugPanel .dbg-tools{display:flex;gap:4px}
@@ -108,8 +107,11 @@ input,select{font-family:inherit}
     <section id="menuScreen" class="setup">
       <div class="panel">
         <div class="hero"><h1>Leo thang, né rắn!</h1><p>Chơi online cùng đồng nghiệp</p></div>
-        <div class="field"><label>Tên hiển thị</label><input id="playerName" class="name-input" maxlength="16" placeholder="Tên..." /></div>
-        <div class="field"><label>Kiểu chơi</label>
+        <div class="field" style="text-align:center">
+          <label style="margin-bottom:4px">Chào mừng</label>
+          <div id="myDisplayName" style="font-size:22px;font-weight:900;color:#a78bfa">...</div>
+        </div>
+        <div class="field" style="margin-top:16px"><label>Kiểu chơi</label>
           <div class="play-mode-grid" id="playModeGrid">
             <button class="play-card active" data-mode="online">🌐 Online</button>
             <button class="play-card" data-mode="bot">🤖 Bot</button>
@@ -141,6 +143,7 @@ input,select{font-family:inherit}
           <select id="hostModeSelect" style="width:100%;padding:12px;border-radius:12px;margin-bottom:10px">
             <option value="classic">Cổ điển</option><option value="speed">Tốc độ</option><option value="chaos">Hỗn loạn</option>
           </select>
+          <div style="font-size:11px;color:#888;margin-bottom:10px;text-align:left">🎲 Tung 6 (cổ điển) / Đôi (tốc độ) = thêm lượt</div>
           <button class="btn btn-primary btn-lg" id="hostStartBtn" disabled>Bắt đầu</button>
         </div>
         <button class="btn btn-ghost btn-lg" id="leaveRoomBtn" style="margin-top:10px">Rời phòng</button>
@@ -156,6 +159,7 @@ input,select{font-family:inherit}
             <button class="play-card" data-mode="speed">Tốc độ</button>
             <button class="play-card" data-mode="chaos">Hỗn loạn</button>
           </div>
+          <div style="font-size:11px;color:#888;margin-top:4px;text-align:left">🎲 Tung 6 (cổ điển) / Đôi (tốc độ) = thêm lượt</div>
         </div>
         <div class="field" style="margin-top:20px"><label>Số người</label>
           <div style="display:flex;gap:10px" id="countSeg">
@@ -245,15 +249,12 @@ input,select{font-family:inherit}
 
   /* ============================ DEBUG STATE ============================ */
   var debugOpen = false;
-  var dbgEvents = [];  // { time: Date, type: string, detail: string }
+  var dbgEvents = [];
   var lastRtAt = 0;
   var lastPollAt = 0;
   var lastRtPayload = null;
 
-  function nowStr() {
-    var d = new Date();
-    return d.toTimeString().slice(0, 8);
-  }
+  function nowStr() { return new Date().toTimeString().slice(0, 8); }
   function agoStr(ts) {
     if (!ts) return '—';
     var s = Math.floor((Date.now() - ts) / 1000);
@@ -279,17 +280,10 @@ input,select{font-family:inherit}
     return {
       timestamp: new Date().toISOString(),
       me: { username: myUsername, display_name: myProfile ? myProfile.display_name : '?' },
-      browser: {
-        ua: navigator.userAgent.slice(0, 120),
-        hidden: document.hidden,
-        online: navigator.onLine
-      },
+      browser: { ua: navigator.userAgent.slice(0, 120), hidden: document.hidden, online: navigator.onLine },
       realtime: {
-        channelActive: !!roomChan,
-        channelState: roomChan && roomChan.state ? roomChan.state : 'none',
-        polling: !!pollTimer,
-        last_rt_ago: agoStr(lastRtAt),
-        last_poll_ago: agoStr(lastPollAt),
+        channelActive: !!roomChan, channelState: roomChan && roomChan.state ? roomChan.state : 'none',
+        polling: !!pollTimer, last_rt_ago: agoStr(lastRtAt), last_poll_ago: agoStr(lastPollAt),
         last_rt_payload: lastRtPayload
       },
       room: room ? {
@@ -297,44 +291,22 @@ input,select{font-family:inherit}
         host: room.host_username, mode: room.mode, max_players: room.max_players
       } : null,
       room_state: room && room.state ? {
-        current_turn: room.state.current_turn,
-        moves: room.state.moves,
-        last_roll_by: room.state.last_roll_by,
-        last_roll_at: room.state.last_roll_at,
-        winner: room.state.winner || null,
-        started_at: room.state.started_at,
-        player_count: room.state.player_count,
-        last_move: room.state.last_move || null,
+        current_turn: room.state.current_turn, moves: room.state.moves,
+        last_roll_by: room.state.last_roll_by, last_roll_at: room.state.last_roll_at,
+        winner: room.state.winner || null, started_at: room.state.started_at,
+        player_count: room.state.player_count, last_move: room.state.last_move || null,
         log_count: room.state.log ? room.state.log.length : 0
       } : null,
       local_state: {
-        mode: state.mode,
-        current_index: state.current,
-        current_username: localTurn,
-        current_name: curP ? curP.name : null,
-        isMyTurn: dbTurn === myUsername,
-        busy: state.busy,
-        over: state.over,
-        turn_match: turnMatch,
+        mode: state.mode, current_index: state.current, current_username: localTurn,
+        current_name: curP ? curP.name : null, isMyTurn: dbTurn === myUsername,
+        busy: state.busy, over: state.over, turn_match: turnMatch,
         players: state.players.map(function (p) {
-          return {
-            username: p.username,
-            name: p.name,
-            pos: p.pos,
-            targetPos: p.targetPos,
-            animating: !!animating[p.username],
-            bot: !!p.bot
-          };
+          return { username: p.username, name: p.name, pos: p.pos, targetPos: p.targetPos, animating: !!animating[p.username], bot: !!p.bot };
         })
       },
       room_players_db: roomPlayers.map(function (p) {
-        return {
-          username: p.username,
-          display_name: p.display_name,
-          pos: p.pos,
-          is_host: !!p.is_host,
-          color_index: p.color_index
-        };
+        return { username: p.username, display_name: p.display_name, pos: p.pos, is_host: !!p.is_host, color_index: p.color_index };
       }),
       events: dbgEvents.slice(-30).map(function (e) {
         return { time: e.time.toTimeString().slice(0, 8), type: e.type, detail: e.detail };
@@ -345,31 +317,21 @@ input,select{font-family:inherit}
   /* ============================ RENDER DEBUG ============================ */
   function renderDbg() {
     if (!debugOpen) return;
-    var s = buildSnapshot();
-    var body = $('dbgBody');
-    var html = '';
+    var s = buildSnapshot(), body = $('dbgBody'), html = '';
 
-    // ME
     html += '<div class="dbg-sec"><div class="dbg-sec-title">👤 Me</div>';
     html += '<div class="dbg-kv"><span class="k">username</span><span class="v">' + esc(s.me.username) + '</span></div>';
     html += '<div class="dbg-kv"><span class="k">display_name</span><span class="v">' + esc(s.me.display_name) + '</span></div>';
     html += '</div>';
 
-    // ROOM
     if (s.room) {
       html += '<div class="dbg-sec"><div class="dbg-sec-title">🏠 Room</div>';
-      html += kv('code', s.room.code);
-      html += kv('status', s.room.status, s.room.status === 'playing' ? 'ok' : 'warn');
-      html += kv('version', s.room.version, 'ok');
-      html += kv('host', s.room.host);
-      html += kv('mode', s.room.mode);
-      html += '</div>';
+      html += kv('code', s.room.code); html += kv('status', s.room.status, s.room.status === 'playing' ? 'ok' : 'warn');
+      html += kv('version', s.room.version, 'ok'); html += kv('host', s.room.host); html += kv('mode', s.room.mode); html += '</div>';
 
       html += '<div class="dbg-sec"><div class="dbg-sec-title">📦 Room State (DB)</div>';
       html += kv('current_turn', s.room_state.current_turn, s.room_state.current_turn === myUsername ? 'ok' : '');
-      html += kv('moves', s.room_state.moves);
-      html += kv('last_roll_by', s.room_state.last_roll_by || '—');
-      html += kv('winner', s.room_state.winner || '—');
+      html += kv('moves', s.room_state.moves); html += kv('last_roll_by', s.room_state.last_roll_by || '—'); html += kv('winner', s.room_state.winner || '—');
       if (s.room_state.last_move) {
         var lm = s.room_state.last_move;
         html += kv('last_move', lm.user + ': ' + lm.from + '→' + lm.dice_land + '→' + lm.final + ' [' + lm.via + ']');
@@ -379,17 +341,14 @@ input,select{font-family:inherit}
       html += '<div class="dbg-sec"><div class="dbg-sec-title">🏠 Room</div><div class="dbg-kv"><span class="v">— not in room —</span></div></div>';
     }
 
-    // LOCAL STATE
     html += '<div class="dbg-sec"><div class="dbg-sec-title">💻 Local State</div>';
-    html += kv('mode', s.local_state.mode);
-    html += kv('current_index', s.local_state.current_index);
+    html += kv('mode', s.local_state.mode); html += kv('current_index', s.local_state.current_index);
     html += kv('current_user', s.local_state.current_username);
     html += kv('busy', s.local_state.busy, s.local_state.busy ? 'warn' : 'ok');
     html += kv('isMyTurn', s.local_state.isMyTurn, s.local_state.isMyTurn ? 'ok' : '');
     html += kv('turn_match', s.local_state.turn_match, s.local_state.turn_match ? 'ok' : 'err');
     html += '</div>';
 
-    // PLAYERS COMPARE
     html += '<div class="dbg-sec"><div class="dbg-sec-title">👥 Players (DB vs Local)</div>';
     if (s.room_players_db.length) {
       html += '<pre>';
@@ -399,30 +358,22 @@ input,select{font-family:inherit}
         var mark = db.username === myUsername ? '★' : ' ';
         html += mark + ' ' + db.display_name + ' (' + db.username.slice(0, 10) + ')\n';
         html += '  DB: pos=' + db.pos + ' host=' + (db.is_host ? 'Y' : 'N') + '\n';
-        if (lo) {
-          html += '  LO: pos=' + lo.pos + ' target=' + lo.targetPos + (lo.animating ? ' 🔄' : '') + '\n';
-        } else {
-          html += '  LO: — MISSING —\n';
-        }
+        if (lo) html += '  LO: pos=' + lo.pos + ' target=' + lo.targetPos + (lo.animating ? ' 🔄' : '') + '\n';
+        else html += '  LO: — MISSING —\n';
       }
       html += '</pre>';
-    } else {
-      html += '<pre>—</pre>';
-    }
+    } else html += '<pre>—</pre>';
     html += '</div>';
 
-    // REALTIME
     html += '<div class="dbg-sec"><div class="dbg-sec-title">📡 Realtime</div>';
     html += kv('channel', s.realtime.channelState, s.realtime.channelState === 'SUBSCRIBED' ? 'ok' : (s.realtime.channelState === 'none' ? '' : 'warn'));
     html += kv('polling', s.realtime.polling ? 'ON (1.5s)' : 'OFF', s.realtime.polling ? 'ok' : 'warn');
-    html += kv('last_rt', s.realtime.last_rt_ago);
-    html += kv('last_poll', s.realtime.last_poll_ago);
+    html += kv('last_rt', s.realtime.last_rt_ago); html += kv('last_poll', s.realtime.last_poll_ago);
     if (s.realtime.last_rt_payload) {
       html += '<pre>' + esc(JSON.stringify(s.realtime.last_rt_payload, null, 2).slice(0, 600)) + '</pre>';
     }
     html += '</div>';
 
-    // EVENTS
     html += '<div class="dbg-sec"><div class="dbg-sec-title">📝 Events (last 30)</div>';
     if (s.events.length) {
       html += '<div class="dbg-evts">';
@@ -431,23 +382,14 @@ input,select{font-family:inherit}
         html += '<div class="dbg-evt"><span class="t">' + ev.time + '</span><span class="ty">' + esc(ev.type) + '</span><span class="d">' + esc(ev.detail) + '</span></div>';
       }
       html += '</div>';
-    } else {
-      html += '<pre>—</pre>';
-    }
+    } else html += '<pre>—</pre>';
     html += '</div>';
 
     body.innerHTML = html;
   }
-  function kv(k, v, cls) {
-    return '<div class="dbg-kv"><span class="k">' + esc(k) + '</span><span class="v' + (cls ? ' ' + cls : '') + '">' + esc(String(v)) + '</span></div>';
-  }
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function kv(k, v, cls) { return '<div class="dbg-kv"><span class="k">' + esc(k) + '</span><span class="v' + (cls ? ' ' + cls : '') + '">' + esc(String(v)) + '</span></div>'; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
-  /* ============================ COPY DEBUG ============================ */
   function copyDebugToClipboard() {
     var s = buildSnapshot();
     var lines = [];
@@ -456,41 +398,25 @@ input,select{font-family:inherit}
     function h1(t) { lines.push(''); lines.push('═══ ' + t + ' ═══'); }
 
     h1('SNAKE GAME DEBUG SNAPSHOT');
-    add('Timestamp', s.timestamp);
-    add('User Agent', s.browser.ua);
-    add('Page Hidden', s.browser.hidden);
-    add('Online', s.browser.online);
+    add('Timestamp', s.timestamp); add('User Agent', s.browser.ua); add('Page Hidden', s.browser.hidden); add('Online', s.browser.online);
 
     h1('ME');
-    add('Username', s.me.username);
-    add('Display Name', s.me.display_name);
+    add('Username', s.me.username); add('Display Name', s.me.display_name);
 
     if (s.room) {
       h1('ROOM');
-      add('ID', s.room.id);
-      add('Code', s.room.code);
-      add('Status', s.room.status);
-      add('Version', s.room.version);
-      add('Host', s.room.host);
-      add('Mode', s.room.mode);
-
+      add('ID', s.room.id); add('Code', s.room.code); add('Status', s.room.status); add('Version', s.room.version); add('Host', s.room.host); add('Mode', s.room.mode);
       h1('ROOM STATE (DB)');
-      add('current_turn', s.room_state.current_turn);
-      add('moves', s.room_state.moves);
-      add('last_roll_by', s.room_state.last_roll_by);
+      add('current_turn', s.room_state.current_turn); add('moves', s.room_state.moves); add('last_roll_by', s.room_state.last_roll_by);
       add('last_roll_at', s.room_state.last_roll_at ? new Date(s.room_state.last_roll_at).toISOString() : '—');
-      add('winner', s.room_state.winner || '—');
-      add('player_count', s.room_state.player_count);
+      add('winner', s.room_state.winner || '—'); add('player_count', s.room_state.player_count);
       add('last_move', s.room_state.last_move ? JSON.stringify(s.room_state.last_move) : '—');
     }
 
     h1('LOCAL STATE');
-    add('mode', s.local_state.mode);
-    add('current_index', s.local_state.current_index);
-    add('current_username', s.local_state.current_username);
-    add('current_name', s.local_state.current_name);
-    add('isMyTurn', s.local_state.isMyTurn);
-    add('busy', s.local_state.busy);
+    add('mode', s.local_state.mode); add('current_index', s.local_state.current_index);
+    add('current_username', s.local_state.current_username); add('current_name', s.local_state.current_name);
+    add('isMyTurn', s.local_state.isMyTurn); add('busy', s.local_state.busy);
     add('turn_match', s.local_state.turn_match + (s.local_state.turn_match ? ' ✓' : ' ✗ MISMATCH!'));
 
     h1('PLAYERS COMPARE (DB vs Local)');
@@ -498,49 +424,32 @@ input,select{font-family:inherit}
       var lo = s.local_state.players.find(function (p) { return p.username === db.username; });
       lines.push((db.username === myUsername ? '★ ' : '  ') + db.display_name + ' (' + db.username + ')');
       lines.push('    DB: pos=' + db.pos + ' host=' + db.is_host + ' color=' + db.color_index);
-      if (lo) {
-        lines.push('    LO: pos=' + lo.pos + ' target=' + lo.targetPos + ' animating=' + lo.animating);
-      } else {
-        lines.push('    LO: MISSING!');
-      }
+      if (lo) lines.push('    LO: pos=' + lo.pos + ' target=' + lo.targetPos + ' animating=' + lo.animating);
+      else lines.push('    LO: MISSING!');
     });
 
     h1('REALTIME');
-    add('channelState', s.realtime.channelState);
-    add('polling', s.realtime.polling ? 'ON' : 'OFF');
-    add('last_rt', s.realtime.last_rt_ago);
-    add('last_poll', s.realtime.last_poll_ago);
-    if (s.realtime.last_rt_payload) {
-      lines.push('last_rt_payload:');
-      lines.push(JSON.stringify(s.realtime.last_rt_payload, null, 2));
-    }
+    add('channelState', s.realtime.channelState); add('polling', s.realtime.polling ? 'ON' : 'OFF');
+    add('last_rt', s.realtime.last_rt_ago); add('last_poll', s.realtime.last_poll_ago);
+    if (s.realtime.last_rt_payload) { lines.push('last_rt_payload:'); lines.push(JSON.stringify(s.realtime.last_rt_payload, null, 2)); }
 
     h1('EVENTS (last 30, newest last)');
-    s.events.forEach(function (e) {
-      lines.push('[' + e.time + '] ' + e.type + ' ' + e.detail);
-    });
-
-    lines.push('');
-    lines.push('=== END SNAPSHOT ===');
+    s.events.forEach(function (e) { lines.push('[' + e.time + '] ' + e.type + ' ' + e.detail); });
 
     var text = lines.join('\n');
     var done = function () { toast('📋 Đã copy debug — gửi cho dev nhé!'); };
     var fail = function () { fallbackCopy(text, done); };
     try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(done).catch(fail);
-      } else fail();
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(fail);
+      else fail();
     } catch (e) { fail(); }
   }
   function fallbackCopy(text, done) {
     try {
       var ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.cssText = 'position:fixed;left:-9999px;top:0';
-      document.body.appendChild(ta);
-      ta.select();
-      var ok = document.execCommand('copy');
-      document.body.removeChild(ta);
+      ta.value = text; ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+      document.body.appendChild(ta); ta.select();
+      var ok = document.execCommand('copy'); document.body.removeChild(ta);
       if (ok) done(); else toast('Không copy được, mở console xem');
     } catch (e) { toast('Copy fail: ' + e.message); }
   }
@@ -593,6 +502,13 @@ input,select{font-family:inherit}
     return { x: c * 10 + 5, y: (9 - r) * 10 + 5, c: c, r: 9 - r };
   }
   function avt(s) { return 'https://api.dicebear.com/9.x/adventurer/svg?seed=' + encodeURIComponent(s) + '&backgroundColor=ffd5dc,b6e3f4&radius=14'; }
+
+  /* FIX 1 & 2: Extra turn logic */
+  function isExtraTurn(mode, vals) {
+    if (mode === 'classic') return vals.length === 1 && vals[0] === 6;
+    if (mode === 'speed') return vals.length === 2 && vals[0] === vals[1];
+    return false;
+  }
 
   /* ============================ AUDIO ============================ */
   var actx = null, sfxOn = true;
@@ -797,7 +713,6 @@ input,select{font-family:inherit}
   function rebuildRoomState() {
     if (!room || (room.status !== 'playing' && room.status !== 'finished')) return;
 
-    // Mutate in-place to preserve animation references
     var oldMap = {};
     state.players.forEach(function (p) { oldMap[p.username] = p; });
 
@@ -832,21 +747,12 @@ input,select{font-family:inherit}
       animating = {};
     }
 
-    // Sync current from DB turn
     var curIdx = state.players.findIndex(function (p) { return p.username === (room.state && room.state.current_turn); });
-    if (curIdx >= 0 && curIdx !== state.current) {
-      state.current = curIdx;
-    }
-    // Fallback if not found
-    if (curIdx < 0 && state.players.length) {
-      state.current = 0;
-    }
+    if (curIdx >= 0 && curIdx !== state.current) state.current = curIdx;
+    if (curIdx < 0 && state.players.length) state.current = 0;
 
-    updatePill();
-    syncCards();
-    posTokens();
+    updatePill(); syncCards(); posTokens();
 
-    // Trigger animations for out-of-sync players
     var lastMove = room.state && room.state.last_move;
     state.players.forEach(function (p) {
       if (p.pos !== p.targetPos && !animating[p.username]) {
@@ -858,10 +764,7 @@ input,select{font-family:inherit}
     renderLogs(room.state && room.state.log);
     syncTurnUI();
 
-    // Winner overlay
-    if (room.state && room.state.winner && $('winOverlay').hidden) {
-      showWin(room.state.winner);
-    }
+    if (room.state && room.state.winner && $('winOverlay').hidden) showWin(room.state.winner);
   }
 
   function animateMove(p, move) {
@@ -875,14 +778,12 @@ input,select{font-family:inherit}
         if (debugOpen) renderDbg();
         return;
       }
-      // If move has dice_land, first walk to it
       if (move && move.dice_land != null && move.dice_land !== move.final && p.pos === move.from) {
         if (p.pos !== move.dice_land) {
           p.pos += move.dice_land > p.pos ? 1 : -1;
           posTokens(); sfx.tick();
           return sleep(60).then(step);
         }
-        // Reached dice_land, do the jump
         return sleep(200).then(function () {
           p.pos = move.final;
           if (move.via === 'ladder') sfx.ladder();
@@ -891,7 +792,6 @@ input,select{font-family:inherit}
           return sleep(300).then(step);
         });
       }
-      // Normal step
       p.pos += p.targetPos > p.pos ? 1 : -1;
       posTokens(); sfx.tick();
       return sleep(60).then(step);
@@ -916,11 +816,7 @@ input,select{font-family:inherit}
     $('rollBtn').disabled = true;
     if (busyTimeout) clearTimeout(busyTimeout);
     busyTimeout = setTimeout(function () {
-      if (state.busy) {
-        state.busy = false;
-        dbgEvent('BUSY_TIMEOUT', 'force reset');
-        syncTurnUI();
-      }
+      if (state.busy) { state.busy = false; dbgEvent('BUSY_TIMEOUT', 'force reset'); syncTurnUI(); }
     }, 8000);
 
     try {
@@ -945,7 +841,13 @@ input,select{font-family:inherit}
 
       var winner = goal ? myUsername : null;
       var curIdx = roomPlayers.findIndex(function (p) { return p.username === myUsername; });
-      var next = roomPlayers[(curIdx + 1) % roomPlayers.length].username;
+      
+      // FIX 1 & 2: Extra turn logic
+      var extra = !winner && isExtraTurn(room.mode, vals);
+      if (extra) {
+        newLogs.push({ text: '🎁 ' + me.display_name + ' được tung thêm 1 lượt!', color: myColor, ts: Date.now() + 2 });
+      }
+      var next = extra ? myUsername : roomPlayers[(curIdx + 1) % roomPlayers.length].username;
 
       var updPlayer = await sb.from('snake_room_players').update({ pos: final }).eq('room_id', room.id).eq('username', myUsername);
       if (updPlayer.error) throw updPlayer.error;
@@ -966,9 +868,8 @@ input,select{font-family:inherit}
       }).eq('id', room.id);
       if (updRoom.error) throw updRoom.error;
 
-      dbgEvent('ROLL_SENT', 'v' + (room.version + 1) + ' ' + vals.join('+') + ' pos=' + final + ' next=' + shortTurn(next));
+      dbgEvent('ROLL_SENT', 'v' + (room.version + 1) + ' ' + vals.join('+') + ' pos=' + final + ' next=' + shortTurn(next) + (extra ? ' [EXTRA]' : ''));
 
-      // FIX: reset busy immediately after successful write — realtime will sync state
       state.busy = false;
       if (busyTimeout) { clearTimeout(busyTimeout); busyTimeout = null; }
       syncTurnUI();
@@ -984,10 +885,7 @@ input,select{font-family:inherit}
   /* ============================ REALTIME ============================ */
   function handleRoomUpdate(oldR, newR) {
     var oldV = oldR.version || 0, newV = newR.version || 0;
-    if (newV <= oldV) {
-      dbgEvent('RT_STALE', 'v' + newV + ' ≤ v' + oldV);
-      return;
-    }
+    if (newV <= oldV) { dbgEvent('RT_STALE', 'v' + newV + ' ≤ v' + oldV); return; }
     dbgEvent('RT_UPDATE', 'v' + oldV + '→v' + newV + ' turn=' + shortTurn(newR.state && newR.state.current_turn));
 
     room = newR;
@@ -996,7 +894,6 @@ input,select{font-family:inherit}
       return;
     }
 
-    // Remote dice animation
     var newRollAt = (newR.state && newR.state.last_roll_at) || 0;
     var oldRollAt = (oldR.state && oldR.state.last_roll_at) || 0;
     if (newRollAt > oldRollAt && newR.state.last_roll_by !== myUsername) {
@@ -1104,6 +1001,16 @@ input,select{font-family:inherit}
     if (LADDERS[p.pos]) { p.pos = LADDERS[p.pos]; sfx.ladder(); posTokens(); await sleep(300); }
     else if (SNAKES[p.pos]) { p.pos = SNAKES[p.pos]; sfx.snake(); posTokens(); await sleep(300); }
     if (p.pos >= 100) { winLocal(p); return; }
+    
+    // FIX 1 & 2: Extra turn logic
+    var extra = isExtraTurn(state.mode, vals);
+    if (extra) {
+      addLog('🎁 ' + p.name + ' được tung thêm 1 lượt!', p.color);
+      state.busy = false;
+      beginTurnLocal();
+      return;
+    }
+    
     state.busy = false;
     state.current = (state.current + 1) % state.players.length;
     beginTurnLocal();
@@ -1134,11 +1041,7 @@ input,select{font-family:inherit}
     if (id !== 'gameScreen') $('winOverlay').hidden = true;
   }
 
-  $('debugBtn').onclick = function () {
-    debugOpen = !debugOpen;
-    $('debugPanel').hidden = !debugOpen;
-    if (debugOpen) renderDbg();
-  };
+  $('debugBtn').onclick = function () { debugOpen = !debugOpen; $('debugPanel').hidden = !debugOpen; if (debugOpen) renderDbg(); };
   $('dbgClose').onclick = function () { debugOpen = false; $('debugPanel').hidden = true; };
   $('dbgCopy').onclick = copyDebugToClipboard;
   $('dbgForce').onclick = async function () {
@@ -1147,9 +1050,7 @@ input,select{font-family:inherit}
     try {
       var r = await sb.from('snake_rooms').select('*').eq('id', room.id).maybeSingle();
       if (r.data) handleRoomUpdate(room, r.data);
-      await refreshPlayers();
-      rebuildRoomState();
-      renderDbg();
+      await refreshPlayers(); rebuildRoomState(); renderDbg();
     } catch (e) { toast('Lỗi: ' + e.message); }
   };
 
@@ -1161,8 +1062,6 @@ input,select{font-family:inherit}
   };
 
   $('continueBtn').onclick = async function () {
-    var name = $('playerName').value.trim() || myUsername;
-    localStorage.setItem('srank_player_name', name);
     if (state.mode === 'online') {
       if (!sb) return toast('Lỗi Supabase');
       showScreen('onlineScreen');
@@ -1177,10 +1076,7 @@ input,select{font-family:inherit}
     }
   };
 
-  $('backFromOnlineBtn').onclick = function () {
-    showScreen('menuScreen');
-    if (roomsChan) { try { sb.removeChannel(roomsChan); } catch (e) {} roomsChan = null; }
-  };
+  $('backFromOnlineBtn').onclick = function () { showScreen('menuScreen'); if (roomsChan) { try { sb.removeChannel(roomsChan); } catch (e) {} roomsChan = null; } };
   $('backFromLocalBtn').onclick = function () { showScreen('menuScreen'); };
   $('refreshRoomsBtn').onclick = fetchRooms;
 
@@ -1192,7 +1088,7 @@ input,select{font-family:inherit}
     room = r.data; isHost = true;
     await sb.from('snake_room_players').insert({
       room_id: room.id, username: myUsername,
-      display_name: $('playerName').value || myUsername,
+      display_name: myProfile.display_name || myUsername,
       avatar_url: myProfile.avatar_url, color_index: 0, pos: 0, is_host: true
     });
     enterWait();
@@ -1209,7 +1105,7 @@ input,select{font-family:inherit}
       var cnt = await sb.from('snake_room_players').select('id', { count: 'exact', head: true }).eq('room_id', rid);
       await sb.from('snake_room_players').insert({
         room_id: rid, username: myUsername,
-        display_name: $('playerName').value || myUsername,
+        display_name: myProfile.display_name || myUsername,
         avatar_url: myProfile.avatar_url, color_index: cnt.count || 0, pos: 0
       });
     }
@@ -1278,9 +1174,7 @@ input,select{font-family:inherit}
   function enterWait() {
     showScreen('waitingScreen');
     $('hostControls').style.display = isHost ? 'block' : 'none';
-    renderWait();
-    startRealtime();
-    refreshPlayers();
+    renderWait(); startRealtime(); refreshPlayers();
     dbgEvent('ENTER_WAIT', room ? room.code : 'none');
   }
   function renderWait() {
@@ -1322,8 +1216,6 @@ input,select{font-family:inherit}
 
   (async function init() {
     myUsername = getMyUsername();
-    var saved = localStorage.getItem('srank_player_name');
-    $('playerName').value = saved || myUsername;
     if (sb) {
       try {
         var p = await sb.from('public_players').select('*').eq('username', myUsername).maybeSingle();
@@ -1332,6 +1224,7 @@ input,select{font-family:inherit}
     } else {
       myProfile = { display_name: myUsername, avatar_url: avt(myUsername) };
     }
+    $('myDisplayName').textContent = myProfile.display_name;
     dbgEvent('INIT', 'user=' + myUsername);
   })();
 
