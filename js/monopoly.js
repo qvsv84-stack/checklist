@@ -1,6 +1,6 @@
 /* =====================================================================
-   CỜ TỶ PHÚ — MONOPOLY (v3.1 — NEON CYBER MARKET)
-   Market Events (Boom, Crash, Heist, Hack) · Owned Property Highlight
+   CỜ TỶ PHÚ — MONOPOLY (v3.2 — 2 DICE & VIETNAMESE)
+   Double Dice (roll again on double) · Fully translated to VN
    ===================================================================== */
 (function () {
   'use strict';
@@ -19,7 +19,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 #mpApp::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 0%,rgba(0,240,255,.15) 0%,transparent 50%),radial-gradient(circle at 10% 90%,rgba(255,42,117,.15) 0%,transparent 50%),linear-gradient(180deg,#050508 0%,#0a0f1c 100%);pointer-events:none;z-index:0}
 #mpApp::after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(0,240,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,240,255,.03) 1px,transparent 1px);background-size:30px 30px;pointer-events:none;z-index:0;opacity:.5}
 
-/* EVENT TICKER */
+/* MARKET TICKER */
 .market-ticker{position:absolute;top:0;left:0;width:100%;height:32px;background:rgba(0,0,0,.9);border-bottom:1px solid #ff2a75;z-index:100;overflow:hidden;display:flex;align-items:center;box-shadow:0 0 20px rgba(255,42,117,.4)}
 .market-ticker-text{white-space:nowrap;font-family:'Orbitron',sans-serif;font-weight:700;font-size:14px;color:#ff2a75;letter-spacing:2px;animation:tickerMove 15s linear infinite;text-shadow:0 0 10px #ff2a75}
 @keyframes tickerMove{0%{transform:translateX(100vw)}100%{transform:translateX(-100%)}}
@@ -63,7 +63,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .game-screen{position:absolute;inset:0;z-index:10;overflow:hidden;animation:fadeIn .3s ease-out;background:#050508}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
-.board{position:absolute;inset:0;padding:6px;padding-top:38px;} /* Chừa chỗ cho Ticker */
+.board{position:absolute;inset:0;padding:6px;padding-top:38px;}
 .board-grid{display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);width:100%;height:100%;gap:4px}
 
 /* TILES */
@@ -82,7 +82,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .tile.prop .tile-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px;position:relative;background:#0d111a}
 .tile-name{font-family:'Orbitron',sans-serif;font-size:calc(var(--tile-size)*.15);font-weight:700;color:#a0aabf;text-align:center;line-height:1.1;white-space:nowrap;letter-spacing:.5px}
 
-/* FIX UI: LÀM NỔI BẬT ĐẤT CỦA MÌNH */
 .tile.prop.owned .tile-body{background:rgba(0,0,0,.4)}
 .tile.prop.my-land{
   border-color:var(--owner-color) !important;
@@ -98,7 +97,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
   filter:drop-shadow(0 0 5px #fff);
 }
 
-/* ĐẤT CỦA NGƯỜI KHÁC (Mờ hơn, viền đứt nét) */
 .tile.prop.other-land{
   border-color:rgba(255,255,255,.2);
   box-shadow: inset 0 0 10px rgba(0,0,0,.8);
@@ -108,7 +106,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .tile-levels{display:flex;gap:2px;margin-top:4px}
 .tile-levels span{font-size:calc(var(--tile-size)*.2);line-height:1;filter:drop-shadow(0 0 3px rgba(255,255,255,.5))}
 
-/* HIGHLIGHT BẢN THÂN */
 .tile.my-position{animation:neonPulse 1s infinite alternate;z-index:5;border-width:2px}
 @keyframes neonPulse{
   0%{box-shadow:inset 0 0 10px var(--my-color), 0 0 15px var(--my-color);border-color:var(--my-color)}
@@ -124,7 +121,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 @keyframes pawnHop{0%{transform:translateY(0) scale(1)}50%{transform:translateY(-60%) scale(1.2)}100%{transform:translateY(0) scale(1)}}
 
 /* CENTER INFO */
-.center-info{grid-column:2/8;grid-row:2/8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:rgba(10,15,28,.85);border-radius:16px;padding:30px;text-align:center;position:relative;overflow:hidden;border:1px solid rgba(0,240,255,.3);box-shadow:inset 0 0 60px rgba(0,240,255,.05),0 0 40px rgba(0,240,255,.1);backdrop-filter:blur(10px)}
+.center-info{grid-column:2/8;grid-row:2/8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:15px;background:rgba(10,15,28,.85);border-radius:16px;padding:20px;text-align:center;position:relative;overflow:hidden;border:1px solid rgba(0,240,255,.3);box-shadow:inset 0 0 60px rgba(0,240,255,.05),0 0 40px rgba(0,240,255,.1);backdrop-filter:blur(10px)}
 .center-info::before{content:"";position:absolute;inset:0;background:linear-gradient(45deg,transparent,rgba(0,240,255,.05),transparent);animation:scanline 4s linear infinite;pointer-events:none}
 @keyframes scanline{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}
 .center-info>*{position:relative;z-index:1}
@@ -135,18 +132,19 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .icon-btn-sm[data-action="quit"]{border-color:rgba(255,42,117,.5);color:#ff2a75}
 .icon-btn-sm[data-action="quit"]:hover{background:rgba(255,42,117,.2);box-shadow:0 0 15px rgba(255,42,117,.4)}
 
-/* EVENT BANNER IN CENTER */
 .event-banner{background:rgba(255,42,117,.2);border:1px solid #ff2a75;padding:8px 16px;border-radius:8px;font-family:'Orbitron',sans-serif;font-size:16px;color:#ffcc00;text-shadow:0 0 10px #ffcc00;animation:pulseEvent 1s infinite alternate}
 @keyframes pulseEvent{0%{box-shadow:0 0 10px rgba(255,204,0,.3)}100%{box-shadow:0 0 30px rgba(255,204,0,.8)}}
 
-.center-player{display:flex;align-items:center;gap:14px;padding:12px 24px;border-radius:12px;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1);box-shadow:0 4px 15px rgba(0,0,0,.5)}
+.center-player{display:flex;align-items:center;gap:14px;padding:10px 20px;border-radius:12px;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1);box-shadow:0 4px 15px rgba(0,0,0,.5)}
 .center-avatar{width:48px;height:48px;border-radius:50%;flex-shrink:0}
 .center-name{font-family:'Orbitron',sans-serif;font-size:18px;font-weight:900;letter-spacing:1px;text-shadow:0 0 10px currentColor}
 
-.center-dice-box{display:flex;align-items:center;justify-content:center;margin:10px 0}
-.center-dice{font-size:80px;line-height:1;filter:drop-shadow(0 0 20px rgba(0,240,255,.6));animation:diceIdle 3s ease-in-out infinite}
+/* 2 DICE UI */
+.center-dice-box{display:flex;align-items:center;justify-content:center;gap:20px;margin:10px 0}
+.dice-item{font-size:70px;line-height:1;filter:drop-shadow(0 0 20px rgba(0,240,255,.6));animation:diceIdle 3s ease-in-out infinite}
+.dice-item:nth-child(2){animation-delay:0.5s}
 @keyframes diceIdle{0%,100%{transform:rotate(-5deg) scale(1)}50%{transform:rotate(5deg) scale(1.05)}}
-.center-dice.rolling{animation:diceSpin .9s cubic-bezier(.4,0,.2,1)}
+.dice-item.rolling{animation:diceSpin .9s cubic-bezier(.4,0,.2,1)}
 @keyframes diceSpin{0%{transform:rotate(0) scale(1)}25%{transform:rotate(180deg) scale(1.3)}50%{transform:rotate(360deg) scale(.9)}75%{transform:rotate(540deg) scale(1.2)}100%{transform:rotate(720deg) scale(1)}}
 
 .center-roll-btn{padding:16px 40px;border-radius:8px;font-family:'Orbitron',sans-serif;font-weight:900;font-size:20px;letter-spacing:2px;text-transform:uppercase;color:#000;background:linear-gradient(90deg,#00f0ff,#00ff66);box-shadow:0 0 30px rgba(0,240,255,.5), inset 0 0 10px rgba(255,255,255,.5);transition:all .2s;position:relative;overflow:hidden}
@@ -205,14 +203,14 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
   var HTML = `
 <div id="mpApp">
   <div class="market-ticker" id="marketTicker">
-    <div class="market-ticker-text" id="marketTickerText">SYSTEM ONLINE... WAITING FOR NEXT MARKET EVENT...</div>
+    <div class="market-ticker-text" id="marketTickerText">HỆ THỐNG TRỰC TUYẾN... ĐANG CHỜ SỰ KIỆN TIẾP THEO...</div>
   </div>
 
   <section id="menuScreen" class="screen">
     <div class="setup-card">
       <div class="hero">
         <h1>🎩 Cờ Tỷ Phú</h1>
-        <p>Metaverse Real Estate Tycoon</p>
+        <p>Trùm Bất Động Sản Metaverse</p>
       </div>
       <div class="field" style="text-align:center;margin-top:12px">
         <label>ID Người Chơi</label>
@@ -230,11 +228,11 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 
   <section id="onlineScreen" class="screen" hidden>
     <div class="setup-card">
-      <h2>🌐 Server Phòng</h2>
+      <h2>🌐 Phòng Chơi</h2>
       <button class="btn btn-primary btn-lg" id="createRoomBtn">➕ Tạo Phòng Mới</button>
       <div style="margin-top:24px;display:flex;justify-content:space-between;align-items:center">
         <b style="font-size:13px;color:#a0aabf;letter-spacing:1px">DANH SÁCH PHÒNG</b>
-        <button class="btn btn-ghost btn-sm" id="refreshRoomsBtn">↻ Refresh</button>
+        <button class="btn btn-ghost btn-sm" id="refreshRoomsBtn">↻ Làm Mới</button>
       </div>
       <div id="roomsList" style="margin-top:12px"></div>
       <button class="btn btn-ghost btn-lg" id="backFromOnlineBtn" style="margin-top:24px">← Quay Lại</button>
@@ -244,7 +242,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
   <section id="waitingScreen" class="screen" hidden>
     <div class="setup-card">
       <h2>⏳ Chờ Kết Nối</h2>
-      <div style="font-weight:700;margin:16px 0 12px;font-size:14px;color:#00f0ff;letter-spacing:1px">PLAYERS: <span id="waitingCount">0</span>/4</div>
+      <div style="font-weight:700;margin:16px 0 12px;font-size:14px;color:#00f0ff;letter-spacing:1px">NGƯỜI CHƠI: <span id="waitingCount">0</span>/4</div>
       <div id="waitingPlayers"></div>
       <div id="hostControls">
         <button class="btn btn-primary btn-lg" id="hostStartBtn" disabled>⏳ Cần 2 người</button>
@@ -347,11 +345,12 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
   var BOT_NAMES = ['CyberBot', 'NeonViper', 'GlitchKing'];
   var DICE_FACES = ['⚀','⚁','⚂','⚃','⚄','⚅'];
 
+  // VIỆT HÓA SỰ KIỆN
   var MARKET_EVENTS = [
-    { type: 'boom', name: 'CRYPTO BOOM', desc: 'Thuế tăng 50% trong 3 lượt tới!', color: '#00ff66' },
-    { type: 'crash', name: 'MARKET CRASH', desc: 'Tất cả nhà giảm 1 cấp!', color: '#ff2a75' },
-    { type: 'heist', name: 'DATA HEIST', desc: 'Người giàu nhất mất 10% tiền chia cho người khác!', color: '#b000ff' },
-    { type: 'hack', name: 'SYSTEM HACK', desc: 'Tất cả người chơi nhận $20k!', color: '#ffcc00' }
+    { type: 'boom', name: 'BÙNG NỔ CRYPTO', desc: 'Thuế tăng 50% trong 3 lượt tới!', color: '#00ff66' },
+    { type: 'crash', name: 'SỤP ĐỔ THỊ TRƯỜNG', desc: 'Tất cả nhà giảm 1 cấp!', color: '#ff2a75' },
+    { type: 'heist', name: 'ĐÁNH CẮP DỮ LIỆU', desc: 'Người giàu nhất mất 10% tiền chia cho người khác!', color: '#b000ff' },
+    { type: 'hack', name: 'HACK HỆ THỐNG', desc: 'Tất cả người chơi nhận $20k!', color: '#ffcc00' }
   ];
 
   function initTiles() {
@@ -438,7 +437,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     if (!board) return;
     var w = board.clientWidth;
     var h = board.clientHeight;
-    // Padding top 38px for ticker, 6px for others -> 44px total vertically
     var tileW = (w - 36) / 8;
     var tileH = (h - 50) / 8;
     var minTile = Math.min(tileW, tileH);
@@ -521,7 +519,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var ticker = $('marketTicker');
     var text = $('marketTickerText');
     ticker.classList.add('active');
-    text.textContent = '⚠️ MARKET ALERT: ' + ev.name + ' — ' + ev.desc + ' ⚠️';
+    text.textContent = '⚠️ CẢNH BÁO THỊ TRƯỜNG: ' + ev.name + ' — ' + ev.desc + ' ⚠️';
     
     sfx.event();
     screenShake();
@@ -556,7 +554,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     
     setTimeout(function() {
       ticker.classList.remove('active');
-      text.textContent = '📡 ' + ev.name + ' ACTIVE (' + state.game.global_event.turnsLeft + ' TURNS LEFT) 📡';
+      text.textContent = '📡 ' + ev.name + ' ĐANG HOẠT ĐỘNG (CÒN ' + state.game.global_event.turnsLeft + ' LƯỢT) 📡';
     }, 5000);
 
     dbgEvent('MARKET_EVENT', ev.name);
@@ -577,16 +575,16 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 
       if (tile.type === 'start') {
         el.className = 'tile corner start';
-        el.innerHTML = '<div class="corner-icon">🏁</div><div class="corner-label">START</div>';
+        el.innerHTML = '<div class="corner-icon">🏁</div><div class="corner-label">XUẤT PHÁT</div>';
       } else if (tile.type === 'jail') {
         el.className = 'tile corner jail';
-        el.innerHTML = '<div class="corner-icon">🚔</div><div class="corner-label">JAIL</div>';
+        el.innerHTML = '<div class="corner-icon">🚔</div><div class="corner-label">NHÀ TÙ</div>';
       } else if (tile.type === 'reward') {
         el.className = 'tile corner reward';
-        el.innerHTML = '<div class="corner-icon">🎁</div><div class="corner-label">REWARD</div>';
+        el.innerHTML = '<div class="corner-icon">🎁</div><div class="corner-label">PHẦN THƯỞNG</div>';
       } else if (tile.type === 'teleport') {
         el.className = 'tile corner teleport';
-        el.innerHTML = '<div class="corner-icon">🌀</div><div class="corner-label">WARP</div>';
+        el.innerHTML = '<div class="corner-icon">🌀</div><div class="corner-label">DỊCH CHUYỂN</div>';
       } else if (tile.type === 'prop') {
         el.className = 'tile prop';
         el.style.setProperty('--zone-color', ZONES[tile.zone].color);
@@ -655,7 +653,10 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
         (curP ? '<img class="center-avatar" src="' + curP.avatar + '" style="box-shadow:0 0 15px ' + curP.color + '; border:2px solid ' + curP.color + '">' +
         '<div class="center-name" style="color:' + curP.color + '">' + esc(curP.name) + '</div>' : '') +
       '</div>' +
-      '<div class="center-dice-box"><div class="center-dice" id="centerDice">🎲</div></div>' +
+      '<div class="center-dice-box">' +
+        '<div class="dice-item" id="centerDice1">🎲</div>' +
+        '<div class="dice-item" id="centerDice2">🎲</div>' +
+      '</div>' +
       '<button class="center-roll-btn" id="rollBtn">TUNG XÚC XẮC</button>' +
       '<div class="center-status" id="rollInfo">...</div>';
     grid.appendChild(center);
@@ -725,7 +726,10 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     btn.disabled = !isMe || isBot || state.busy || hasPending || state.animating;
     if (isBot) info.textContent = '🤖 ' + curP.name + ' ĐANG CHƠI...';
     else if (hasPending) info.textContent = '⏳ CHỜ QUYẾT ĐỊNH...';
-    else if (isMe) info.textContent = '👉 NHẤN ĐỂ TUNG!';
+    else if (isMe) {
+        if (state.game.is_double) info.textContent = '🎲 XÚC XẮC ĐÔI! ĐI TIẾP!';
+        else info.textContent = '👉 NHẤN ĐỂ TUNG!';
+    }
     else info.textContent = '⏳ ĐANG CHỜ...';
   }
 
@@ -739,6 +743,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var player = currentPlayer();
     if (!player) return;
     state.animating = true;
+    state.game.is_double = false; // Reset double state
     syncRollBtn();
 
     try {
@@ -750,27 +755,39 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
         return;
       }
 
-      var dice = 1 + rnd(6);
+      var dice1 = 1 + rnd(6);
+      var dice2 = 1 + rnd(6);
+      var isDouble = (dice1 === dice2);
+      var steps = dice1 + dice2;
 
-      var centerDice = $('centerDice');
-      if (centerDice) {
-        centerDice.classList.add('rolling');
+      var centerDice1 = $('centerDice1');
+      var centerDice2 = $('centerDice2');
+      
+      if (centerDice1 && centerDice2) {
+        centerDice1.classList.add('rolling');
+        centerDice2.classList.add('rolling');
         sfx.roll();
-        var swap2 = setInterval(function () { centerDice.textContent = DICE_FACES[rnd(6)]; }, 55);
+        var swap = setInterval(function () { 
+            centerDice1.textContent = DICE_FACES[rnd(6)]; 
+            centerDice2.textContent = DICE_FACES[rnd(6)]; 
+        }, 55);
+        
         await sleep(750);
-        clearInterval(swap2);
-        centerDice.classList.remove('rolling');
-        centerDice.textContent = DICE_FACES[dice - 1];
+        clearInterval(swap);
+        
+        centerDice1.classList.remove('rolling');
+        centerDice2.classList.remove('rolling');
+        centerDice1.textContent = DICE_FACES[dice1 - 1];
+        centerDice2.textContent = DICE_FACES[dice2 - 1];
       }
 
       var oldPos = player.pos;
-      var steps = dice;
-      var passed = (oldPos + dice) >= 28;
+      var passed = (oldPos + steps) >= 28;
 
       if (state.playMode !== 'online') {
         await animateStepMove(player, steps);
       } else {
-        player.pos = (oldPos + dice) % 28;
+        player.pos = (oldPos + steps) % 28;
         renderPawns();
       }
       sfx.land();
@@ -784,6 +801,11 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
       renderPawns();
       renderCenter();
       await sleep(280);
+
+      if (isDouble) {
+        toast('🎲 XÚC XẮC ĐÔI! ĐI THÊM LƯỢT!');
+        state.game.is_double = true;
+      }
 
       await resolveTile(player, player.pos);
     } finally {
@@ -850,6 +872,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 
     if (tile.type === 'jail') {
       player.jail_turns = 2;
+      state.game.is_double = false; // Vào tù thì mất lượt, hủy double
       sfx.lose();
       await commitAndRender();
       await sleep(500);
@@ -964,7 +987,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var buyBackPrice = Math.floor(totalValue * 1.5);
     var rentPrice = Math.floor(totalValue * 0.5);
 
-    // MARKET EVENT BUFF: BOOM increases rent by 50%
     if (state.game.global_event && state.game.global_event.type === 'boom') {
       rentPrice = Math.floor(rentPrice * 1.5);
     }
@@ -1037,9 +1059,28 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
       commitAndRender().then(function () { showWinOverlay(); });
       return;
     }
+
+    // Xử lý Double Dice (đi thêm lượt)
+    if (state.game.is_double) {
+      state.game.is_double = false;
+      state.game.turn_count++;
+      
+      // Kiểm tra sự kiện
+      if (state.game.turn_count > 0 && state.game.turn_count % 5 === 0) {
+        triggerMarketEvent();
+      }
+
+      commitAndRender().then(function () {
+        var p = currentPlayer();
+        if (p && p.bot) {
+            setTimeout(function () { executeRoll(); }, 1000);
+        }
+      });
+      return; // Không chuyển người chơi
+    }
+
     state.game.turn_count = (state.game.turn_count || 0) + 1;
     
-    // Kiểm tra Sự kiện Thị trường mỗi 5 lượt
     if (state.game.turn_count > 0 && state.game.turn_count % 5 === 0) {
       triggerMarketEvent();
     } else if (state.game.global_event) {
@@ -1047,7 +1088,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
       if (state.game.global_event.turnsLeft <= 0) {
         state.game.global_event = null;
         var text = $('marketTickerText');
-        if (text) text.textContent = '📡 MARKET STABILIZED. SYSTEM NORMAL. 📡';
+        if (text) text.textContent = '📡 THỊ TRƯỜNG ỔN ĐỊNH. HỆ THỐNG BÌNH THƯỜNG. 📡';
       }
     }
 
@@ -1291,7 +1332,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     state.game = {
       players: players, tiles: initTiles(),
       current_turn: myUsername, turn_count: 0,
-      started_at: Date.now(), winner: null, pending_action: null, global_event: null
+      started_at: Date.now(), winner: null, pending_action: null, global_event: null, is_double: false
     };
     showScreen('gameScreen');
     renderAll();
@@ -1373,7 +1414,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var initialState = {
       players: players, tiles: initTiles(),
       current_turn: roomPlayers[0].username, turn_count: 0,
-      started_at: Date.now(), winner: null, pending_action: null, global_event: null
+      started_at: Date.now(), winner: null, pending_action: null, global_event: null, is_double: false
     };
     await sb.from('monopoly_rooms').update({
       status: 'playing', state: initialState,
@@ -1607,7 +1648,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var elName = $('myDisplayName');
     if (elName) elName.textContent = myUsername;
     bindEvents();
-    dbgEvent('INIT', 'Monopoly v3.1 initialized.');
+    dbgEvent('INIT', 'Monopoly v3.2 initialized.');
   }
 
   function openGame() {
