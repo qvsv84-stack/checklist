@@ -1,6 +1,6 @@
 /* =====================================================================
-   CỜ TỶ PHÚ — MONOPOLY (v2.5 — FINAL POLISH)
-   Giá trên band · Mua lại 150% · Thuê 50% · Nút điều khiển vào giữa
+   CỜ TỶ PHÚ — MONOPOLY (v2.6 — DYNAMIC PRICING & UPGRADES)
+   Chain-based band values · Manual upgrades on own tiles · Clean UI
    ===================================================================== */
 (function () {
   'use strict';
@@ -89,7 +89,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .tile-levels{display:flex;gap:1.5px;margin-top:2px;flex-wrap:wrap;justify-content:center;max-width:100%}
 .tile-levels span{font-size:calc(var(--tile-size)*.22);line-height:1}
 
-/* Hiệu ứng nhấp nháy vị trí BẢN THÂN */
+/* Highlight cho vị trí của bản thân */
 .tile.my-position{animation:myTilePulse 1.5s ease-in-out infinite;z-index:5}
 @keyframes myTilePulse{
   0%,100%{
@@ -472,6 +472,26 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     }
   }
 
+  function getChainCount(tileIdx) {
+    var tile = state.game.tiles[tileIdx];
+    if (tile.type !== 'prop' || !tile.owner) return 0;
+    var owner = tile.owner, zone = tile.zone, range = ZONE_RANGES[zone];
+    var count = 1;
+    for (var i = tileIdx - 1; i >= range.start; i--) {
+      if (state.game.tiles[i].owner === owner) count++; else break;
+    }
+    for (var i = tileIdx + 1; i <= range.end; i++) {
+      if (state.game.tiles[i].owner === owner) count++; else break;
+    }
+    return count;
+  }
+
+  function getBaseValue(tileIdx) {
+    var tile = state.game.tiles[tileIdx];
+    if (tile.type !== 'prop' || !tile.owner) return ZONES[tile.zone].price;
+    return ZONES[tile.zone].price * getChainCount(tileIdx);
+  }
+
   function renderStaticTiles() {
     var grid = $('boardGrid');
     grid.innerHTML = '';
@@ -508,8 +528,10 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
           el.style.setProperty('--owner-bg', owner.soft);
         }
         
-        // Luôn hiển thị giá gốc trên band
-        var bandText = fmtShort(ZONES[tile.zone].price);
+        // Giá trên Band thay đổi theo chuỗi
+        var displayPrice = owner ? getBaseValue(i) : ZONES[tile.zone].price;
+        var bandText = fmtShort(displayPrice);
+        
         var nameShort = ZONES[tile.zone].short;
         var body = '';
         
@@ -621,37 +643,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     else info.textContent = '⏳ Đang chờ...';
   }
 
-  function getZoneRange(zoneIdx) { return ZONE_RANGES[zoneIdx]; }
-
-  function calcChainValue(tileIdx) {
-    var tile = state.game.tiles[tileIdx];
-    if (tile.type !== 'prop' || !tile.owner) return 0;
-    var owner = tile.owner, zone = tile.zone, range = getZoneRange(zone);
-    var count = 1;
-    for (var i = tileIdx - 1; i >= range.start; i--) {
-      if (state.game.tiles[i].owner === owner) count++; else break;
-    }
-    for (var i = tileIdx + 1; i <= range.end; i++) {
-      if (state.game.tiles[i].owner === owner) count++; else break;
-    }
-    // Giá mua lại = 150% * base * chain * level
-    return Math.floor(ZONES[zone].price * 1.5 * count * tile.level);
-  }
-
-  function getChainCount(tileIdx) {
-    var tile = state.game.tiles[tileIdx];
-    if (tile.type !== 'prop' || !tile.owner) return 0;
-    var owner = tile.owner, zone = tile.zone, range = getZoneRange(zone);
-    var count = 1;
-    for (var i = tileIdx - 1; i >= range.start; i--) {
-      if (state.game.tiles[i].owner === owner) count++; else break;
-    }
-    for (var i = tileIdx + 1; i <= range.end; i++) {
-      if (state.game.tiles[i].owner === owner) count++; else break;
-    }
-    return count;
-  }
-
   function getPlayer(username) {
     return state.game.players.find(function (p) { return p.username === username; });
   }
@@ -700,9 +691,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 
       if (passed) {
         player.money += 10000;
-        state.game.tiles.forEach(function (t) {
-          if (t.type === 'prop' && t.owner === player.username && t.level < 5) t.level++;
-        });
         showMoneyFloat(player.username, 10000);
       }
 
@@ -827,10 +815,9 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
   async function resolveProperty(player, tileIdx) {
     var tile = state.game.tiles[tileIdx];
     var zone = ZONES[tile.zone];
-    var basePrice = zone.price;
 
     if (!tile.owner) {
-      var price = basePrice;
+      var price = zone.price;
       if (player.bot) {
         if (player.money >= price + 30000) {
           player.money -= price;
@@ -856,18 +843,43 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
       return;
     }
 
+    // Nếu là nhà của chính mình
     if (tile.owner === player.username) {
-      await commitAndRender();
-      await sleep(300);
-      advanceTurn();
+      if (player.bot) {
+        var upgradeCost = ZONES[tile.zone].price;
+        if (player.money >= upgradeCost + 30000 && tile.level < 5) {
+          player.money -= upgradeCost;
+          tile.level++;
+          showMoneyFloat(player.username, -upgradeCost);
+          sfx.buy();
+          await commitAndRender();
+          await sleep(500);
+        }
+        advanceTurn();
+      } else if (player.username === myUsername) {
+        if (tile.level < 5) {
+          state.game.pending_action = {
+            type: 'upgrade', player: player.username, tileIdx: tileIdx,
+            cost: ZONES[tile.zone].price, deadline: Date.now() + 30000
+          };
+          await commitAndRender();
+          showUpgradeModal(player, tileIdx, ZONES[tile.zone].price, tile.level);
+        } else {
+          await commitAndRender();
+          await sleep(300);
+          advanceTurn();
+        }
+      } else {
+        syncRollBtn();
+      }
       return;
     }
 
-    var chainCount = getChainCount(tileIdx);
-    // Giá mua lại = 150%
-    var chainValue = calcChainValue(tileIdx);
-    // Giá thuê = 50%
-    var rentPrice = Math.floor(basePrice * 0.5 * chainCount * tile.level);
+    // Nếu là nhà của người khác
+    var currentBase = getBaseValue(tileIdx);
+    var totalValue = currentBase * tile.level;
+    var buyBackPrice = Math.floor(totalValue * 1.5);
+    var rentPrice = Math.floor(totalValue * 0.5);
 
     if (player.bot) {
       if (player.money >= rentPrice) {
@@ -882,19 +894,20 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
         advanceTurn();
         return;
       }
-      if (player.money >= chainValue) {
-        player.money -= chainValue;
+      if (player.money >= buyBackPrice) {
+        player.money -= buyBackPrice;
         var owner = getPlayer(tile.owner);
-        if (owner) owner.money += chainValue;
+        if (owner) owner.money += buyBackPrice;
         tile.owner = player.username;
-        showMoneyFloat(player.username, -chainValue);
+        showMoneyFloat(player.username, -buyBackPrice);
+        if (owner) showMoneyFloat(owner.username, buyBackPrice);
         sfx.buy();
         await commitAndRender();
         await sleep(500);
         advanceTurn();
         return;
       }
-      doBankrupt(player, getPlayer(tile.owner), chainValue);
+      doBankrupt(player, getPlayer(tile.owner), buyBackPrice);
       await commitAndRender();
       await sleep(700);
       advanceTurn();
@@ -904,11 +917,11 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     if (player.username === myUsername) {
       state.game.pending_action = {
         type: 'opponent_tile', player: player.username, tileIdx: tileIdx,
-        chainValue: chainValue, rentPrice: rentPrice, chainCount: chainCount,
+        chainValue: buyBackPrice, rentPrice: rentPrice, chainCount: getChainCount(tileIdx),
         deadline: Date.now() + 30000
       };
       await commitAndRender();
-      showOpponentModal(player, tileIdx, chainValue, rentPrice, chainCount);
+      showOpponentModal(player, tileIdx, buyBackPrice, rentPrice, getChainCount(tileIdx));
     } else {
       syncRollBtn();
     }
@@ -981,6 +994,24 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     advanceTurn();
   }
 
+  async function handleUpgrade(yes) {
+    var pa = state.game.pending_action;
+    if (!pa || pa.type !== 'upgrade') return;
+    var player = getPlayer(pa.player);
+    if (!player) return;
+    if (yes && player.money >= pa.cost) {
+      player.money -= pa.cost;
+      state.game.tiles[pa.tileIdx].level++;
+      showMoneyFloat(player.username, -pa.cost);
+      sfx.buy();
+    }
+    state.game.pending_action = null;
+    hideActionModal();
+    await commitAndRender();
+    await sleep(400);
+    advanceTurn();
+  }
+
   async function handleOpponentAction(action) {
     var pa = state.game.pending_action;
     if (!pa || pa.type !== 'opponent_tile') return;
@@ -1036,6 +1067,33 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     startDecisionTimeout();
   }
 
+  function showUpgradeModal(player, tileIdx, cost, currentLevel) {
+    var tile = state.game.tiles[tileIdx];
+    var zone = ZONES[tile.zone];
+    var currentBase = getBaseValue(tileIdx);
+    var currentRent = Math.floor(currentBase * currentLevel * 0.5);
+    var nextRent = Math.floor(currentBase * (currentLevel + 1) * 0.5);
+    var canUpgrade = player.money >= cost;
+
+    $('actionModal').innerHTML =
+      '<h2>🏠 Nâng cấp ô ' + tileIdx + '</h2>' +
+      '<div class="sub">' + zone.name + ' · Lv.' + currentLevel + '</div>' +
+      '<div class="prop-info">' +
+        '<div class="row"><span>Giá nâng cấp</span><b>' + fmtMoney(cost) + '</b></div>' +
+        '<div class="row"><span>Thuế hiện tại</span><b>' + fmtMoney(currentRent) + '</b></div>' +
+        '<div class="row"><span>Thuế sau nâng cấp</span><b>' + fmtMoney(nextRent) + '</b></div>' +
+        '<div class="row"><span>Tiền bạn có</span><b>' + fmtMoney(player.money) + '</b></div>' +
+      '</div>' +
+      '<div class="actions">' +
+        '<button class="btn btn-buy" id="btnUpgradeYes" ' + (canUpgrade ? '' : 'disabled') + '>⬆️ Nâng cấp ($' + (cost/1000) + 'k)</button>' +
+        '<button class="btn btn-skip" id="btnUpgradeNo">Bỏ qua</button>' +
+      '</div>';
+    $('actionOverlay').hidden = false;
+    if (canUpgrade) $('btnUpgradeYes').onclick = function () { handleUpgrade(true); };
+    $('btnUpgradeNo').onclick = function () { handleUpgrade(false); };
+    startDecisionTimeout();
+  }
+
   function showOpponentModal(player, tileIdx, chainValue, rentPrice, chainCount) {
     var tile = state.game.tiles[tileIdx];
     var zone = ZONES[tile.zone];
@@ -1043,13 +1101,14 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var canRent = player.money >= rentPrice;
     var canBuy = player.money >= chainValue;
     var multiplier = chainCount > 1 ? (' × ' + chainCount + ' (chuỗi ' + chainCount + ')') : '';
+    var currentBase = getBaseValue(tileIdx);
     
     $('actionModal').innerHTML =
       '<h2>⚠️ Ô ' + tileIdx + ' của ' + esc(owner ? owner.name : '?') + '</h2>' +
       '<div class="sub">' + zone.name + ' · Level ' + tile.level + '</div>' +
       '<div class="prop-info">' +
-        '<div class="row"><span>Giá gốc</span><b>' + fmtMoney(ZONES[tile.zone].price) + '</b></div>' +
-        '<div class="row"><span>Cấp nhà</span><b>Lv.' + tile.level + multiplier + '</b></div>' +
+        '<div class="row"><span>Giá gốc hiện tại</span><b>' + fmtMoney(currentBase) + multiplier + '</b></div>' +
+        '<div class="row"><span>Cấp nhà</span><b>Lv.' + tile.level + '</b></div>' +
         '<div class="row"><span>→ Mua lại (150%)</span><b>' + fmtMoney(chainValue) + '</b></div>' +
         '<div class="row"><span>Thuê (50%)</span><b>' + fmtMoney(rentPrice) + '</b></div>' +
         '<div class="row"><span>Tiền bạn có</span><b>' + fmtMoney(player.money) + '</b></div>' +
@@ -1074,6 +1133,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
       if (!pa) return;
       dbgEvent('DECISION_TIMEOUT', pa.type);
       if (pa.type === 'buy_empty') handleBuyEmpty(false);
+      else if (pa.type === 'upgrade') handleUpgrade(false);
       else if (pa.type === 'opponent_tile') {
         if (state.game.players.find(function (p) { return p.username === pa.player; }).money >= pa.rentPrice) handleOpponentAction('rent');
         else handleOpponentAction('bankrupt');
@@ -1266,6 +1326,9 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
       if (pa.type === 'buy_empty') {
         var p = getPlayer(pa.player);
         showBuyEmptyModal(p, pa.tileIdx, pa.price);
+      } else if (pa.type === 'upgrade') {
+        var p = getPlayer(pa.player);
+        showUpgradeModal(p, pa.tileIdx, pa.cost, state.game.tiles[pa.tileIdx].level);
       } else if (pa.type === 'opponent_tile') {
         var p = getPlayer(pa.player);
         showOpponentModal(p, pa.tileIdx, pa.chainValue, pa.rentPrice, pa.chainCount);
@@ -1346,7 +1409,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
   }
 
   function bindEvents() {
-    // Event delegation cho các nút trong center
     $('boardGrid').addEventListener('click', function(e) {
       var btn = e.target.closest('.icon-btn-sm');
       if (!btn) return;
@@ -1432,7 +1494,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var elName = $('myDisplayName');
     if (elName) elName.textContent = myUsername;
     bindEvents();
-    dbgEvent('INIT', 'Monopoly v2.5 initialized.');
+    dbgEvent('INIT', 'Monopoly v2.6 initialized.');
   }
 
   function openGame() {
