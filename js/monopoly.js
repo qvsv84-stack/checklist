@@ -1,6 +1,6 @@
 /* =====================================================================
-   CỜ TỶ PHÚ — MONOPOLY (v3.0 — NEON CRYPTO TYCOON)
-   Cyberpunk Theme · Holographic UI · High Contrast Neon Glows
+   CỜ TỶ PHÚ — MONOPOLY (v3.1 — NEON CYBER MARKET)
+   Market Events (Boom, Crash, Heist, Hack) · Owned Property Highlight
    ===================================================================== */
 (function () {
   'use strict';
@@ -16,9 +16,14 @@ html,body{overflow:hidden;height:100%;width:100%;margin:0;background:#050508}
 [hidden]{display:none!important}
 button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit}
 
-/* BACKGROUND */
 #mpApp::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 0%,rgba(0,240,255,.15) 0%,transparent 50%),radial-gradient(circle at 10% 90%,rgba(255,42,117,.15) 0%,transparent 50%),linear-gradient(180deg,#050508 0%,#0a0f1c 100%);pointer-events:none;z-index:0}
 #mpApp::after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(0,240,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,240,255,.03) 1px,transparent 1px);background-size:30px 30px;pointer-events:none;z-index:0;opacity:.5}
+
+/* EVENT TICKER */
+.market-ticker{position:absolute;top:0;left:0;width:100%;height:32px;background:rgba(0,0,0,.9);border-bottom:1px solid #ff2a75;z-index:100;overflow:hidden;display:flex;align-items:center;box-shadow:0 0 20px rgba(255,42,117,.4)}
+.market-ticker-text{white-space:nowrap;font-family:'Orbitron',sans-serif;font-weight:700;font-size:14px;color:#ff2a75;letter-spacing:2px;animation:tickerMove 15s linear infinite;text-shadow:0 0 10px #ff2a75}
+@keyframes tickerMove{0%{transform:translateX(100vw)}100%{transform:translateX(-100%)}}
+.market-ticker.active .market-ticker-text{color:#ffcc00;text-shadow:0 0 10px #ffcc00}
 
 /* SETUP SCREENS */
 .screen{position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;padding:18px;overflow-y:auto}
@@ -47,7 +52,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .btn-lg{padding:16px 28px;font-size:15px;width:100%}
 .btn-sm{padding:8px 16px;font-size:12px}
 
-/* ROOM LIST */
 .room-item{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);margin-bottom:10px}
 .room-item:hover{border-color:rgba(0,240,255,.4);background:rgba(0,240,255,.05)}
 .room-item-info{flex:1;min-width:0}
@@ -56,11 +60,10 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .room-item-join{padding:10px 18px;border-radius:8px;font-family:'Orbitron',sans-serif;font-weight:700;font-size:12px;color:#000;background:linear-gradient(90deg,#00f0ff,#00ff66);box-shadow:0 0 15px rgba(0,240,255,.3)}
 .room-item-join:disabled{opacity:.4;cursor:not-allowed;box-shadow:none;filter:grayscale(1)}
 
-/* GAME SCREEN */
 .game-screen{position:absolute;inset:0;z-index:10;overflow:hidden;animation:fadeIn .3s ease-out;background:#050508}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
-.board{position:absolute;inset:0;padding:6px}
+.board{position:absolute;inset:0;padding:6px;padding-top:38px;} /* Chừa chỗ cho Ticker */
 .board-grid{display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);width:100%;height:100%;gap:4px}
 
 /* TILES */
@@ -78,8 +81,30 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .tile-band-text{font-family:'Orbitron',sans-serif;font-size:calc(var(--tile-size)*.16);font-weight:900;color:#000;letter-spacing:.5px;white-space:nowrap}
 .tile.prop .tile-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px;position:relative;background:#0d111a}
 .tile-name{font-family:'Orbitron',sans-serif;font-size:calc(var(--tile-size)*.15);font-weight:700;color:#a0aabf;text-align:center;line-height:1.1;white-space:nowrap;letter-spacing:.5px}
-.tile.prop.owned{box-shadow:inset 0 0 15px var(--owner-color), 0 0 10px var(--owner-color);border-color:var(--owner-color)}
+
+/* FIX UI: LÀM NỔI BẬT ĐẤT CỦA MÌNH */
 .tile.prop.owned .tile-body{background:rgba(0,0,0,.4)}
+.tile.prop.my-land{
+  border-color:var(--owner-color) !important;
+  box-shadow: inset 0 0 20px var(--owner-color), 0 0 15px var(--owner-color) !important;
+  transform: scale(1.02);
+  z-index: 4;
+}
+.tile.prop.my-land .tile-body{
+  background: linear-gradient(180deg, rgba(255,255,255,.1) 0%, rgba(0,0,0,.6) 100%) !important;
+}
+.my-land-badge{
+  position:absolute;top:2px;right:2px;font-size:calc(var(--tile-size)*.2);z-index:10;
+  filter:drop-shadow(0 0 5px #fff);
+}
+
+/* ĐẤT CỦA NGƯỜI KHÁC (Mờ hơn, viền đứt nét) */
+.tile.prop.other-land{
+  border-color:rgba(255,255,255,.2);
+  box-shadow: inset 0 0 10px rgba(0,0,0,.8);
+}
+.tile.prop.other-land .tile-body{opacity:.7}
+
 .tile-levels{display:flex;gap:2px;margin-top:4px}
 .tile-levels span{font-size:calc(var(--tile-size)*.2);line-height:1;filter:drop-shadow(0 0 3px rgba(255,255,255,.5))}
 
@@ -110,6 +135,10 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .icon-btn-sm[data-action="quit"]{border-color:rgba(255,42,117,.5);color:#ff2a75}
 .icon-btn-sm[data-action="quit"]:hover{background:rgba(255,42,117,.2);box-shadow:0 0 15px rgba(255,42,117,.4)}
 
+/* EVENT BANNER IN CENTER */
+.event-banner{background:rgba(255,42,117,.2);border:1px solid #ff2a75;padding:8px 16px;border-radius:8px;font-family:'Orbitron',sans-serif;font-size:16px;color:#ffcc00;text-shadow:0 0 10px #ffcc00;animation:pulseEvent 1s infinite alternate}
+@keyframes pulseEvent{0%{box-shadow:0 0 10px rgba(255,204,0,.3)}100%{box-shadow:0 0 30px rgba(255,204,0,.8)}}
+
 .center-player{display:flex;align-items:center;gap:14px;padding:12px 24px;border-radius:12px;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1);box-shadow:0 4px 15px rgba(0,0,0,.5)}
 .center-avatar{width:48px;height:48px;border-radius:50%;flex-shrink:0}
 .center-name{font-family:'Orbitron',sans-serif;font-size:18px;font-weight:900;letter-spacing:1px;text-shadow:0 0 10px currentColor}
@@ -138,6 +167,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .mp-modal .prop-info .row{display:flex;justify-content:space-between;margin:4px 0;border-bottom:1px dashed rgba(255,255,255,.1);padding-bottom:4px}
 .mp-modal .prop-info .row:last-child{border-bottom:none;padding-bottom:0}
 .mp-modal .prop-info .row b{font-family:'Orbitron',sans-serif;color:#00f0ff;font-weight:700}
+.mp-modal .prop-info .row b.event-buff{color:#ffcc00;text-shadow:0 0 5px #ffcc00}
 .mp-modal .actions{display:flex;flex-direction:column;gap:10px;margin-top:20px}
 .mp-modal .actions .btn{width:100%;padding:14px;font-size:13px}
 .mp-modal .actions .btn-buy{background:linear-gradient(90deg,#00ff66,#00f0ff);color:#000;box-shadow:0 0 20px rgba(0,255,102,.4)}
@@ -145,31 +175,25 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .mp-modal .actions .btn-danger{background:linear-gradient(90deg,#ff2a75,#b000ff);color:#fff;box-shadow:0 0 20px rgba(255,42,117,.4)}
 .mp-modal .actions .btn-skip{background:rgba(255,255,255,.1);color:#a0aabf;border:1px solid rgba(255,255,255,.2)}
 
-/* WIN CARD */
 .win-card{background:rgba(10,15,28,.95);padding:40px;border-radius:20px;text-align:center;width:min(420px,92%);border:1px solid rgba(0,240,255,.5);box-shadow:0 0 80px rgba(0,240,255,.3);animation:modalPop .4s cubic-bezier(.4,1.4,.6,1);margin:auto}
 .win-card .emoji{font-size:80px;margin-bottom:16px;animation:emojiBounce 1.2s infinite;filter:drop-shadow(0 0 20px rgba(0,240,255,.8))}
 @keyframes emojiBounce{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-15px) scale(1.1)}}
 .win-card h2{margin:0 0 12px;font-family:'Orbitron',sans-serif;font-size:28px;letter-spacing:2px;background:linear-gradient(90deg,#00f0ff,#ff2a75);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 15px rgba(0,240,255,.5))}
 .win-card p{color:#a0aabf;margin:0 0 24px;font-weight:600;font-size:16px;letter-spacing:1px}
 
-/* TOAST */
 .toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(20px);padding:12px 24px;border-radius:8px;background:rgba(0,0,0,.9);color:#00f0ff;font-family:'Orbitron',sans-serif;font-weight:700;font-size:14px;z-index:9700;opacity:0;pointer-events:none;transition:all .3s;border:1px solid #00f0ff;box-shadow:0 0 20px rgba(0,240,255,.4)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-/* MONEY FLOAT */
 .money-float{position:fixed;font-family:'Orbitron',sans-serif;font-size:24px;font-weight:900;pointer-events:none;z-index:9500;text-shadow:0 0 15px currentColor;animation:moneyRise 1.4s cubic-bezier(.4,0,.2,1) forwards;white-space:nowrap}
 @keyframes moneyRise{0%{opacity:0;transform:translate(-50%,0) scale(.5)}20%{opacity:1;transform:translate(-50%,-15px) scale(1.2)}100%{opacity:0;transform:translate(-50%,-80px) scale(1)}}
 
-/* TURN BANNER */
 .turn-banner{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%) scale(0);font-family:'Orbitron',sans-serif;font-size:clamp(24px,5vmin,40px);font-weight:900;padding:20px 60px;border-radius:8px;background:rgba(0,0,0,.8);color:#fff;border:2px solid currentColor;box-shadow:0 0 40px currentColor;opacity:0;transition:all .4s cubic-bezier(.4,1.6,.6,1);pointer-events:none;z-index:9000;white-space:nowrap;letter-spacing:2px;text-transform:uppercase;text-shadow:0 0 10px currentColor}
 .turn-banner.show{opacity:1;transform:translate(-50%,-50%) scale(1);animation:bannerBounce .5s ease-out}
 @keyframes bannerBounce{0%{transform:translate(-50%,-50%) scale(.6)}60%{transform:translate(-50%,-50%) scale(1.05)}100%{transform:translate(-50%,-50%) scale(1)}}
 
-/* CONFETTI */
 .confetti{position:fixed;width:8px;height:8px;top:-20px;pointer-events:none;z-index:9999;animation:confettiFall linear forwards}
 @keyframes confettiFall{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}
 
-/* DEBUG */
 #debugPanel{position:fixed;top:60px;right:12px;z-index:9800;width:min(400px,calc(100vw - 24px));max-height:calc(100vh - 80px);overflow-y:auto;background:rgba(0,0,0,.95);color:#00ff66;padding:16px;border-radius:8px;font-family:monospace;font-size:11px;line-height:1.6;border:1px solid #00ff66;box-shadow:0 0 30px rgba(0,255,102,.2)}
 #debugPanel .dbg-head{display:flex;justify-content:space-between;align-items:center;padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid rgba(0,255,102,.3);font-weight:900;font-size:12px}
 #debugPanel .dbg-head button{padding:4px 8px;border-radius:4px;background:rgba(0,255,102,.1);color:#00ff66;font-size:10px;border:1px solid rgba(0,255,102,.4);margin-left:4px}
@@ -180,6 +204,10 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 
   var HTML = `
 <div id="mpApp">
+  <div class="market-ticker" id="marketTicker">
+    <div class="market-ticker-text" id="marketTickerText">SYSTEM ONLINE... WAITING FOR NEXT MARKET EVENT...</div>
+  </div>
+
   <section id="menuScreen" class="screen">
     <div class="setup-card">
       <div class="hero">
@@ -298,7 +326,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
   var sb = null;
   if (window.supabase && CFG.SUPABASE_URL) sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY, { auth: { persistSession: false } });
 
-  // NEON ZONES
   var ZONES = [
     { name: 'Nhà nghèo', short: 'Nghèo', price: 10000, color: '#00f0ff', soft: 'rgba(0,240,255,0.2)' },
     { name: 'Nhà giàu', short: 'Giàu', price: 15000, color: '#00ff66', soft: 'rgba(0,255,102,0.2)' },
@@ -311,8 +338,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     { start: 15, end: 20 },
     { start: 22, end: 27 }
   ];
-  
-  // NEON PLAYERS
   var PLAYER_COLORS = [
     { c: '#ff2a75', s: 'rgba(255,42,117,0.2)' },
     { c: '#00f0ff', s: 'rgba(0,240,255,0.2)' },
@@ -321,6 +346,13 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
   ];
   var BOT_NAMES = ['CyberBot', 'NeonViper', 'GlitchKing'];
   var DICE_FACES = ['⚀','⚁','⚂','⚃','⚄','⚅'];
+
+  var MARKET_EVENTS = [
+    { type: 'boom', name: 'CRYPTO BOOM', desc: 'Thuế tăng 50% trong 3 lượt tới!', color: '#00ff66' },
+    { type: 'crash', name: 'MARKET CRASH', desc: 'Tất cả nhà giảm 1 cấp!', color: '#ff2a75' },
+    { type: 'heist', name: 'DATA HEIST', desc: 'Người giàu nhất mất 10% tiền chia cho người khác!', color: '#b000ff' },
+    { type: 'hack', name: 'SYSTEM HACK', desc: 'Tất cả người chơi nhận $20k!', color: '#ffcc00' }
+  ];
 
   function initTiles() {
     var tiles = [];
@@ -397,7 +429,8 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     buy: function () { [659, 880, 1046].forEach(function (f, i) { setTimeout(function () { beep(f, .1, 'triangle', .05); }, i * 70); }); },
     pay: function () { [300, 250, 200].forEach(function (f, i) { setTimeout(function () { beep(f, .15, 'sawtooth', .04); }, i * 70); }); },
     win: function () { [523, 659, 784, 1046, 1318, 1567].forEach(function (f, i) { setTimeout(function () { beep(f, .15, 'square', .05); }, i * 80); }); },
-    lose: function () { [400, 300, 200, 100].forEach(function (f, i) { setTimeout(function () { beep(f, .2, 'sawtooth', .05); }, i * 100); }); }
+    lose: function () { [400, 300, 200, 100].forEach(function (f, i) { setTimeout(function () { beep(f, .2, 'sawtooth', .05); }, i * 100); }); },
+    event: function () { [880, 1108, 1318, 1760].forEach(function (f, i) { setTimeout(function () { beep(f, .2, 'square', .06); }, i * 100); }); }
   };
 
   function fitBoard() {
@@ -405,8 +438,9 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     if (!board) return;
     var w = board.clientWidth;
     var h = board.clientHeight;
+    // Padding top 38px for ticker, 6px for others -> 44px total vertically
     var tileW = (w - 36) / 8;
-    var tileH = (h - 36) / 8;
+    var tileH = (h - 50) / 8;
     var minTile = Math.min(tileW, tileH);
     board.style.setProperty('--tile-size', minTile + 'px');
   }
@@ -479,6 +513,55 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     return ZONES[tile.zone].price * getChainCount(tileIdx);
   }
 
+  /* ============================ MARKET EVENTS ============================ */
+  function triggerMarketEvent() {
+    var ev = MARKET_EVENTS[rnd(MARKET_EVENTS.length)];
+    state.game.global_event = { type: ev.type, turnsLeft: 3 };
+    
+    var ticker = $('marketTicker');
+    var text = $('marketTickerText');
+    ticker.classList.add('active');
+    text.textContent = '⚠️ MARKET ALERT: ' + ev.name + ' — ' + ev.desc + ' ⚠️';
+    
+    sfx.event();
+    screenShake();
+    
+    if (ev.type === 'crash') {
+      state.game.tiles.forEach(function (t) {
+        if (t.type === 'prop' && t.owner && t.level > 1) t.level--;
+      });
+    } else if (ev.type === 'heist') {
+      var richest = null;
+      state.game.players.forEach(function(p) {
+        if (!p.bankrupt && (!richest || p.money > richest.money)) richest = p;
+      });
+      if (richest && richest.money > 0) {
+        var stolen = Math.floor(richest.money * 0.1);
+        richest.money -= stolen;
+        var others = state.game.players.filter(function(p){ return !p.bankrupt && p.username !== richest.username; });
+        if (others.length > 0) {
+          var share = Math.floor(stolen / others.length);
+          others.forEach(function(p){ p.money += share; });
+        }
+        showMoneyFloat(richest.username, -stolen);
+      }
+    } else if (ev.type === 'hack') {
+      state.game.players.forEach(function(p) {
+        if (!p.bankrupt) {
+          p.money += 20000;
+          showMoneyFloat(p.username, 20000);
+        }
+      });
+    }
+    
+    setTimeout(function() {
+      ticker.classList.remove('active');
+      text.textContent = '📡 ' + ev.name + ' ACTIVE (' + state.game.global_event.turnsLeft + ' TURNS LEFT) 📡';
+    }, 5000);
+
+    dbgEvent('MARKET_EVENT', ev.name);
+  }
+
   function renderStaticTiles() {
     var grid = $('boardGrid');
     grid.innerHTML = '';
@@ -511,8 +594,13 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
         
         if (owner) {
           el.classList.add('owned');
-          el.style.setProperty('--owner-color', owner.color);
-          el.style.setProperty('--owner-bg', owner.soft);
+          if (owner.username === myUsername) {
+            el.classList.add('my-land');
+            el.style.setProperty('--owner-color', owner.color);
+          } else {
+            el.classList.add('other-land');
+            el.style.setProperty('--owner-color', owner.color);
+          }
         }
         
         var displayPrice = owner ? getBaseValue(i) : ZONES[tile.zone].price;
@@ -522,6 +610,9 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
         var body = '';
         
         if (owner) {
+          if (owner.username === myUsername) {
+            body += '<div class="my-land-badge">⭐</div>';
+          }
           var lv = '';
           for (var l = 0; l < tile.level; l++) lv += '<span>🏠</span>';
           body += '<div class="tile-levels">' + lv + '</div>';
@@ -536,7 +627,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
       if (me && me.pos === i && !me.bankrupt) {
         el.classList.add('my-position');
         el.style.setProperty('--my-color', me.color);
-        el.style.setProperty('--my-color-alpha', me.soft);
       }
 
       grid.appendChild(el);
@@ -545,12 +635,22 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var center = document.createElement('div');
     center.className = 'center-info';
     var curP = state.game.players.find(function (p) { return p.username === state.game.current_turn; });
+    
+    var eventHtml = '';
+    if (state.game.global_event) {
+      var ev = MARKET_EVENTS.find(function(e){ return e.type === state.game.global_event.type; });
+      if (ev) {
+        eventHtml = '<div class="event-banner">⚠️ ' + ev.name + ' (' + state.game.global_event.turnsLeft + ')</div>';
+      }
+    }
+
     center.innerHTML =
       '<div class="center-actions">' +
         '<button class="icon-btn-sm" data-action="sound" title="Âm thanh">' + (sfxOn ? '🔊' : '🔇') + '</button>' +
         '<button class="icon-btn-sm" data-action="debug" title="Debug">🐞</button>' +
         '<button class="icon-btn-sm" data-action="quit" title="Thoát">✕</button>' +
       '</div>' +
+      eventHtml +
       '<div class="center-player">' +
         (curP ? '<img class="center-avatar" src="' + curP.avatar + '" style="box-shadow:0 0 15px ' + curP.color + '; border:2px solid ' + curP.color + '">' +
         '<div class="center-name" style="color:' + curP.color + '">' + esc(curP.name) + '</div>' : '') +
@@ -710,7 +810,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
         if (newHighlightTile) {
           newHighlightTile.classList.add('my-position');
           newHighlightTile.style.setProperty('--my-color', me.color);
-          newHighlightTile.style.setProperty('--my-color-alpha', me.soft);
         }
       }
 
@@ -865,6 +964,11 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var buyBackPrice = Math.floor(totalValue * 1.5);
     var rentPrice = Math.floor(totalValue * 0.5);
 
+    // MARKET EVENT BUFF: BOOM increases rent by 50%
+    if (state.game.global_event && state.game.global_event.type === 'boom') {
+      rentPrice = Math.floor(rentPrice * 1.5);
+    }
+
     if (player.bot) {
       if (player.money >= rentPrice) {
         player.money -= rentPrice;
@@ -934,6 +1038,19 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
       return;
     }
     state.game.turn_count = (state.game.turn_count || 0) + 1;
+    
+    // Kiểm tra Sự kiện Thị trường mỗi 5 lượt
+    if (state.game.turn_count > 0 && state.game.turn_count % 5 === 0) {
+      triggerMarketEvent();
+    } else if (state.game.global_event) {
+      state.game.global_event.turnsLeft--;
+      if (state.game.global_event.turnsLeft <= 0) {
+        state.game.global_event = null;
+        var text = $('marketTickerText');
+        if (text) text.textContent = '📡 MARKET STABILIZED. SYSTEM NORMAL. 📡';
+      }
+    }
+
     var idx = state.game.players.findIndex(function (p) { return p.username === state.game.current_turn; });
     for (var i = 1; i <= state.game.players.length; i++) {
       idx = (idx + 1) % state.game.players.length;
@@ -1059,13 +1176,20 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var nextRent = Math.floor(currentBase * (currentLevel + 1) * 0.5);
     var canUpgrade = player.money >= cost;
 
+    var boomHtml = '';
+    if (state.game.global_event && state.game.global_event.type === 'boom') {
+      currentRent = Math.floor(currentRent * 1.5);
+      nextRent = Math.floor(nextRent * 1.5);
+      boomHtml = ' <span style="color:#ffcc00;font-size:12px">(x1.5 BOOM)</span>';
+    }
+
     $('actionModal').innerHTML =
       '<h2>NÂNG CẤP</h2>' +
       '<div class="sub">' + zone.name + ' · Lv.' + currentLevel + '</div>' +
       '<div class="prop-info">' +
         '<div class="row"><span>Chi phí</span><b>' + fmtMoney(cost) + '</b></div>' +
-        '<div class="row"><span>Thuế hiện tại</span><b>' + fmtMoney(currentRent) + '</b></div>' +
-        '<div class="row"><span>Thuế sau nâng</span><b>' + fmtMoney(nextRent) + '</b></div>' +
+        '<div class="row"><span>Thuế hiện tại</span><b>' + fmtMoney(currentRent) + boomHtml + '</b></div>' +
+        '<div class="row"><span>Thuế sau nâng</span><b>' + fmtMoney(nextRent) + boomHtml + '</b></div>' +
         '<div class="row"><span>Ví của bạn</span><b>' + fmtMoney(player.money) + '</b></div>' +
       '</div>' +
       '<div class="actions">' +
@@ -1087,13 +1211,18 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var multiplier = chainCount > 1 ? (' × ' + chainCount + ' (chuỗi ' + chainCount + ')') : '';
     var currentBase = getBaseValue(tileIdx);
     
+    var boomHtml = '';
+    if (state.game.global_event && state.game.global_event.type === 'boom') {
+      boomHtml = ' <span style="color:#ffcc00;font-size:12px">(x1.5 BOOM)</span>';
+    }
+
     $('actionModal').innerHTML =
       '<h2>ĐẤT CỦA ' + esc(owner ? owner.name : '?') + '</h2>' +
       '<div class="sub">' + zone.name + ' · Lv.' + tile.level + '</div>' +
       '<div class="prop-info">' +
         '<div class="row"><span>Giá gốc</span><b>' + fmtMoney(currentBase) + multiplier + '</b></div>' +
         '<div class="row"><span>Mua lại (150%)</span><b>' + fmtMoney(chainValue) + '</b></div>' +
-        '<div class="row"><span>Thuê (50%)</span><b>' + fmtMoney(rentPrice) + '</b></div>' +
+        '<div class="row"><span>Thuê (50%)</span><b>' + fmtMoney(rentPrice) + boomHtml + '</b></div>' +
         '<div class="row"><span>Ví của bạn</span><b>' + fmtMoney(player.money) + '</b></div>' +
       '</div>' +
       '<div class="actions">' +
@@ -1162,7 +1291,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     state.game = {
       players: players, tiles: initTiles(),
       current_turn: myUsername, turn_count: 0,
-      started_at: Date.now(), winner: null, pending_action: null
+      started_at: Date.now(), winner: null, pending_action: null, global_event: null
     };
     showScreen('gameScreen');
     renderAll();
@@ -1244,7 +1373,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var initialState = {
       players: players, tiles: initTiles(),
       current_turn: roomPlayers[0].username, turn_count: 0,
-      started_at: Date.now(), winner: null, pending_action: null
+      started_at: Date.now(), winner: null, pending_action: null, global_event: null
     };
     await sb.from('monopoly_rooms').update({
       status: 'playing', state: initialState,
@@ -1371,6 +1500,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     }
     if (state.game) {
       html += '<div class="kv"><span class="k">Turn</span><span class="v">' + state.game.current_turn + '</span></div>';
+      html += '<div class="kv"><span class="k">Event</span><span class="v">' + (state.game.global_event ? state.game.global_event.type : 'None') + '</span></div>';
       html += '<div class="kv"><span class="k">Winner</span><span class="v">' + (state.game.winner || 'None') + '</span></div>';
       html += '<pre>' + esc(JSON.stringify(state.game, null, 2)) + '</pre>';
     }
@@ -1477,7 +1607,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var elName = $('myDisplayName');
     if (elName) elName.textContent = myUsername;
     bindEvents();
-    dbgEvent('INIT', 'Monopoly v3.0 initialized.');
+    dbgEvent('INIT', 'Monopoly v3.1 initialized.');
   }
 
   function openGame() {
