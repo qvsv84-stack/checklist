@@ -1,5 +1,6 @@
 /* =====================================================================
-   CỜ TỶ PHÚ — MONOPOLY (v2.4 — OWNER COLORS & MY POSITION PULSE)
+   CỜ TỶ PHÚ — MONOPOLY (v2.5 — FINAL POLISH)
+   Giá trên band · Mua lại 150% · Thuê 50% · Nút điều khiển vào giữa
    ===================================================================== */
 (function () {
   'use strict';
@@ -15,12 +16,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 
 #mpApp::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 15% 5%,rgba(245,158,11,.22),transparent 40%),radial-gradient(ellipse at 85% 95%,rgba(124,58,237,.25),transparent 42%),radial-gradient(ellipse at 50% 50%,rgba(34,201,138,.06),transparent 60%),linear-gradient(135deg,#0a0417 0%,#1e1233 45%,#0a0417 100%);pointer-events:none;z-index:0}
 #mpApp::after{content:"";position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");pointer-events:none;z-index:0;mix-blend-mode:overlay}
-
-/* ========== HUD FLOAT ========== */
-.hud-float{position:fixed;top:12px;right:12px;z-index:9000;display:flex;gap:6px}
-.icon-btn{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:17px;background:linear-gradient(145deg,rgba(255,255,255,.96),rgba(255,248,239,.9));border:1px solid rgba(245,158,11,.4);box-shadow:0 6px 18px -8px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.9);transition:transform .18s cubic-bezier(.4,1.6,.6,1)}
-.icon-btn:hover{transform:translateY(-2px)}
-.icon-btn:active{transform:scale(.94)}
 
 /* ========== SETUP SCREENS ========== */
 .screen{position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;padding:18px;overflow-y:auto}
@@ -59,12 +54,11 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .waiting-player img{width:36px;height:36px;border-radius:50%;box-shadow:0 0 0 2px #fff,0 4px 12px -4px rgba(0,0,0,.2)}
 
 /* =====================================================
-   GAME SCREEN — MAXIMUM SPACE (NO HUD)
+   GAME SCREEN
    ===================================================== */
 .game-screen{position:absolute;inset:0;z-index:10;overflow:hidden;animation:fadeIn .3s ease-out;background:#0a0417}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
-/* Bản đồ phủ kín 100% màn hình */
 .board{position:absolute;inset:0;background:radial-gradient(circle at 30% 20%,rgba(255,255,255,.08),transparent 50%),linear-gradient(135deg,#1e1233 0%,#2d1b4e 50%,#1e1233 100%);padding:4px;box-shadow:inset 0 0 80px rgba(245,158,11,.1)}
 .board::before{content:"";position:absolute;inset:2px;pointer-events:none;background:linear-gradient(135deg,rgba(245,158,11,.18),transparent 40%,rgba(124,58,237,.12));z-index:0}
 .board-grid{display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);width:100%;height:100%;gap:3px;position:relative;z-index:1}
@@ -88,7 +82,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .tile.prop .tile-band::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.35),transparent 60%)}
 .tile-band-text{font-size:calc(var(--tile-size)*.18);font-weight:900;color:#fff;position:relative;z-index:1;text-shadow:0 1px 2px rgba(0,0,0,.4);white-space:nowrap}
 
-/* Đây là phần nền thay đổi theo màu người chơi */
 .tile.prop .tile-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:2px;min-height:0;background:#fff;position:relative;transition:background .3s ease}
 .tile.prop.owned .tile-body{background:var(--owner-bg, #fff)}
 .tile-name{font-size:calc(var(--tile-size)*.2);font-weight:900;color:#3b2b52;text-align:center;line-height:1.1;margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:100%}
@@ -124,6 +117,12 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .center-info::before{content:"";position:absolute;inset:-30%;background:conic-gradient(from 0deg,transparent 0deg,rgba(245,158,11,.15) 60deg,transparent 120deg,rgba(245,158,11,.15) 240deg,transparent 300deg);animation:centerSpin 24s linear infinite;pointer-events:none}
 @keyframes centerSpin{to{transform:rotate(360deg)}}
 .center-info>*{position:relative;z-index:1}
+
+/* Nút điều khiển trong trung tâm */
+.center-actions{position:absolute;top:calc(var(--tile-size)*.15);right:calc(var(--tile-size)*.15);display:flex;gap:calc(var(--tile-size)*.1);z-index:10}
+.icon-btn-sm{width:calc(var(--tile-size)*.45);height:calc(var(--tile-size)*.45);border-radius:50%;display:grid;place-items:center;font-size:calc(var(--tile-size)*.22);background:rgba(255,255,255,.9);border:1px solid rgba(245,158,11,.4);box-shadow:0 2px 6px rgba(0,0,0,.2);transition:transform .15s;cursor:pointer}
+.icon-btn-sm:hover{transform:scale(1.1)}
+.icon-btn-sm:active{transform:scale(.95)}
 
 .center-player{display:flex;align-items:center;gap:calc(var(--tile-size)*.15);padding:calc(var(--tile-size)*.1) calc(var(--tile-size)*.25);border-radius:999px;background:rgba(255,255,255,.95);box-shadow:0 4px 12px rgba(0,0,0,.1);max-width:90%;border:2px solid rgba(0,0,0,.05)}
 .center-avatar{width:calc(var(--tile-size)*.5);height:calc(var(--tile-size)*.5);border-radius:50%;flex-shrink:0}
@@ -197,12 +196,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 
   var HTML = `
 <div id="mpApp">
-  <div class="hud-float">
-    <button class="icon-btn" id="soundBtn" title="Âm thanh">🔊</button>
-    <button class="icon-btn" id="debugBtn" title="Debug">🐞</button>
-    <button class="icon-btn" id="quitBtn" title="Thoát" style="background:#ef4444;color:#fff;border-color:#dc2626">✕</button>
-  </div>
-
   <section id="menuScreen" class="screen">
     <div class="setup-card">
       <div class="hero">
@@ -420,7 +413,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     lose: function () { [440, 370, 311, 261].forEach(function (f, i) { setTimeout(function () { beep(f, .22, 'sawtooth', .05); }, i * 110); }); }
   };
 
-  /* ============================ LAYOUT ============================ */
   function fitBoard() {
     var board = $('board');
     if (!board) return;
@@ -432,7 +424,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     board.style.setProperty('--tile-size', minTile + 'px');
   }
 
-  /* ============================ EFFECTS ============================ */
   function showTurnBanner(name, color) {
     var b = $('turnBanner'); if (!b) return;
     b.textContent = '👉 ' + name;
@@ -481,7 +472,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     }
   }
 
-  /* ============================ BOARD RENDER ============================ */
   function renderStaticTiles() {
     var grid = $('boardGrid');
     grid.innerHTML = '';
@@ -515,10 +505,11 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
         if (owner) {
           el.classList.add('owned');
           el.style.setProperty('--owner-color', owner.color);
-          el.style.setProperty('--owner-bg', owner.soft); // Lấy màu pastel làm nền
+          el.style.setProperty('--owner-bg', owner.soft);
         }
         
-        var bandText = owner ? ('Lv.' + tile.level) : fmtShort(ZONES[tile.zone].price);
+        // Luôn hiển thị giá gốc trên band
+        var bandText = fmtShort(ZONES[tile.zone].price);
         var nameShort = ZONES[tile.zone].short;
         var body = '';
         
@@ -534,7 +525,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
                        '<div class="tile-body">' + body + '</div>';
       }
 
-      // Highlight nhấp nháy vị trí của BẠN
       if (me && me.pos === i && !me.bankrupt) {
         el.classList.add('my-position');
         el.style.setProperty('--my-color', me.color);
@@ -548,6 +538,11 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     center.className = 'center-info';
     var curP = state.game.players.find(function (p) { return p.username === state.game.current_turn; });
     center.innerHTML =
+      '<div class="center-actions">' +
+        '<button class="icon-btn-sm" data-action="sound" title="Âm thanh">' + (sfxOn ? '🔊' : '🔇') + '</button>' +
+        '<button class="icon-btn-sm" data-action="debug" title="Debug">🐞</button>' +
+        '<button class="icon-btn-sm" data-action="quit" title="Thoát" style="background:#ef4444;color:#fff;border-color:#dc2626">✕</button>' +
+      '</div>' +
       '<div class="center-player">' +
         (curP ? '<img class="center-avatar" src="' + curP.avatar + '" style="box-shadow:0 0 0 3px ' + curP.color + '">' +
         '<div class="center-name" style="color:' + curP.color + '">' + esc(curP.name) + '</div>' : '') +
@@ -626,7 +621,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     else info.textContent = '⏳ Đang chờ...';
   }
 
-  /* ============================ LOGIC HELPERS ============================ */
   function getZoneRange(zoneIdx) { return ZONE_RANGES[zoneIdx]; }
 
   function calcChainValue(tileIdx) {
@@ -640,8 +634,10 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     for (var i = tileIdx + 1; i <= range.end; i++) {
       if (state.game.tiles[i].owner === owner) count++; else break;
     }
-    return ZONES[zone].price * count * tile.level;
+    // Giá mua lại = 150% * base * chain * level
+    return Math.floor(ZONES[zone].price * 1.5 * count * tile.level);
   }
+
   function getChainCount(tileIdx) {
     var tile = state.game.tiles[tileIdx];
     if (tile.type !== 'prop' || !tile.owner) return 0;
@@ -661,7 +657,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
   }
   function currentPlayer() { return getPlayer(state.game.current_turn); }
 
-  /* ============================ TURN ENGINE ============================ */
   async function executeRoll() {
     if (!state.game || state.game.winner || state.animating) return;
     var player = currentPlayer();
@@ -729,7 +724,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var me = state.game.players.find(function(p){ return p.username === myUsername; });
     
     for (var s = 0; s < steps; s++) {
-      // Xóa viền phát sáng của ô cũ (nếu đang là lượt của mình)
       if (me && player.username === myUsername) {
         var oldTile = grid.querySelector('[data-idx="' + player.pos + '"]');
         if (oldTile) oldTile.classList.remove('my-position');
@@ -737,7 +731,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 
       player.pos = (player.pos + 1) % 28;
 
-      // Thêm viền phát sáng vào ô mới
       if (me && player.username === myUsername) {
         var newHighlightTile = grid.querySelector('[data-idx="' + player.pos + '"]');
         if (newHighlightTile) {
@@ -834,9 +827,10 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
   async function resolveProperty(player, tileIdx) {
     var tile = state.game.tiles[tileIdx];
     var zone = ZONES[tile.zone];
+    var basePrice = zone.price;
 
     if (!tile.owner) {
-      var price = zone.price;
+      var price = basePrice;
       if (player.bot) {
         if (player.money >= price + 30000) {
           player.money -= price;
@@ -869,9 +863,11 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
       return;
     }
 
-    var chainValue = calcChainValue(tileIdx);
     var chainCount = getChainCount(tileIdx);
-    var rentPrice = Math.floor(chainValue / 2);
+    // Giá mua lại = 150%
+    var chainValue = calcChainValue(tileIdx);
+    // Giá thuê = 50%
+    var rentPrice = Math.floor(basePrice * 0.5 * chainCount * tile.level);
 
     if (player.bot) {
       if (player.money >= rentPrice) {
@@ -966,7 +962,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     }
   }
 
-  /* ============================ HUMAN HANDLERS ============================ */
   async function handleBuyEmpty(yes) {
     var pa = state.game.pending_action;
     if (!pa || pa.type !== 'buy_empty') return;
@@ -1020,7 +1015,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     advanceTurn();
   }
 
-  /* ============================ MODALS ============================ */
   function showBuyEmptyModal(player, tileIdx, price) {
     var tile = state.game.tiles[tileIdx];
     var zone = ZONES[tile.zone];
@@ -1049,12 +1043,14 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var canRent = player.money >= rentPrice;
     var canBuy = player.money >= chainValue;
     var multiplier = chainCount > 1 ? (' × ' + chainCount + ' (chuỗi ' + chainCount + ')') : '';
+    
     $('actionModal').innerHTML =
       '<h2>⚠️ Ô ' + tileIdx + ' của ' + esc(owner ? owner.name : '?') + '</h2>' +
       '<div class="sub">' + zone.name + ' · Level ' + tile.level + '</div>' +
       '<div class="prop-info">' +
-        '<div class="row"><span>Giá trị nhà</span><b>' + fmtMoney(ZONES[tile.zone].price) + ' × ' + tile.level + multiplier + '</b></div>' +
-        '<div class="row"><span>→ Tổng giá trị</span><b>' + fmtMoney(chainValue) + '</b></div>' +
+        '<div class="row"><span>Giá gốc</span><b>' + fmtMoney(ZONES[tile.zone].price) + '</b></div>' +
+        '<div class="row"><span>Cấp nhà</span><b>Lv.' + tile.level + multiplier + '</b></div>' +
+        '<div class="row"><span>→ Mua lại (150%)</span><b>' + fmtMoney(chainValue) + '</b></div>' +
         '<div class="row"><span>Thuê (50%)</span><b>' + fmtMoney(rentPrice) + '</b></div>' +
         '<div class="row"><span>Tiền bạn có</span><b>' + fmtMoney(player.money) + '</b></div>' +
       '</div>' +
@@ -1105,7 +1101,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     $('winOverlay').hidden = false;
   }
 
-  /* ============================ LOCAL GAME START ============================ */
   function startLocalGame() {
     myUsername = getMyUsername();
     var players = [{
@@ -1132,7 +1127,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     dbgEvent('LOCAL_START', 'players=' + players.length);
   }
 
-  /* ============================ ONLINE ============================ */
   async function createRoom() {
     if (!sb) return toast('Supabase chưa sẵn sàng');
     if (room) return toast('Đang ở phòng khác');
@@ -1321,7 +1315,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     }, 4000);
   }
 
-  /* ============================ DEBUG ============================ */
   function renderDbg() {
     var b = $('dbgBody'); if (!b) return;
     var html = '<div class="kv"><span class="k">Mode</span><span class="v">' + state.playMode + '</span></div>';
@@ -1342,7 +1335,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     b.innerHTML = html;
   }
 
-  /* ============================ NAV ============================ */
   function showScreen(id) {
     ['menuScreen', 'onlineScreen', 'waitingScreen', 'localSetupScreen', 'gameScreen'].forEach(function (sid) {
       var el = $(sid);
@@ -1354,16 +1346,31 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
   }
 
   function bindEvents() {
-    $('soundBtn').onclick = function () {
-      sfxOn = !sfxOn;
-      $('soundBtn').textContent = sfxOn ? '🔊' : '🔇';
-      toast(sfxOn ? 'Đã bật âm thanh' : 'Đã tắt âm thanh');
-    };
-    $('debugBtn').onclick = function () {
-      debugOpen = !debugOpen;
-      $('debugPanel').hidden = !debugOpen;
-      if (debugOpen) renderDbg();
-    };
+    // Event delegation cho các nút trong center
+    $('boardGrid').addEventListener('click', function(e) {
+      var btn = e.target.closest('.icon-btn-sm');
+      if (!btn) return;
+      var action = btn.dataset.action;
+      if (action === 'sound') {
+        sfxOn = !sfxOn;
+        shadow.querySelectorAll('.icon-btn-sm[data-action="sound"]').forEach(function(b) {
+          b.textContent = sfxOn ? '🔊' : '🔇';
+        });
+        toast(sfxOn ? 'Đã bật âm thanh' : 'Đã tắt âm thanh');
+      } else if (action === 'debug') {
+        debugOpen = !debugOpen;
+        $('debugPanel').hidden = !debugOpen;
+        if (debugOpen) renderDbg();
+      } else if (action === 'quit') {
+        if (confirm('Bạn muốn thoát game?')) {
+          if (room) leaveRoom();
+          state.game = null;
+          showScreen('menuScreen');
+          closeGame();
+        }
+      }
+    });
+
     $('dbgClose').onclick = function () { debugOpen = false; $('debugPanel').hidden = true; };
     $('dbgCopy').onclick = function () {
       try { navigator.clipboard.writeText(JSON.stringify(state.game, null, 2)); toast('Đã copy state!'); } catch (e) { toast('Lỗi copy'); }
@@ -1408,15 +1415,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     $('hostStartBtn').onclick = function () { hostStart(); };
     $('leaveRoomBtn').onclick = async function () { await leaveRoom(); showScreen('onlineScreen'); };
 
-    $('quitBtn').onclick = async function () {
-      if (confirm('Bạn muốn thoát game?')) {
-        if (room) await leaveRoom();
-        state.game = null;
-        showScreen('menuScreen');
-        closeGame();
-      }
-    };
-
     $('playAgainBtn').onclick = function () {
       $('winOverlay').hidden = true;
       state.game = null;
@@ -1434,7 +1432,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var elName = $('myDisplayName');
     if (elName) elName.textContent = myUsername;
     bindEvents();
-    dbgEvent('INIT', 'Monopoly v2.4 initialized.');
+    dbgEvent('INIT', 'Monopoly v2.5 initialized.');
   }
 
   function openGame() {
