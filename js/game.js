@@ -1,7 +1,7 @@
 /* =====================================================================
    RẮN & THANG — PREMIUM EDITION
-   Self-contained: tự inject CSS + HTML vào Shadow DOM.
-   Không đụng CSS/JS của app chính.
+   Self-contained: inject CSS + HTML vào Shadow DOM.
+   Tích hợp multiplayer: chọn đối thủ từ Supabase view public_players.
    ===================================================================== */
 (function () {
   'use strict';
@@ -157,6 +157,36 @@ input{font-family:inherit}
 .toggle .thumb{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(88,60,150,.3);transition:transform .22s cubic-bezier(.3,.9,.4,1.4)}
 .toggle input:checked + .track{background:linear-gradient(135deg,#ff7ab8,#a78bfa)}
 .toggle input:checked + .track .thumb{transform:translateX(22px)}
+
+/* System users */
+.system-users-block{
+  margin-top:16px;padding:14px;
+  background:rgba(255,255,255,.6);
+  border:2px dashed rgba(167,139,250,.3);
+  border-radius:18px;
+}
+.system-users-head{
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:13px;font-weight:800;color:#6b5b85;margin-bottom:10px;
+}
+.system-users-head .sys-count{font-size:11px;color:#a78bfa;font-weight:900;letter-spacing:.3px}
+.system-users-list{display:flex;flex-wrap:wrap;gap:8px;max-height:180px;overflow-y:auto;padding-right:2px}
+.sys-user-chip{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:6px 12px 6px 6px;border-radius:999px;background:#fff;
+  border:2px solid rgba(167,139,250,.18);font-size:13px;font-weight:800;color:#4a3a63;
+  cursor:pointer;transition:all .15s ease;max-width:100%;
+}
+.sys-user-chip:hover{border-color:rgba(167,139,250,.5);transform:translateY(-1px)}
+.sys-user-chip.selected{
+  background:linear-gradient(135deg,#f0e8ff,#e8f0ff);
+  border-color:#a78bfa;box-shadow:0 6px 14px -8px rgba(167,139,250,.8);
+}
+.sys-user-chip img{width:28px;height:28px;border-radius:50%;object-fit:cover;background:#f0ecfa;flex:0 0 auto}
+.sys-user-chip .sys-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sys-user-chip .sys-check{font-size:12px;color:#a78bfa;opacity:0;transition:opacity .15s}
+.sys-user-chip.selected .sys-check{opacity:1}
+.sys-empty{font-size:12px;color:#a396bd;font-style:italic;padding:8px 4px}
 
 .lb-block{margin-top:6px}
 .lb-block h3{margin:0 0 10px;font-family:'Baloo 2',cursive;font-size:16px;font-weight:800;color:#6b5b85;display:flex;align-items:center;gap:8px}
@@ -378,7 +408,7 @@ input{font-family:inherit}
         <span class="badge">PREMIUM</span>
       </div>
       <div class="top-actions">
-        <button class="icon-btn" id="soundBtn" title="Bật/tắt âm thanh">🔊</button>
+        <button class="icon-btn" id="soundBtn" title="Bật/tắt âm thanh" type="button">🔊</button>
       </div>
     </header>
 
@@ -416,6 +446,17 @@ input{font-family:inherit}
             <span>Đấu với máy 🤖 &nbsp;<em style="font-style:normal;color:#b0a4c7;font-weight:700">(tắt = chơi chung một máy)</em></span>
           </label>
         </div>
+
+        <div class="system-users-block">
+          <div class="system-users-head">
+            <span>👥 Đối thủ từ hệ thống</span>
+            <span class="sys-count" id="sysCount">0/3</span>
+          </div>
+          <div class="system-users-list" id="systemUsersList">
+            <div class="sys-empty">Đang tải user…</div>
+          </div>
+        </div>
+
         <div style="margin-top:20px">
           <button class="btn btn-primary btn-lg" id="startBtn" type="button">Bắt đầu chơi 🚀</button>
         </div>
@@ -499,7 +540,7 @@ input{font-family:inherit}
   shadow.innerHTML = '<style>' + GAME_CSS + '</style>' + GAME_HTML;
   document.body.appendChild(host);
 
-  /* Nút đóng (ngoài shadow) */
+  /* Close button (ngoài shadow) */
   var closeBtn = document.createElement('button');
   closeBtn.id = 'snakeGameClose';
   closeBtn.type = 'button';
@@ -714,9 +755,109 @@ input{font-family:inherit}
   };
   var dice0 = null, dice1 = null;
 
+  var systemUsers = [];          // [{id, username, name, avatar}]
+  var selectedUserIds = new Set();
+
   function avatarUrl(seed) {
     return 'https://api.dicebear.com/9.x/adventurer/svg?seed=' + encodeURIComponent(seed) +
       '&backgroundColor=ffd5dc,ffdfbf,c0aede,b6e3f4,d1d4f9&radius=14';
+  }
+
+  /* ============================ System users ============================ */
+  function getCurrentUsername() {
+    try {
+      var keys = ['srank_username', 'srank_user', 'auth_username', 'username'];
+      for (var i = 0; i < keys.length; i++) {
+        var v = localStorage.getItem(keys[i]);
+        if (v) {
+          try { var obj = JSON.parse(v); return obj.username || obj.name || v; } catch (_) { return v; }
+        }
+      }
+      if (window.SRANK_STATE && window.SRANK_STATE.currentUser) {
+        return window.SRANK_STATE.currentUser.username || window.SRANK_STATE.currentUser.name || '';
+      }
+      var el = document.getElementById('logoutName');
+      if (el && el.textContent && el.textContent.trim()) return el.textContent.trim();
+    } catch (e) {}
+    return '';
+  }
+
+  async function fetchSystemUsers() {
+    var el = $('systemUsersList');
+    if (!sb) { el.innerHTML = '<div class="sys-empty">Chưa kết nối Supabase</div>'; return; }
+
+    var me = getCurrentUsername().toLowerCase();
+    var usersTable = (CFG && CFG.USERS_TABLE) || 'public_players';
+
+    el.innerHTML = '<div class="sys-empty">Đang tải user…</div>';
+
+    try {
+      var res = await sb.from(usersTable).select('*').limit(500);
+      if (res.error) throw res.error;
+
+      systemUsers = (res.data || [])
+        .filter(function (u) {
+          var uname = (u.username || '').toLowerCase();
+          var dname = (u.display_name || '').toLowerCase();
+          if (!uname && !dname) return false;
+          if (me && (uname === me || dname === me)) return false;
+          return true;
+        })
+        .map(function (u, i) {
+          var uname = String(u.username || '').toLowerCase();
+          var dname = String(u.display_name || u.username || ('User ' + i)).slice(0, 32);
+          return {
+            id: String(u.id || uname || i),
+            username: uname,
+            name: dname,
+            avatar: u.avatar_url || avatarUrl(dname + '-' + (u.id || i))
+          };
+        })
+        .sort(function (a, b) { return a.name.localeCompare(b.name, 'vi'); });
+
+      if (!systemUsers.length) {
+        el.innerHTML = '<div class="sys-empty">Chưa có user nào khác trong hệ thống</div>';
+        return;
+      }
+      renderSystemUsers();
+    } catch (e) {
+      console.warn('[sys] fetch failed:', e.message || e);
+      el.innerHTML = '<div class="sys-empty">Không tải được user — kiểm tra console</div>';
+    }
+  }
+
+  function renderSystemUsers() {
+    var el = $('systemUsersList');
+    var cnt = $('sysCount');
+    if (!el) return;
+    if (!systemUsers.length) {
+      el.innerHTML = '<div class="sys-empty">Chưa có user nào khác trong hệ thống</div>';
+      if (cnt) cnt.textContent = '0/3';
+      return;
+    }
+    el.innerHTML = systemUsers.map(function (u) {
+      var sel = selectedUserIds.has(u.id);
+      return '<button type="button" class="sys-user-chip' + (sel ? ' selected' : '') + '" data-uid="' + escapeHtml(u.id) + '">' +
+        '<img src="' + escapeHtml(u.avatar) + '" alt="" onerror="this.style.opacity=\'0\'">' +
+        '<span class="sys-name">' + escapeHtml(u.name) + '</span>' +
+        '<span class="sys-check">✓</span>' +
+        '</button>';
+    }).join('');
+    if (cnt) cnt.textContent = selectedUserIds.size + '/3';
+  }
+
+  function syncCountFromSelection() {
+    if (selectedUserIds.size === 0) return;
+    var want = 1 + selectedUserIds.size;
+    if (want < 2) want = 2;
+    if (want > 4) want = 4;
+    state.count = want;
+    var seg = $('countSeg');
+    if (seg) {
+      Array.prototype.forEach.call(seg.children, function (b) {
+        b.classList.toggle('active', +b.dataset.count === state.count);
+      });
+    }
   }
 
   /* ============================ Board build ============================ */
@@ -949,15 +1090,61 @@ input{font-family:inherit}
     var nameInput = $('playerName');
     var myName = (nameInput.value || '').trim().slice(0, 16) || 'Bạn';
     try { localStorage.setItem('srank_player_name', myName); } catch (e) {}
+
     var players = [];
-    for (var i = 0; i < state.count; i++) {
-      var st = PLAYER_STYLES[i];
-      var isBot = state.vsBot && i > 0;
-      var nm = i === 0 ? myName : (isBot ? BOT_NAMES[i - 1] : ('Người chơi ' + (i + 1)));
+    var st0 = PLAYER_STYLES[0];
+    players.push({
+      id: 0, name: myName, bot: false, pos: 0, skip: false, extra: false,
+      color: st0.color, soft: st0.soft, emoji: st0.emoji,
+      avatar: avatarUrl(myName + '-me-' + Date.now())
+    });
+
+    // Ưu tiên: user thật được chọn
+    var picked = systemUsers.filter(function (u) { return selectedUserIds.has(u.id); });
+    picked.slice(0, state.count - 1).forEach(function (u, i) {
+      var st = PLAYER_STYLES[i + 1];
       players.push({
-        id: i, name: nm, bot: isBot, pos: 0, skip: false, extra: false,
+        id: i + 1,
+        name: u.name.slice(0, 16),
+        bot: false,
+        pos: 0, skip: false, extra: false,
         color: st.color, soft: st.soft, emoji: st.emoji,
-        avatar: avatarUrl(nm + '-' + i)
+        avatar: u.avatar
+      });
+    });
+
+    // Fill bot nếu còn slot và vsBot ON
+    if (state.vsBot) {
+      var bi = 0;
+      while (players.length < state.count && bi < BOT_NAMES.length) {
+        var st = PLAYER_STYLES[players.length];
+        var nm = BOT_NAMES[bi++];
+        players.push({
+          id: players.length, name: nm, bot: true,
+          pos: 0, skip: false, extra: false,
+          color: st.color, soft: st.soft, emoji: st.emoji,
+          avatar: avatarUrl(nm + '-' + players.length)
+        });
+      }
+    } else if (picked.length === 0 && players.length < 2) {
+      // Không chọn ai + không bot → pass-and-play 2 người
+      var st1 = PLAYER_STYLES[1];
+      players.push({
+        id: 1, name: 'Người chơi 2', bot: false,
+        pos: 0, skip: false, extra: false,
+        color: st1.color, soft: st1.soft, emoji: st1.emoji,
+        avatar: avatarUrl('P2-' + Date.now())
+      });
+    }
+
+    // Đảm bảo tối thiểu 2 người
+    while (players.length < 2) {
+      var s = PLAYER_STYLES[players.length];
+      players.push({
+        id: players.length, name: 'Người chơi ' + (players.length + 1), bot: false,
+        pos: 0, skip: false, extra: false,
+        color: s.color, soft: s.soft, emoji: s.emoji,
+        avatar: avatarUrl('P' + (players.length + 1))
       });
     }
     return players;
@@ -1219,6 +1406,22 @@ input{font-family:inherit}
     beep(720, 0.07, 'sine', 0.04);
   });
   $('vsBot').addEventListener('change', function () { state.vsBot = this.checked; });
+
+  $('systemUsersList').addEventListener('click', function (e) {
+    var chip = e.target.closest('.sys-user-chip');
+    if (!chip) return;
+    var uid = chip.dataset.uid;
+    if (selectedUserIds.has(uid)) {
+      selectedUserIds.delete(uid);
+    } else {
+      if (selectedUserIds.size >= 3) { toast('Tối đa 3 đối thủ từ hệ thống'); return; }
+      selectedUserIds.add(uid);
+    }
+    renderSystemUsers();
+    syncCountFromSelection();
+    beep(720, 0.06, 'sine', 0.04);
+  });
+
   $('startBtn').addEventListener('click', function () { ac(); startGame(); });
   $('rollBtn').addEventListener('click', function () { ac(); doRoll(); });
   $('quitBtn').addEventListener('click', function () {
@@ -1259,9 +1462,10 @@ input{font-family:inherit}
     document.body.classList.add('snake-game-open');
     host.style.display = 'block';
     closeBtn.style.display = 'grid';
-    // reset scroll về đầu mỗi lần mở
     var app = shadow.getElementById('sgApp');
     if (app) app.scrollTop = 0;
+    // Nếu chưa fetch users lần nào → fetch
+    if (!systemUsers.length) fetchSystemUsers();
   }
   function closeGame() {
     host.style.display = 'none';
@@ -1283,8 +1487,9 @@ input{font-family:inherit}
   dice0 = makeDice($('diceCube0'));
   dice1 = makeDice($('diceCube1'));
   refreshLeaderboards();
+  fetchSystemUsers();
 
-  /* Bind nút mở (có thể chưa render nếu script chạy trước) */
+  /* Bind launcher button */
   function bindLauncher() {
     var launch = document.getElementById('snakeLadderBtn');
     if (launch && !launch.__sgBound) {
