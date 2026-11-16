@@ -1,5 +1,5 @@
 /* =====================================================================
-   RẮN & THANG — v4.2 (Extra turn on 6 / Doubles + Auto display_name)
+   RẮN & THANG — v4.4 (fix animation stuck + extra turn)
    ===================================================================== */
 (function () {
   'use strict';
@@ -68,8 +68,6 @@ input,select{font-family:inherit}
 .win-card{background:#fff;padding:28px;border-radius:24px;text-align:center;width:min(400px,90%)}
 .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);padding:12px 22px;border-radius:999px;background:#3b2b52;color:#fff;font-weight:800;z-index:9500;opacity:0;transition:.3s}
 .toast.show{opacity:1}
-
-/* DEBUG PANEL */
 #debugPanel{position:fixed;top:56px;right:8px;z-index:9800;width:min(420px,calc(100vw - 16px));max-height:calc(100vh - 72px);overflow-y:auto;background:rgba(12,8,24,.98);color:#d0f5d0;padding:12px;border-radius:14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.5;border:1px solid rgba(0,255,0,.4);box-shadow:0 20px 60px rgba(0,0,0,.8)}
 #debugPanel .dbg-head{display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid rgba(0,255,0,.3);font-weight:900;font-size:12px;color:#00ff88}
 #debugPanel .dbg-tools{display:flex;gap:4px}
@@ -83,6 +81,7 @@ input,select{font-family:inherit}
 #debugPanel .dbg-kv .v.warn{color:#ffd060}
 #debugPanel .dbg-kv .v.err{color:#ff6b8a}
 #debugPanel .dbg-kv .v.ok{color:#00ff88}
+#debugPanel .dbg-kv .v.muted{color:#707080}
 #debugPanel pre{white-space:pre-wrap;word-break:break-all;margin:4px 0 0;background:rgba(0,0,0,.5);padding:6px;border-radius:4px;font-size:9.5px;max-height:200px;overflow-y:auto;color:#b0d0b0;line-height:1.4}
 #debugPanel .dbg-evts{margin-top:4px}
 #debugPanel .dbg-evt{display:flex;gap:6px;padding:2px 0;font-size:9.5px;border-bottom:1px solid rgba(0,255,136,.1)}
@@ -107,15 +106,12 @@ input,select{font-family:inherit}
     <section id="menuScreen" class="setup">
       <div class="panel">
         <div class="hero"><h1>Leo thang, né rắn!</h1><p>Chơi online cùng đồng nghiệp</p></div>
-        <div class="field" style="text-align:center">
-          <label style="margin-bottom:4px">Chào mừng</label>
-          <div id="myDisplayName" style="font-size:22px;font-weight:900;color:#a78bfa">...</div>
-        </div>
+        <div class="field" style="text-align:center"><label style="margin-bottom:4px">Chào mừng</label><div id="myDisplayName" style="font-size:22px;font-weight:900;color:#a78bfa">...</div></div>
         <div class="field" style="margin-top:16px"><label>Kiểu chơi</label>
           <div class="play-mode-grid" id="playModeGrid">
-            <button class="play-card active" data-mode="online">🌐 Online</button>
-            <button class="play-card" data-mode="bot">🤖 Bot</button>
-            <button class="play-card" data-mode="local">👥 Cùng máy</button>
+            <button class="play-card active" data-playmode="online">🌐 Online</button>
+            <button class="play-card" data-playmode="bot">🤖 Bot</button>
+            <button class="play-card" data-playmode="local">👥 Cùng máy</button>
           </div>
         </div>
         <button class="btn btn-primary btn-lg" id="continueBtn" style="margin-top:20px">Tiếp tục →</button>
@@ -126,9 +122,7 @@ input,select{font-family:inherit}
       <div class="panel">
         <h2 style="text-align:center">Phòng chơi</h2>
         <button class="btn btn-primary btn-lg" id="createRoomBtn">➕ Tạo phòng mới</button>
-        <div style="margin-top:20px;display:flex;justify-content:space-between;align-items:center">
-          <b>Phòng đang chờ</b><button class="btn btn-ghost" id="refreshRoomsBtn" style="padding:5px 10px">↻</button>
-        </div>
+        <div style="margin-top:20px;display:flex;justify-content:space-between;align-items:center"><b>Phòng đang chờ</b><button class="btn btn-ghost" id="refreshRoomsBtn" style="padding:5px 10px">↻</button></div>
         <div id="roomsList" style="margin-top:10px"></div>
         <button class="btn btn-ghost btn-lg" id="backFromOnlineBtn" style="margin-top:20px">← Quay lại</button>
       </div>
@@ -141,9 +135,10 @@ input,select{font-family:inherit}
         <div id="waitingPlayers"></div>
         <div id="hostControls">
           <select id="hostModeSelect" style="width:100%;padding:12px;border-radius:12px;margin-bottom:10px">
-            <option value="classic">Cổ điển</option><option value="speed">Tốc độ</option><option value="chaos">Hỗn loạn</option>
+            <option value="classic">Cổ điển · 6 = thêm lượt</option>
+            <option value="speed">Tốc độ · đôi = thêm lượt</option>
+            <option value="chaos">Hỗn loạn · 6 = thêm lượt</option>
           </select>
-          <div style="font-size:11px;color:#888;margin-bottom:10px;text-align:left">🎲 Tung 6 (cổ điển) / Đôi (tốc độ) = thêm lượt</div>
           <button class="btn btn-primary btn-lg" id="hostStartBtn" disabled>Bắt đầu</button>
         </div>
         <button class="btn btn-ghost btn-lg" id="leaveRoomBtn" style="margin-top:10px">Rời phòng</button>
@@ -155,11 +150,10 @@ input,select{font-family:inherit}
         <h2 style="text-align:center" id="localSetupTitle">Đấu với Bot</h2>
         <div class="field" style="margin-top:20px"><label>Chế độ</label>
           <div class="play-mode-grid" id="modeGrid">
-            <button class="play-card active" data-mode="classic">Cổ điển</button>
-            <button class="play-card" data-mode="speed">Tốc độ</button>
-            <button class="play-card" data-mode="chaos">Hỗn loạn</button>
+            <button class="play-card active" data-mode="classic">🎲 Cổ điển<br><small style="font-size:10px;color:#888">6 = thêm lượt</small></button>
+            <button class="play-card" data-mode="speed">⚡ Tốc độ<br><small style="font-size:10px;color:#888">đôi = thêm lượt</small></button>
+            <button class="play-card" data-mode="chaos">🌪️ Hỗn loạn<br><small style="font-size:10px;color:#888">6 = thêm lượt</small></button>
           </div>
-          <div style="font-size:11px;color:#888;margin-top:4px;text-align:left">🎲 Tung 6 (cổ điển) / Đôi (tốc độ) = thêm lượt</div>
         </div>
         <div class="field" style="margin-top:20px"><label>Số người</label>
           <div style="display:flex;gap:10px" id="countSeg">
@@ -179,18 +173,13 @@ input,select{font-family:inherit}
             <div class="turn-pill" id="turnPill"><span class="dot"></span><span class="txt">...</span></div>
             <button class="btn btn-ghost" id="quitBtn">Thoát</button>
           </div>
-          <div class="board">
-            <svg id="boardSvg" viewBox="0 0 100 100"></svg><div class="cells" id="cells"></div><div class="tokens" id="tokens"></div>
-          </div>
+          <div class="board"><svg id="boardSvg" viewBox="0 0 100 100"></svg><div class="cells" id="cells"></div><div class="tokens" id="tokens"></div></div>
         </main>
         <aside class="panel">
           <div class="dice-panel">
-            <div style="display:flex;gap:16px">
-              <div class="dice-stage"><div class="dice-cube" id="dice0"></div></div>
-              <div class="dice-stage" id="diceStage1"><div class="dice-cube" id="dice1"></div></div>
-            </div>
+            <div style="display:flex;gap:16px"><div class="dice-stage"><div class="dice-cube" id="dice0"></div></div><div class="dice-stage" id="diceStage1"><div class="dice-cube" id="dice1"></div></div></div>
             <button class="btn btn-primary btn-lg" id="rollBtn">🎲 Tung</button>
-            <div id="rollHint" style="font-size:12px;color:#888">...</div>
+            <div id="rollHint" style="font-size:12px;color:#888;text-align:center;line-height:1.4">...</div>
           </div>
           <div class="log" id="log" style="margin-top:20px"></div>
         </aside>
@@ -199,23 +188,13 @@ input,select{font-family:inherit}
   </div>
 
   <div class="overlay" id="winOverlay" hidden>
-    <div class="win-card">
-      <h2 id="winTitle">Chiến thắng!</h2><p id="winSub"></p>
-      <button class="btn btn-primary btn-lg" id="playAgainBtn" style="margin-top:20px">Về sảnh</button>
-    </div>
+    <div class="win-card"><h2 id="winTitle">Chiến thắng!</h2><p id="winSub"></p><button class="btn btn-primary btn-lg" id="playAgainBtn" style="margin-top:20px">Về sảnh</button></div>
   </div>
 
   <div class="toast" id="toast"></div>
 
   <div id="debugPanel" hidden>
-    <div class="dbg-head">
-      <span>🐞 DEBUG v2</span>
-      <div class="dbg-tools">
-        <button id="dbgCopy" type="button">📋 Copy</button>
-        <button id="dbgForce" type="button">🔄 Force</button>
-        <button id="dbgClose" type="button">✕</button>
-      </div>
-    </div>
+    <div class="dbg-head"><span>🐞 DEBUG v4</span><div class="dbg-tools"><button id="dbgCopy" type="button">📋 Copy</button><button id="dbgForce" type="button">🔄 Force</button><button id="dbgClose" type="button">✕</button></div></div>
     <div id="dbgBody"></div>
   </div>
 </div>
@@ -247,14 +226,14 @@ input,select{font-family:inherit}
     el._t = setTimeout(function () { el.classList.remove('show'); }, 2500);
   }
 
-  /* ============================ DEBUG STATE ============================ */
+  /* ============================ DEBUG ============================ */
   var debugOpen = false;
   var dbgEvents = [];
   var lastRtAt = 0;
   var lastPollAt = 0;
   var lastRtPayload = null;
+  var lastStaleLoggedVer = -1;
 
-  function nowStr() { return new Date().toTimeString().slice(0, 8); }
   function agoStr(ts) {
     if (!ts) return '—';
     var s = Math.floor((Date.now() - ts) / 1000);
@@ -264,18 +243,19 @@ input,select{font-family:inherit}
   }
   function dbgEvent(type, detail) {
     dbgEvents.push({ time: new Date(), type: type, detail: detail || '' });
-    if (dbgEvents.length > 60) dbgEvents.shift();
+    if (dbgEvents.length > 80) dbgEvents.shift();
     if (window.console) console.log('[SG]', type, detail || '');
     if (debugOpen) renderDbg();
   }
   function shortTurn(t) { return t ? String(t).slice(0, 12) : '—'; }
 
-  /* ============================ FULL SNAPSHOT ============================ */
   function buildSnapshot() {
     var curP = state.players[state.current];
     var dbTurn = room && room.state ? room.state.current_turn : null;
     var localTurn = curP ? curP.username : null;
-    var turnMatch = dbTurn && localTurn && (dbTurn === localTurn);
+    var turnMatch;
+    if (!room || state.playMode !== 'online') turnMatch = null;
+    else turnMatch = dbTurn && localTurn && (dbTurn === localTurn);
 
     return {
       timestamp: new Date().toISOString(),
@@ -286,10 +266,7 @@ input,select{font-family:inherit}
         polling: !!pollTimer, last_rt_ago: agoStr(lastRtAt), last_poll_ago: agoStr(lastPollAt),
         last_rt_payload: lastRtPayload
       },
-      room: room ? {
-        id: room.id, code: room.code, status: room.status, version: room.version,
-        host: room.host_username, mode: room.mode, max_players: room.max_players
-      } : null,
+      room: room ? { id: room.id, code: room.code, status: room.status, version: room.version, host: room.host_username, mode: room.mode, max_players: room.max_players } : null,
       room_state: room && room.state ? {
         current_turn: room.state.current_turn, moves: room.state.moves,
         last_roll_by: room.state.last_roll_by, last_roll_at: room.state.last_roll_at,
@@ -298,87 +275,78 @@ input,select{font-family:inherit}
         log_count: room.state.log ? room.state.log.length : 0
       } : null,
       local_state: {
-        mode: state.mode, current_index: state.current, current_username: localTurn,
+        playMode: state.playMode, mode: state.mode,
+        current_index: state.current, current_username: localTurn,
         current_name: curP ? curP.name : null, isMyTurn: dbTurn === myUsername,
         busy: state.busy, over: state.over, turn_match: turnMatch,
+        iAmAnimating: !!animating[myUsername],
         players: state.players.map(function (p) {
           return { username: p.username, name: p.name, pos: p.pos, targetPos: p.targetPos, animating: !!animating[p.username], bot: !!p.bot };
         })
       },
-      room_players_db: roomPlayers.map(function (p) {
-        return { username: p.username, display_name: p.display_name, pos: p.pos, is_host: !!p.is_host, color_index: p.color_index };
-      }),
-      events: dbgEvents.slice(-30).map(function (e) {
-        return { time: e.time.toTimeString().slice(0, 8), type: e.type, detail: e.detail };
-      })
+      room_players_db: roomPlayers.map(function (p) { return { username: p.username, display_name: p.display_name, pos: p.pos, is_host: !!p.is_host, color_index: p.color_index }; }),
+      events: dbgEvents.slice(-40).map(function (e) { return { time: e.time.toTimeString().slice(0, 8), type: e.type, detail: e.detail }; })
     };
   }
 
-  /* ============================ RENDER DEBUG ============================ */
   function renderDbg() {
     if (!debugOpen) return;
     var s = buildSnapshot(), body = $('dbgBody'), html = '';
 
     html += '<div class="dbg-sec"><div class="dbg-sec-title">👤 Me</div>';
-    html += '<div class="dbg-kv"><span class="k">username</span><span class="v">' + esc(s.me.username) + '</span></div>';
-    html += '<div class="dbg-kv"><span class="k">display_name</span><span class="v">' + esc(s.me.display_name) + '</span></div>';
-    html += '</div>';
+    html += kv('username', s.me.username); html += kv('display_name', s.me.display_name); html += '</div>';
 
     if (s.room) {
       html += '<div class="dbg-sec"><div class="dbg-sec-title">🏠 Room</div>';
       html += kv('code', s.room.code); html += kv('status', s.room.status, s.room.status === 'playing' ? 'ok' : 'warn');
       html += kv('version', s.room.version, 'ok'); html += kv('host', s.room.host); html += kv('mode', s.room.mode); html += '</div>';
-
       html += '<div class="dbg-sec"><div class="dbg-sec-title">📦 Room State (DB)</div>';
       html += kv('current_turn', s.room_state.current_turn, s.room_state.current_turn === myUsername ? 'ok' : '');
       html += kv('moves', s.room_state.moves); html += kv('last_roll_by', s.room_state.last_roll_by || '—'); html += kv('winner', s.room_state.winner || '—');
-      if (s.room_state.last_move) {
-        var lm = s.room_state.last_move;
-        html += kv('last_move', lm.user + ': ' + lm.from + '→' + lm.dice_land + '→' + lm.final + ' [' + lm.via + ']');
-      }
+      if (s.room_state.last_move) { var lm = s.room_state.last_move; html += kv('last_move', lm.user + ': ' + lm.from + '→' + lm.dice_land + '→' + lm.final + ' [' + lm.via + ']'); }
       html += '</div>';
     } else {
-      html += '<div class="dbg-sec"><div class="dbg-sec-title">🏠 Room</div><div class="dbg-kv"><span class="v">— not in room —</span></div></div>';
+      html += '<div class="dbg-sec"><div class="dbg-sec-title">🏠 Room</div><div class="dbg-kv"><span class="v muted">— local mode —</span></div></div>';
     }
 
     html += '<div class="dbg-sec"><div class="dbg-sec-title">💻 Local State</div>';
-    html += kv('mode', s.local_state.mode); html += kv('current_index', s.local_state.current_index);
-    html += kv('current_user', s.local_state.current_username);
+    html += kv('playMode', s.local_state.playMode, s.local_state.playMode === 'online' ? 'ok' : 'warn');
+    html += kv('gameMode', s.local_state.mode); html += kv('current_index', s.local_state.current_index);
+    html += kv('current_user', s.local_state.current_username); html += kv('current_name', s.local_state.current_name);
     html += kv('busy', s.local_state.busy, s.local_state.busy ? 'warn' : 'ok');
     html += kv('isMyTurn', s.local_state.isMyTurn, s.local_state.isMyTurn ? 'ok' : '');
-    html += kv('turn_match', s.local_state.turn_match, s.local_state.turn_match ? 'ok' : 'err');
+    html += kv('iAmAnimating', s.local_state.iAmAnimating, s.local_state.iAmAnimating ? 'warn' : 'ok');
+    if (s.local_state.turn_match === null) html += kv('turn_match', 'n/a', 'muted');
+    else html += kv('turn_match', s.local_state.turn_match ? '✓ match' : '✗ MISMATCH', s.local_state.turn_match ? 'ok' : 'err');
     html += '</div>';
 
-    html += '<div class="dbg-sec"><div class="dbg-sec-title">👥 Players (DB vs Local)</div>';
+    html += '<div class="dbg-sec"><div class="dbg-sec-title">👥 Players</div>';
     if (s.room_players_db.length) {
       html += '<pre>';
       for (var i = 0; i < s.room_players_db.length; i++) {
         var db = s.room_players_db[i];
         var lo = s.local_state.players.find(function (p) { return p.username === db.username; });
-        var mark = db.username === myUsername ? '★' : ' ';
-        html += mark + ' ' + db.display_name + ' (' + db.username.slice(0, 10) + ')\n';
-        html += '  DB: pos=' + db.pos + ' host=' + (db.is_host ? 'Y' : 'N') + '\n';
+        html += (db.username === myUsername ? '★' : ' ') + ' ' + db.display_name + '\n';
+        html += '  DB: pos=' + db.pos + '\n';
         if (lo) html += '  LO: pos=' + lo.pos + ' target=' + lo.targetPos + (lo.animating ? ' 🔄' : '') + '\n';
-        else html += '  LO: — MISSING —\n';
       }
       html += '</pre>';
     } else html += '<pre>—</pre>';
     html += '</div>';
 
     html += '<div class="dbg-sec"><div class="dbg-sec-title">📡 Realtime</div>';
-    html += kv('channel', s.realtime.channelState, s.realtime.channelState === 'SUBSCRIBED' ? 'ok' : (s.realtime.channelState === 'none' ? '' : 'warn'));
-    html += kv('polling', s.realtime.polling ? 'ON (1.5s)' : 'OFF', s.realtime.polling ? 'ok' : 'warn');
-    html += kv('last_rt', s.realtime.last_rt_ago); html += kv('last_poll', s.realtime.last_poll_ago);
-    if (s.realtime.last_rt_payload) {
-      html += '<pre>' + esc(JSON.stringify(s.realtime.last_rt_payload, null, 2).slice(0, 600)) + '</pre>';
-    }
+    if (s.local_state.playMode === 'online') {
+      html += kv('channel', s.realtime.channelState, s.realtime.channelState === 'SUBSCRIBED' ? 'ok' : 'warn');
+      html += kv('polling', s.realtime.polling ? 'ON' : 'OFF', s.realtime.polling ? 'ok' : 'warn');
+      html += kv('last_rt', s.realtime.last_rt_ago); html += kv('last_poll', s.realtime.last_poll_ago);
+    } else html += '<div class="dbg-kv"><span class="v muted">— n/a —</span></div>';
     html += '</div>';
 
-    html += '<div class="dbg-sec"><div class="dbg-sec-title">📝 Events (last 30)</div>';
+    html += '<div class="dbg-sec"><div class="dbg-sec-title">📝 Events</div>';
     if (s.events.length) {
       html += '<div class="dbg-evts">';
-      for (var j = s.events.length - 1; j >= 0; j--) {
-        var ev = s.events[j];
+      for (var k = s.events.length - 1; k >= 0; k--) {
+        var ev = s.events[k];
         html += '<div class="dbg-evt"><span class="t">' + ev.time + '</span><span class="ty">' + esc(ev.type) + '</span><span class="d">' + esc(ev.detail) + '</span></div>';
       }
       html += '</div>';
@@ -391,67 +359,69 @@ input,select{font-family:inherit}
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
   function copyDebugToClipboard() {
-    var s = buildSnapshot();
-    var lines = [];
-    function add(k, v) { lines.push(pad(k) + ': ' + v); }
-    function pad(s) { return (s + ' '.repeat(24)).slice(0, 24); }
+    var s = buildSnapshot(), lines = [];
+    function add(k, v) { lines.push((k + ' '.repeat(24)).slice(0, 24) + ': ' + v); }
     function h1(t) { lines.push(''); lines.push('═══ ' + t + ' ═══'); }
 
-    h1('SNAKE GAME DEBUG SNAPSHOT');
-    add('Timestamp', s.timestamp); add('User Agent', s.browser.ua); add('Page Hidden', s.browser.hidden); add('Online', s.browser.online);
+    h1('SNAKE GAME DEBUG SNAPSHOT v4');
+    add('Timestamp', s.timestamp); add('UA', s.browser.ua); add('Hidden', s.browser.hidden); add('Online', s.browser.online);
 
     h1('ME');
     add('Username', s.me.username); add('Display Name', s.me.display_name);
 
+    h1('LOCAL STATE');
+    add('playMode', s.local_state.playMode); add('gameMode', s.local_state.mode);
+    add('current_index', s.local_state.current_index); add('current_user', s.local_state.current_username);
+    add('busy', s.local_state.busy); add('iAmAnimating', s.local_state.iAmAnimating);
+    if (s.local_state.turn_match === null) add('turn_match', 'n/a (local)');
+    else add('turn_match', s.local_state.turn_match ? 'MATCH ✓' : 'MISMATCH ✗');
+
     if (s.room) {
       h1('ROOM');
-      add('ID', s.room.id); add('Code', s.room.code); add('Status', s.room.status); add('Version', s.room.version); add('Host', s.room.host); add('Mode', s.room.mode);
+      add('Code', s.room.code); add('Status', s.room.status); add('Version', s.room.version); add('Host', s.room.host); add('Mode', s.room.mode);
       h1('ROOM STATE (DB)');
       add('current_turn', s.room_state.current_turn); add('moves', s.room_state.moves); add('last_roll_by', s.room_state.last_roll_by);
       add('last_roll_at', s.room_state.last_roll_at ? new Date(s.room_state.last_roll_at).toISOString() : '—');
-      add('winner', s.room_state.winner || '—'); add('player_count', s.room_state.player_count);
+      add('winner', s.room_state.winner || '—');
       add('last_move', s.room_state.last_move ? JSON.stringify(s.room_state.last_move) : '—');
     }
 
-    h1('LOCAL STATE');
-    add('mode', s.local_state.mode); add('current_index', s.local_state.current_index);
-    add('current_username', s.local_state.current_username); add('current_name', s.local_state.current_name);
-    add('isMyTurn', s.local_state.isMyTurn); add('busy', s.local_state.busy);
-    add('turn_match', s.local_state.turn_match + (s.local_state.turn_match ? ' ✓' : ' ✗ MISMATCH!'));
-
-    h1('PLAYERS COMPARE (DB vs Local)');
-    s.room_players_db.forEach(function (db) {
-      var lo = s.local_state.players.find(function (p) { return p.username === db.username; });
-      lines.push((db.username === myUsername ? '★ ' : '  ') + db.display_name + ' (' + db.username + ')');
-      lines.push('    DB: pos=' + db.pos + ' host=' + db.is_host + ' color=' + db.color_index);
-      if (lo) lines.push('    LO: pos=' + lo.pos + ' target=' + lo.targetPos + ' animating=' + lo.animating);
-      else lines.push('    LO: MISSING!');
-    });
+    h1('PLAYERS');
+    if (s.room_players_db.length) {
+      s.room_players_db.forEach(function (db) {
+        var lo = s.local_state.players.find(function (p) { return p.username === db.username; });
+        lines.push((db.username === myUsername ? '★ ' : '  ') + db.display_name + ' (' + db.username + ')');
+        lines.push('    DB: pos=' + db.pos + ' host=' + db.is_host);
+        if (lo) lines.push('    LO: pos=' + lo.pos + ' target=' + lo.targetPos + ' animating=' + lo.animating);
+      });
+    } else {
+      s.local_state.players.forEach(function (p, i) {
+        lines.push((p.username === myUsername ? '★ ' : '  ') + p.name + (p.bot ? ' [BOT]' : '') + (i === s.local_state.current_index ? ' ← CURRENT' : ''));
+        lines.push('    pos=' + p.pos + ' animating=' + p.animating);
+      });
+    }
 
     h1('REALTIME');
-    add('channelState', s.realtime.channelState); add('polling', s.realtime.polling ? 'ON' : 'OFF');
-    add('last_rt', s.realtime.last_rt_ago); add('last_poll', s.realtime.last_poll_ago);
-    if (s.realtime.last_rt_payload) { lines.push('last_rt_payload:'); lines.push(JSON.stringify(s.realtime.last_rt_payload, null, 2)); }
+    if (s.local_state.playMode === 'online') {
+      add('channelState', s.realtime.channelState); add('polling', s.realtime.polling ? 'ON' : 'OFF');
+      add('last_rt', s.realtime.last_rt_ago); add('last_poll', s.realtime.last_poll_ago);
+    } else add('status', 'n/a (offline)');
 
-    h1('EVENTS (last 30, newest last)');
+    h1('EVENTS');
     s.events.forEach(function (e) { lines.push('[' + e.time + '] ' + e.type + ' ' + e.detail); });
 
     var text = lines.join('\n');
-    var done = function () { toast('📋 Đã copy debug — gửi cho dev nhé!'); };
+    var done = function () { toast('📋 Đã copy debug!'); };
     var fail = function () { fallbackCopy(text, done); };
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(fail);
-      else fail();
-    } catch (e) { fail(); }
+    try { if (navigator.clipboard) navigator.clipboard.writeText(text).then(done).catch(fail); else fail(); } catch (e) { fail(); }
   }
   function fallbackCopy(text, done) {
     try {
-      var ta = document.createElement('textarea');
-      ta.value = text; ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+      var ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;left:-9999px';
       document.body.appendChild(ta); ta.select();
       var ok = document.execCommand('copy'); document.body.removeChild(ta);
-      if (ok) done(); else toast('Không copy được, mở console xem');
-    } catch (e) { toast('Copy fail: ' + e.message); }
+      if (ok) done(); else toast('Copy fail');
+    } catch (e) { toast('Copy fail'); }
   }
 
   /* ============================ CONFIG ============================ */
@@ -461,9 +431,7 @@ input,select{font-family:inherit}
   };
   var CFG = window.__SRANK_CONFIG || FALLBACK;
   var sb = null;
-  if (window.supabase && CFG.SUPABASE_URL) {
-    sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY, { auth: { persistSession: false } });
-  }
+  if (window.supabase && CFG.SUPABASE_URL) sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY, { auth: { persistSession: false } });
 
   /* ============================ STATE ============================ */
   var LADDERS = { 1:38, 4:14, 9:31, 21:42, 28:84, 36:44, 51:67, 71:91, 80:100 };
@@ -471,11 +439,10 @@ input,select{font-family:inherit}
   var STYLES = [{c:'#ff5fa2',s:'#ffe4f1'},{c:'#4f8dff',s:'#e0edff'},{c:'#18c08a',s:'#dcf9ee'},{c:'#f6a723',s:'#ffefd4'}];
   var BOTS = ['Mèo', 'Gấu', 'Thỏ'];
 
-  var state = { mode: 'online', count: 2, players: [], current: 0, busy: false, over: false, startTime: 0 };
+  var state = { playMode: 'online', mode: 'classic', count: 2, players: [], current: 0, busy: false, over: false, startTime: 0 };
   var myUsername = '', myProfile = null, room = null, roomPlayers = [];
   var roomChan = null, roomsChan = null, pollTimer = null, animating = {};
-  var isHost = false, busyTimeout = null, pendingWin = null, wasMyTurn = false;
-  var refreshTimer = null;
+  var isHost = false, busyTimeout = null, refreshTimer = null, safetyInterval = null;
 
   function getMyUsername() {
     var u = '';
@@ -495,7 +462,6 @@ input,select{font-family:inherit}
     return String(u).trim();
   }
 
-  /* ============================ HELPERS ============================ */
   function posToXY(pos) {
     var idx = pos - 1, r = Math.floor(idx / 10), c = idx % 10;
     if (r % 2 !== 0) c = 9 - c;
@@ -503,14 +469,14 @@ input,select{font-family:inherit}
   }
   function avt(s) { return 'https://api.dicebear.com/9.x/adventurer/svg?seed=' + encodeURIComponent(s) + '&backgroundColor=ffd5dc,b6e3f4&radius=14'; }
 
-  /* FIX 1 & 2: Extra turn logic */
+  /* Extra turn logic */
   function isExtraTurn(mode, vals) {
-    if (mode === 'classic') return vals.length === 1 && vals[0] === 6;
+    if (mode === 'classic' || mode === 'chaos') return vals.length === 1 && vals[0] === 6;
     if (mode === 'speed') return vals.length === 2 && vals[0] === vals[1];
     return false;
   }
 
-  /* ============================ AUDIO ============================ */
+  /* AUDIO */
   var actx = null, sfxOn = true;
   function beep(f, d, t, v, delay) {
     if (!sfxOn) return;
@@ -531,21 +497,17 @@ input,select{font-family:inherit}
     win: function () { [500, 600, 800, 1000].forEach(function (f, i) { beep(f, .3, 'sine', .05, i * .1); }); }
   };
 
-  /* ============================ DICE ============================ */
+  /* DICE */
   var PIPS = {1:[[2,2]],2:[[1,1],[3,3]],3:[[1,1],[2,2],[3,3]],4:[[1,1],[1,3],[3,1],[3,3]],5:[[1,1],[1,3],[2,2],[3,1],[3,3]],6:[[1,1],[1,3],[2,1],[2,3],[3,1],[3,3]]};
   var FACE_TF = {1:'translateZ(36px)',2:'rotateY(90deg) translateZ(36px)',3:'rotateX(90deg) translateZ(36px)',4:'rotateX(-90deg) translateZ(36px)',5:'rotateY(-90deg) translateZ(36px)',6:'rotateY(180deg) translateZ(36px)'};
   var FACE_RT = {1:[0,0],2:[0,-90],3:[-90,0],4:[90,0],5:[0,90],6:[0,180]};
   function makeDice(el) {
     el.innerHTML = '';
     for (var f = 1; f <= 6; f++) {
-      var div = document.createElement('div');
-      div.className = 'dice-face';
-      div.style.transform = FACE_TF[f];
+      var div = document.createElement('div'); div.className = 'dice-face'; div.style.transform = FACE_TF[f];
       PIPS[f].forEach(function (rc) {
-        var p = document.createElement('i');
-        p.className = 'pip';
-        p.style.gridRow = rc[0]; p.style.gridColumn = rc[1];
-        div.appendChild(p);
+        var p = document.createElement('i'); p.className = 'pip';
+        p.style.gridRow = rc[0]; p.style.gridColumn = rc[1]; div.appendChild(p);
       });
       el.appendChild(div);
     }
@@ -554,12 +516,8 @@ input,select{font-family:inherit}
       show: function (n, inst) {
         var rx = FACE_RT[n][0], ry = FACE_RT[n][1];
         if (inst) {
-          el.style.transition = 'none';
-          el.style.transform = 'rotateX(' + rx + 'deg) rotateY(' + ry + 'deg)';
-          sx = rx; sy = ry;
-          void el.offsetWidth;
-          el.style.transition = '';
-          return;
+          el.style.transition = 'none'; el.style.transform = 'rotateX(' + rx + 'deg) rotateY(' + ry + 'deg)';
+          sx = rx; sy = ry; void el.offsetWidth; el.style.transition = ''; return;
         }
         sx += 360 * (2 + rnd(3)); sy += 360 * (2 + rnd(3));
         el.style.transform = 'rotateX(' + (sx + rx) + 'deg) rotateY(' + (sy + ry) + 'deg)';
@@ -568,21 +526,18 @@ input,select{font-family:inherit}
   }
   var dice0, dice1;
 
-  /* ============================ RENDER UI ============================ */
+  /* RENDER */
   function renderPlayers() {
     var el = $('playerList'); el.innerHTML = '';
     state.players.forEach(function (p, i) {
       var card = document.createElement('div');
       card.className = 'pcard' + (i === state.current ? ' active' : '');
-      card.style.setProperty('--c', p.color);
-      card.style.setProperty('--soft', p.soft);
+      card.style.setProperty('--c', p.color); card.style.setProperty('--soft', p.soft);
       card.innerHTML = '<div class="pav"><img src="' + p.avatar + '"><span class="ptag">' + p.pos + '</span></div>' +
         '<div style="flex:1"><div class="pname">' + esc(p.name) + (p.username === myUsername ? ' <span style="color:#4f8dff;font-size:9px">(BẠN)</span>' : '') + '</div>' +
         '<div class="pbar"><span style="width:' + p.pos + '%"></span></div></div>';
       el.appendChild(card);
-      p.cardEl = card;
-      p.posEl = card.querySelector('.ptag');
-      p.barEl = card.querySelector('.pbar span');
+      p.cardEl = card; p.posEl = card.querySelector('.ptag'); p.barEl = card.querySelector('.pbar span');
     });
   }
   function syncCards() {
@@ -596,11 +551,9 @@ input,select{font-family:inherit}
     var el = $('tokens'); el.innerHTML = '';
     state.players.forEach(function (p) {
       var div = document.createElement('div');
-      div.className = 'token';
-      div.style.setProperty('--c', p.color);
+      div.className = 'token'; div.style.setProperty('--c', p.color);
       div.innerHTML = '<img src="' + p.avatar + '"><span style="position:absolute;bottom:-5px;right:-5px;background:' + p.color + ';color:#fff;font-size:8px;border-radius:50%;width:14px;height:14px;display:grid;place-items:center">' + (p.id + 1) + '</span>';
-      el.appendChild(div);
-      p.el = div;
+      el.appendChild(div); p.el = div;
     });
   }
   function posTokens() {
@@ -610,10 +563,8 @@ input,select{font-family:inherit}
       var pos = +k, g = posToXY(Math.max(1, Math.min(100, pos))), list = groups[k], n = list.length;
       list.forEach(function (p, i) {
         if (!p.el) return;
-        var ang = n > 1 ? (i / n) * Math.PI * 2 : 0;
-        var r = n > 1 ? 2.5 : 0;
-        p.el.style.left = (g.x + Math.cos(ang) * r) + '%';
-        p.el.style.top = (g.y + Math.sin(ang) * r) + '%';
+        var ang = n > 1 ? (i / n) * Math.PI * 2 : 0, r = n > 1 ? 2.5 : 0;
+        p.el.style.left = (g.x + Math.cos(ang) * r) + '%'; p.el.style.top = (g.y + Math.sin(ang) * r) + '%';
         p.el.style.zIndex = p === state.players[state.current] ? 60 : 20;
       });
     });
@@ -622,28 +573,23 @@ input,select{font-family:inherit}
   function updatePill() {
     var p = state.players[state.current]; if (!p) return;
     $('turnPill').style.setProperty('--c', p.color);
-    var isMe = (p.username === myUsername && state.mode === 'online');
-    $('turnPill').querySelector('.txt').textContent = state.over ? 'Kết thúc' : (isMe ? '👉 Lượt BẠN!' : 'Lượt: ' + p.name);
+    if (state.over) { $('turnPill').querySelector('.txt').textContent = 'Kết thúc'; return; }
+    var isMe = state.playMode === 'online' && p.username === myUsername;
+    $('turnPill').querySelector('.txt').textContent = isMe ? '👉 Lượt BẠN!' : 'Lượt: ' + p.name;
   }
   function addLog(text, color) {
     var div = document.createElement('div');
-    div.className = 'log-item';
-    div.style.setProperty('--c', color || '#a78bfa');
-    div.textContent = text;
+    div.className = 'log-item'; div.style.setProperty('--c', color || '#a78bfa'); div.textContent = text;
     $('log').prepend(div);
   }
 
-  /* ============================ BOARD ============================ */
   function buildBoard() {
     var cells = $('cells'); cells.innerHTML = '';
     for (var i = 1; i <= 100; i++) {
       var g = posToXY(i);
       var c = document.createElement('div');
-      c.className = 'cell';
-      c.style.gridColumn = g.c + 1;
-      c.style.gridRow = g.r + 1;
-      c.textContent = i;
-      c.style.background = 'hsl(' + (g.r * 30) + ' 90% 97%)';
+      c.className = 'cell'; c.style.gridColumn = g.c + 1; c.style.gridRow = g.r + 1;
+      c.textContent = i; c.style.background = 'hsl(' + (g.r * 30) + ' 90% 97%)';
       if (i === 1) c.innerHTML += '🏁';
       else if (i === 100) c.innerHTML += '🏆';
       else if (LADDERS[i]) c.innerHTML += '<span style="position:absolute;right:2px;bottom:2px">🪜</span>';
@@ -662,31 +608,25 @@ input,select{font-family:inherit}
     svg.innerHTML = h;
   }
 
-  /* ============================ GAME LOGIC ============================ */
   function animateDice(vals) {
     var cubes = [dice0]; if (vals.length > 1) cubes.push(dice1);
-    cubes.forEach(function (c) { c.show(1 + rnd(6)); });
-    sfx.roll();
+    cubes.forEach(function (c) { c.show(1 + rnd(6)); }); sfx.roll();
     return (function loop(i) {
-      if (i >= 5) {
-        cubes.forEach(function (c, j) { c.show(vals[j] || 1); });
-        return sleep(500);
-      }
-      return sleep(60).then(function () {
-        cubes.forEach(function (c) { c.show(1 + rnd(6)); });
-        return loop(i + 1);
-      });
+      if (i >= 5) { cubes.forEach(function (c, j) { c.show(vals[j] || 1); }); return sleep(500); }
+      return sleep(60).then(function () { cubes.forEach(function (c) { c.show(1 + rnd(6)); }); return loop(i + 1); });
     })(0);
   }
 
+  /* ============================ CRITICAL FIX: TURN UI ============================ */
   function syncTurnUI() {
-    if (state.mode !== 'online' || !room) return;
+    if (state.playMode !== 'online' || !room) return;
     var isMe = room.state && room.state.current_turn === myUsername;
     var play = room.status === 'playing';
-    var canRoll = isMe && play && !state.busy && !animating[myUsername];
+    var isAnim = animating[myUsername] === true;
+    var canRoll = isMe && play && !state.busy && !isAnim;
     $('rollBtn').disabled = !canRoll;
     if (!play) $('rollHint').textContent = 'Đã kết thúc';
-    else if (isMe) $('rollHint').textContent = state.busy ? 'Đang xử lý...' : '👉 Lượt của bạn!';
+    else if (isMe) $('rollHint').textContent = state.busy ? 'Đang xử lý...' : (isAnim ? 'Đang di chuyển...' : '👉 Lượt của bạn!');
     else {
       var curP = state.players.find(function (p) { return p.username === (room.state && room.state.current_turn); });
       $('rollHint').textContent = 'Đang chờ ' + (curP ? curP.name : '...') + '...';
@@ -694,20 +634,54 @@ input,select{font-family:inherit}
     if (debugOpen) renderDbg();
   }
 
-  function enterGameRoom() {
-    state.players = [];
-    state.over = false;
-    state.busy = false;
-    animating = {};
-    $('log').innerHTML = '';
-    showScreen('gameScreen');
-    buildBoard();
-    createTokens();
-    $('diceStage1').style.display = room.mode === 'speed' ? 'block' : 'none';
-    dice0.show(1, true);
-    if (dice1) dice1.show(1, true);
-    rebuildRoomState();
-    dbgEvent('ENTER_GAME', 'mode=' + room.mode);
+  /* ============================ CRITICAL FIX: ANIMATION ============================ */
+  async function animateMove(p, move) {
+    if (animating[p.username]) return;
+    animating[p.username] = true;
+    dbgEvent('ANIM_START', p.name + ' ' + p.pos + '→' + p.targetPos + (move ? ' [' + move.via + ']' : ''));
+
+    var safetyTimer = setTimeout(function () {
+      if (animating[p.username]) {
+        dbgEvent('ANIM_TIMEOUT', p.name + ' forced');
+        animating[p.username] = false;
+        p.pos = p.targetPos;
+        posTokens();
+        if (p.username === myUsername) state.busy = false;
+        syncTurnUI();
+      }
+    }, 8000);
+
+    try {
+      if (move && move.dice_land != null && move.dice_land !== move.final && p.pos === move.from) {
+        while (p.pos !== move.dice_land) {
+          p.pos += move.dice_land > p.pos ? 1 : -1;
+          posTokens(); sfx.tick(); await sleep(60);
+        }
+        await sleep(200);
+        p.pos = move.final;
+        if (move.via === 'ladder') sfx.ladder();
+        else if (move.via === 'snake') sfx.snake();
+        posTokens(); await sleep(300);
+      } else {
+        while (p.pos !== p.targetPos) {
+          p.pos += p.targetPos > p.pos ? 1 : -1;
+          posTokens(); sfx.tick(); await sleep(60);
+        }
+      }
+    } finally {
+      clearTimeout(safetyTimer);
+      p.pos = p.targetPos;
+      posTokens();
+      animating[p.username] = false;
+      dbgEvent('ANIM_END', p.name + ' pos=' + p.pos);
+      // CRITICAL: reset busy + syncTurnUI after animation
+      if (p.username === myUsername) {
+        state.busy = false;
+        if (busyTimeout) { clearTimeout(busyTimeout); busyTimeout = null; }
+      }
+      syncTurnUI();
+      if (debugOpen) renderDbg();
+    }
   }
 
   function rebuildRoomState() {
@@ -715,41 +689,24 @@ input,select{font-family:inherit}
 
     var oldMap = {};
     state.players.forEach(function (p) { oldMap[p.username] = p; });
-
     var needRender = false;
     var newPlayers = roomPlayers.map(function (rp, i) {
       var old = oldMap[rp.username];
       if (old) {
-        old.targetPos = rp.pos;
-        old.name = rp.display_name;
-        old.skip = rp.skip_turn;
-        old.extra = rp.extra_turn;
+        old.targetPos = rp.pos; old.name = rp.display_name; old.skip = rp.skip_turn; old.extra = rp.extra_turn;
         return old;
       } else {
         needRender = true;
         var st = STYLES[rp.color_index % 4];
-        return {
-          id: i, username: rp.username, name: rp.display_name,
-          pos: rp.pos, targetPos: rp.pos,
-          color: st.c, soft: st.s,
-          avatar: rp.avatar_url || avt(rp.display_name)
-        };
+        return { id: i, username: rp.username, name: rp.display_name, pos: rp.pos, targetPos: rp.pos, color: st.c, soft: st.s, avatar: rp.avatar_url || avt(rp.display_name) };
       }
     });
-
     if (newPlayers.length !== state.players.length) needRender = true;
     state.players = newPlayers;
-
-    if (needRender) {
-      renderPlayers();
-      createTokens();
-      posTokens();
-      animating = {};
-    }
+    if (needRender) { renderPlayers(); createTokens(); posTokens(); animating = {}; }
 
     var curIdx = state.players.findIndex(function (p) { return p.username === (room.state && room.state.current_turn); });
-    if (curIdx >= 0 && curIdx !== state.current) state.current = curIdx;
-    if (curIdx < 0 && state.players.length) state.current = 0;
+    if (curIdx >= 0) state.current = curIdx;
 
     updatePill(); syncCards(); posTokens();
 
@@ -763,39 +720,7 @@ input,select{font-family:inherit}
 
     renderLogs(room.state && room.state.log);
     syncTurnUI();
-
     if (room.state && room.state.winner && $('winOverlay').hidden) showWin(room.state.winner);
-  }
-
-  function animateMove(p, move) {
-    if (animating[p.username]) return;
-    animating[p.username] = true;
-    dbgEvent('ANIM_START', p.name + ' ' + p.pos + '→' + p.targetPos + (move ? ' [' + move.via + ']' : ''));
-    (function step() {
-      if (p.pos === p.targetPos) {
-        animating[p.username] = false;
-        dbgEvent('ANIM_END', p.name + ' pos=' + p.pos);
-        if (debugOpen) renderDbg();
-        return;
-      }
-      if (move && move.dice_land != null && move.dice_land !== move.final && p.pos === move.from) {
-        if (p.pos !== move.dice_land) {
-          p.pos += move.dice_land > p.pos ? 1 : -1;
-          posTokens(); sfx.tick();
-          return sleep(60).then(step);
-        }
-        return sleep(200).then(function () {
-          p.pos = move.final;
-          if (move.via === 'ladder') sfx.ladder();
-          else if (move.via === 'snake') sfx.snake();
-          posTokens();
-          return sleep(300).then(step);
-        });
-      }
-      p.pos += p.targetPos > p.pos ? 1 : -1;
-      posTokens(); sfx.tick();
-      return sleep(60).then(step);
-    })();
   }
 
   function renderLogs(logs) {
@@ -808,16 +733,15 @@ input,select{font-family:inherit}
   /* ============================ ONLINE ROLL ============================ */
   async function doRollOnline() {
     if (state.busy || !room || room.status !== 'playing') return;
-    if (!room.state || room.state.current_turn !== myUsername) {
-      dbgEvent('ROLL_BLOCKED', 'not my turn');
-      return;
-    }
+    if (!room.state || room.state.current_turn !== myUsername) { dbgEvent('ROLL_BLOCKED', 'not my turn'); return; }
+    if (animating[myUsername]) { dbgEvent('ROLL_BLOCKED', 'still animating'); return; }
+
     state.busy = true;
     $('rollBtn').disabled = true;
     if (busyTimeout) clearTimeout(busyTimeout);
     busyTimeout = setTimeout(function () {
       if (state.busy) { state.busy = false; dbgEvent('BUSY_TIMEOUT', 'force reset'); syncTurnUI(); }
-    }, 8000);
+    }, 12000);
 
     try {
       var me = roomPlayers.find(function (p) { return p.username === myUsername; });
@@ -828,8 +752,7 @@ input,select{font-family:inherit}
       dbgEvent('ROLL_DICE', vals.join('+') + '=' + total);
       await animateDice(vals);
 
-      var land = me.pos + total;
-      var goal = land >= 100;
+      var land = me.pos + total, goal = land >= 100;
       if (goal) land = 100;
       var final = land, via = 'normal';
       var myColor = STYLES[me.color_index % 4].c;
@@ -841,20 +764,15 @@ input,select{font-family:inherit}
 
       var winner = goal ? myUsername : null;
       var curIdx = roomPlayers.findIndex(function (p) { return p.username === myUsername; });
-      
-      // FIX 1 & 2: Extra turn logic
       var extra = !winner && isExtraTurn(room.mode, vals);
-      if (extra) {
-        newLogs.push({ text: '🎁 ' + me.display_name + ' được tung thêm 1 lượt!', color: myColor, ts: Date.now() + 2 });
-      }
+      if (extra) newLogs.push({ text: '🎁 ' + me.display_name + ' được thêm lượt (roll ' + (room.mode === 'speed' ? 'đôi' : '6') + ')!', color: myColor, ts: Date.now() + 2 });
       var next = extra ? myUsername : roomPlayers[(curIdx + 1) % roomPlayers.length].username;
 
       var updPlayer = await sb.from('snake_room_players').update({ pos: final }).eq('room_id', room.id).eq('username', myUsername);
       if (updPlayer.error) throw updPlayer.error;
 
       var newState = {
-        current_turn: winner || next,
-        dice: vals, last_roll_by: myUsername, last_roll_at: Date.now(),
+        current_turn: winner || next, dice: vals, last_roll_by: myUsername, last_roll_at: Date.now(),
         moves: ((room.state && room.state.moves) || 0) + 1,
         started_at: (room.state && room.state.started_at) || Date.now(),
         player_count: (room.state && room.state.player_count) || roomPlayers.length,
@@ -870,9 +788,17 @@ input,select{font-family:inherit}
 
       dbgEvent('ROLL_SENT', 'v' + (room.version + 1) + ' ' + vals.join('+') + ' pos=' + final + ' next=' + shortTurn(next) + (extra ? ' [EXTRA]' : ''));
 
-      state.busy = false;
-      if (busyTimeout) { clearTimeout(busyTimeout); busyTimeout = null; }
-      syncTurnUI();
+      // CRITICAL: do NOT reset busy here — let animateMove handle it when animation completes
+      // (if animation was triggered). If no animation needed, syncTurnUI will clear here.
+      if (!animating[myUsername]) {
+        state.busy = false;
+        if (busyTimeout) { clearTimeout(busyTimeout); busyTimeout = null; }
+        syncTurnUI();
+      }
+
+      if (extra) {
+        setTimeout(function () { toast('🎁 Được thêm 1 lượt!'); }, 700);
+      }
     } catch (e) {
       state.busy = false;
       if (busyTimeout) { clearTimeout(busyTimeout); busyTimeout = null; }
@@ -882,10 +808,16 @@ input,select{font-family:inherit}
     }
   }
 
-  /* ============================ REALTIME ============================ */
   function handleRoomUpdate(oldR, newR) {
     var oldV = oldR.version || 0, newV = newR.version || 0;
-    if (newV <= oldV) { dbgEvent('RT_STALE', 'v' + newV + ' ≤ v' + oldV); return; }
+    if (newV <= oldV) {
+      if (lastStaleLoggedVer !== newV) {
+        dbgEvent('RT_STALE', 'v' + newV + ' ≤ v' + oldV);
+        lastStaleLoggedVer = newV;
+      }
+      return;
+    }
+    lastStaleLoggedVer = -1;
     dbgEvent('RT_UPDATE', 'v' + oldV + '→v' + newV + ' turn=' + shortTurn(newR.state && newR.state.current_turn));
 
     room = newR;
@@ -924,9 +856,7 @@ input,select{font-family:inherit}
         clearTimeout(refreshTimer);
         refreshTimer = setTimeout(refreshPlayers, 80);
       })
-      .subscribe(function (status) {
-        dbgEvent('RT_STATUS', status);
-      });
+      .subscribe(function (status) { dbgEvent('RT_STATUS', status); });
 
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(async function () {
@@ -934,7 +864,12 @@ input,select{font-family:inherit}
       lastPollAt = Date.now();
       try {
         var r = await sb.from('snake_rooms').select('*').eq('id', room.id).maybeSingle();
-        if (r.data) handleRoomUpdate(room, r.data);
+        if (r.data) {
+          var newVer = r.data.version || 0;
+          var oldVer = room.version || 0;
+          // CRITICAL: only call handleRoomUpdate if version changed — no spam
+          if (newVer > oldVer) handleRoomUpdate(room, r.data);
+        }
       } catch (e) {}
     }, 1500);
   }
@@ -952,36 +887,36 @@ input,select{font-family:inherit}
     state.players = [];
     state.over = false; state.busy = false;
     state.current = 0; state.startTime = Date.now();
+    var useBot = state.playMode === 'bot';
     var me = { id: 0, username: myUsername, name: myProfile.display_name, pos: 0, targetPos: 0, color: STYLES[0].c, soft: STYLES[0].s, avatar: myProfile.avatar_url, bot: false };
     state.players.push(me);
     for (var i = 1; i < state.count; i++) {
-      var bot = state.mode === 'bot';
       state.players.push({
-        id: i, username: bot ? 'bot_' + i : 'p' + i,
-        name: bot ? BOTS[i - 1] : 'Người chơi ' + i,
-        pos: 0, targetPos: 0,
-        color: STYLES[i].c, soft: STYLES[i].s,
-        avatar: avt('bot' + i), bot: bot
+        id: i, username: useBot ? 'bot_' + i : 'p' + i,
+        name: useBot ? BOTS[i - 1] : 'Người chơi ' + (i + 1),
+        pos: 0, targetPos: 0, color: STYLES[i].c, soft: STYLES[i].s,
+        avatar: avt(useBot ? 'bot' + i : 'p' + i), bot: useBot
       });
     }
     $('log').innerHTML = '';
-    showScreen('gameScreen');
-    buildBoard(); renderPlayers(); createTokens();
+    showScreen('gameScreen'); buildBoard(); renderPlayers(); createTokens();
     $('diceStage1').style.display = state.mode === 'speed' ? 'block' : 'none';
     posTokens(); updatePill(); syncCards();
+    dbgEvent('LOCAL_START', 'playMode=' + state.playMode + ' mode=' + state.mode + ' count=' + state.count);
     beginTurnLocal();
   }
 
   function beginTurnLocal() {
     var p = state.players[state.current]; if (!p) return;
     updatePill(); syncCards(); posTokens();
+    var isMe = p.username === myUsername;
     if (p.bot) {
       $('rollBtn').disabled = true;
-      $('rollHint').textContent = 'Bot đang suy nghĩ...';
-      setTimeout(doRollLocal, 800);
+      $('rollHint').textContent = p.name + ' đang suy nghĩ...';
+      setTimeout(function () { if (!state.over && state.players[state.current] === p) doRollLocal(); }, 800);
     } else {
       $('rollBtn').disabled = false;
-      $('rollHint').textContent = 'Lượt của bạn!';
+      $('rollHint').textContent = isMe ? '👉 Lượt của bạn!' : 'Lượt: ' + p.name;
     }
   }
 
@@ -989,38 +924,56 @@ input,select{font-family:inherit}
     if (state.busy || state.over) return;
     state.busy = true;
     $('rollBtn').disabled = true;
-    var p = state.players[state.current], n = state.mode === 'speed' ? 2 : 1;
-    var vals = []; for (var i = 0; i < n; i++) vals.push(1 + rnd(6));
-    await animateDice(vals);
-    var tot = vals.reduce(function (a, b) { return a + b; }, 0);
-    addLog('🎲 ' + p.name + ' tung ' + tot, p.color);
-    var land = p.pos + tot, goal = land >= 100;
-    if (goal) land = 100;
-    while (p.pos < land) { p.pos++; posTokens(); sfx.tick(); await sleep(50); }
-    if (goal) { winLocal(p); return; }
-    if (LADDERS[p.pos]) { p.pos = LADDERS[p.pos]; sfx.ladder(); posTokens(); await sleep(300); }
-    else if (SNAKES[p.pos]) { p.pos = SNAKES[p.pos]; sfx.snake(); posTokens(); await sleep(300); }
-    if (p.pos >= 100) { winLocal(p); return; }
-    
-    // FIX 1 & 2: Extra turn logic
-    var extra = isExtraTurn(state.mode, vals);
-    if (extra) {
-      addLog('🎁 ' + p.name + ' được tung thêm 1 lượt!', p.color);
+
+    var localTimeout = setTimeout(function () {
+      if (state.busy) { state.busy = false; $('rollBtn').disabled = false; dbgEvent('LOCAL_TIMEOUT', 'force'); }
+    }, 10000);
+
+    try {
+      var p = state.players[state.current], n = state.mode === 'speed' ? 2 : 1;
+      var vals = []; for (var i = 0; i < n; i++) vals.push(1 + rnd(6));
+      var tot = vals.reduce(function (a, b) { return a + b; }, 0);
+      dbgEvent('LOCAL_ROLL', p.name + ' ' + vals.join('+') + '=' + tot);
+      await animateDice(vals);
+      addLog('🎲 ' + p.name + ' tung ' + vals.join('+') + (n > 1 ? '=' + tot : ''), p.color);
+
+      var land = p.pos + tot, goal = land >= 100;
+      if (goal) land = 100;
+      while (p.pos < land) { p.pos++; posTokens(); sfx.tick(); await sleep(50); }
+      if (goal) { clearTimeout(localTimeout); state.busy = false; winLocal(p); return; }
+
+      if (LADDERS[p.pos]) { p.pos = LADDERS[p.pos]; sfx.ladder(); posTokens(); await sleep(300); }
+      else if (SNAKES[p.pos]) { p.pos = SNAKES[p.pos]; sfx.snake(); posTokens(); await sleep(300); }
+      if (p.pos >= 100) { clearTimeout(localTimeout); state.busy = false; winLocal(p); return; }
+
+      var extra = isExtraTurn(state.mode, vals);
+      clearTimeout(localTimeout);
       state.busy = false;
+
+      if (extra) {
+        addLog('🎁 ' + p.name + ' được thêm lượt!', p.color);
+        if (p.username === myUsername) toast('🎁 Được thêm 1 lượt!');
+        dbgEvent('LOCAL_EXTRA', p.name);
+        beginTurnLocal();
+        return;
+      }
+
+      state.current = (state.current + 1) % state.players.length;
       beginTurnLocal();
-      return;
+    } catch (e) {
+      clearTimeout(localTimeout);
+      state.busy = false;
+      $('rollBtn').disabled = false;
+      dbgEvent('LOCAL_ERR', e.message || String(e));
     }
-    
-    state.busy = false;
-    state.current = (state.current + 1) % state.players.length;
-    beginTurnLocal();
   }
 
   function winLocal(p) {
-    state.over = true;
+    state.over = true; state.busy = false;
     sfx.win();
     $('winTitle').textContent = p.username === myUsername ? 'Bạn thắng!' : p.name + ' thắng!';
     $('winOverlay').hidden = false;
+    dbgEvent('LOCAL_WIN', p.name);
   }
 
   function showWin(winner) {
@@ -1035,9 +988,7 @@ input,select{font-family:inherit}
 
   /* ============================ UI BINDINGS ============================ */
   function showScreen(id) {
-    ['menuScreen', 'onlineScreen', 'waitingScreen', 'localSetupScreen', 'gameScreen'].forEach(function (s) {
-      $(s).hidden = (s !== id);
-    });
+    ['menuScreen', 'onlineScreen', 'waitingScreen', 'localSetupScreen', 'gameScreen'].forEach(function (s) { $(s).hidden = (s !== id); });
     if (id !== 'gameScreen') $('winOverlay').hidden = true;
   }
 
@@ -1058,20 +1009,20 @@ input,select{font-family:inherit}
     var btn = e.target.closest('.play-card'); if (!btn) return;
     Array.prototype.forEach.call(e.currentTarget.children, function (c) { c.classList.remove('active'); });
     btn.classList.add('active');
-    state.mode = btn.dataset.mode;
+    state.playMode = btn.dataset.playmode;
+    dbgEvent('SET_PLAYMODE', state.playMode);
   };
 
   $('continueBtn').onclick = async function () {
-    if (state.mode === 'online') {
+    if (state.playMode === 'online') {
       if (!sb) return toast('Lỗi Supabase');
-      showScreen('onlineScreen');
-      fetchRooms();
+      showScreen('onlineScreen'); fetchRooms();
       if (roomsChan) { try { sb.removeChannel(roomsChan); } catch (e) {} }
       roomsChan = sb.channel('rooms-list')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'snake_rooms' }, fetchRooms)
         .subscribe();
     } else {
-      $('localSetupTitle').textContent = state.mode === 'bot' ? 'Đấu với Bot' : 'Cùng máy';
+      $('localSetupTitle').textContent = state.playMode === 'bot' ? 'Đấu với Bot' : 'Cùng máy';
       showScreen('localSetupScreen');
     }
   };
@@ -1086,11 +1037,7 @@ input,select{font-family:inherit}
     var r = await sb.from('snake_rooms').insert({ code: code, host_username: myUsername, status: 'waiting', max_players: 4, mode: 'classic', state: {}, version: 0 }).select().single();
     if (r.error) return toast('Lỗi tạo phòng');
     room = r.data; isHost = true;
-    await sb.from('snake_room_players').insert({
-      room_id: room.id, username: myUsername,
-      display_name: myProfile.display_name || myUsername,
-      avatar_url: myProfile.avatar_url, color_index: 0, pos: 0, is_host: true
-    });
+    await sb.from('snake_room_players').insert({ room_id: room.id, username: myUsername, display_name: myProfile.display_name || myUsername, avatar_url: myProfile.avatar_url, color_index: 0, pos: 0, is_host: true });
     enterWait();
   };
 
@@ -1103,11 +1050,7 @@ input,select{font-family:inherit}
     var ex = await sb.from('snake_room_players').select('id').eq('room_id', rid).eq('username', myUsername).maybeSingle();
     if (!ex.data) {
       var cnt = await sb.from('snake_room_players').select('id', { count: 'exact', head: true }).eq('room_id', rid);
-      await sb.from('snake_room_players').insert({
-        room_id: rid, username: myUsername,
-        display_name: myProfile.display_name || myUsername,
-        avatar_url: myProfile.avatar_url, color_index: cnt.count || 0, pos: 0
-      });
+      await sb.from('snake_room_players').insert({ room_id: rid, username: myUsername, display_name: myProfile.display_name || myUsername, avatar_url: myProfile.avatar_url, color_index: cnt.count || 0, pos: 0 });
     }
     enterWait();
   };
@@ -1149,6 +1092,7 @@ input,select{font-family:inherit}
     Array.prototype.forEach.call(e.currentTarget.children, function (c) { c.classList.remove('active'); });
     btn.classList.add('active');
     state.mode = btn.dataset.mode;
+    dbgEvent('SET_GAMEMODE', state.mode);
   };
   $('countSeg').onclick = function (e) {
     var btn = e.target.closest('button'); if (!btn) return;
@@ -1159,17 +1103,14 @@ input,select{font-family:inherit}
   $('startLocalBtn').onclick = startLocalGame;
   $('quitBtn').onclick = function () { if (room) leaveRoom(); else showScreen('menuScreen'); };
   $('rollBtn').onclick = function () {
-    if (state.mode === 'online' && room) doRollOnline();
+    if (state.playMode === 'online' && room) doRollOnline();
     else doRollLocal();
   };
   $('playAgainBtn').onclick = function () {
     $('winOverlay').hidden = true;
     if (room) leaveRoom(); else showScreen('menuScreen');
   };
-  $('soundBtn').onclick = function (e) {
-    sfxOn = !sfxOn;
-    e.currentTarget.textContent = sfxOn ? '🔊' : '🔇';
-  };
+  $('soundBtn').onclick = function (e) { sfxOn = !sfxOn; e.currentTarget.textContent = sfxOn ? '🔊' : '🔇'; };
 
   function enterWait() {
     showScreen('waitingScreen');
@@ -1199,12 +1140,9 @@ input,select{font-family:inherit}
       if (p.data) p.data.forEach(function (row) { counts[row.room_id] = (counts[row.room_id] || 0) + 1; });
     }
     $('roomsList').innerHTML = r.data.map(function (rm) {
-      var cnt = counts[rm.id] || 1;
-      var mine = rm.host_username === myUsername;
-      var full = cnt >= rm.max_players;
+      var cnt = counts[rm.id] || 1, mine = rm.host_username === myUsername, full = cnt >= rm.max_players;
       var label = mine ? 'Của bạn' : (full ? 'Đầy' : 'Vào');
-      return '<div class="room-item">' +
-        '<div class="room-item-info"><div class="room-item-host">🐱 ' + esc(rm.host_username) + '</div>' +
+      return '<div class="room-item"><div class="room-item-info"><div class="room-item-host">🐱 ' + esc(rm.host_username) + '</div>' +
         '<div class="room-item-meta">' + cnt + '/' + rm.max_players + ' người · ' + esc(rm.mode) + '</div></div>' +
         '<button class="room-item-join" data-id="' + rm.id + '"' + ((mine || full) ? ' disabled' : '') + '>' + label + '</button></div>';
     }).join('') || '<div style="text-align:center;padding:20px;color:#888">Chưa có phòng nào</div>';
@@ -1221,12 +1159,17 @@ input,select{font-family:inherit}
         var p = await sb.from('public_players').select('*').eq('username', myUsername).maybeSingle();
         myProfile = p.data || { display_name: myUsername, avatar_url: avt(myUsername) };
       } catch (e) { myProfile = { display_name: myUsername, avatar_url: avt(myUsername) }; }
-    } else {
-      myProfile = { display_name: myUsername, avatar_url: avt(myUsername) };
-    }
+    } else myProfile = { display_name: myUsername, avatar_url: avt(myUsername) };
     $('myDisplayName').textContent = myProfile.display_name;
     dbgEvent('INIT', 'user=' + myUsername);
   })();
+
+  /* SAFETY: periodic sync every 2s during online play */
+  safetyInterval = setInterval(function () {
+    if (state.playMode === 'online' && room && room.status === 'playing' && !state.over) {
+      syncTurnUI();
+    }
+  }, 2000);
 
   function openGame() {
     document.body.style.overflow = 'hidden';
