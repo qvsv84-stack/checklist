@@ -1,9 +1,6 @@
 /* =====================================================================
-   RẮN & THANG — ONLINE MULTIPLAYER EDITION
-   - Tạo phòng / Join phòng qua Supabase
-   - Realtime sync state
-   - Chỉ current_turn mới roll được
-   - Bonus: pass-and-play local mode
+   RẮN & THANG — ONLINE MULTIPLAYER (v2.1 optimized)
+   Fixes: duplicate score save, turn race, realtime stale, animation skip
    ===================================================================== */
 (function () {
   'use strict';
@@ -13,17 +10,7 @@
   /* ============================ CSS ============================ */
   var GAME_CSS = `
 *,*::before,*::after{box-sizing:border-box}
-#sgApp{
-  margin:0;font-family:'Nunito',system-ui,-apple-system,'Segoe UI',sans-serif;
-  color:#3b2b52;
-  background:
-    radial-gradient(1200px 700px at 8% -12%, #ffe4f5 0%, transparent 58%),
-    radial-gradient(1000px 700px at 108% -4%, #dceeff 0%, transparent 55%),
-    radial-gradient(900px 800px at 50% 118%, #fff1d8 0%, transparent 60%),
-    linear-gradient(165deg,#fdf8ff 0%, #eff6ff 46%, #fff8f1 100%);
-  min-height:100vh;overflow-x:hidden;-webkit-tap-highlight-color:transparent;
-  position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
-}
+#sgApp{margin:0;font-family:'Nunito',system-ui,-apple-system,'Segoe UI',sans-serif;color:#3b2b52;background:radial-gradient(1200px 700px at 8% -12%,#ffe4f5 0%,transparent 58%),radial-gradient(1000px 700px at 108% -4%,#dceeff 0%,transparent 55%),radial-gradient(900px 800px at 50% 118%,#fff1d8 0%,transparent 60%),linear-gradient(165deg,#fdf8ff 0%,#eff6ff 46%,#fff8f1 100%);min-height:100vh;overflow-x:hidden;-webkit-tap-highlight-color:transparent;position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
 [hidden]{display:none!important}
 button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit}
 input,select{font-family:inherit}
@@ -42,12 +29,12 @@ input,select{font-family:inherit}
 .icon-btn:hover{transform:translateY(-2px)}
 .panel{background:rgba(255,255,255,.82);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(167,139,250,.2);border-radius:24px;box-shadow:0 20px 46px -28px rgba(88,60,150,.62);padding:18px}
 .panel-title{margin:0 0 12px;font-family:'Baloo 2',cursive;font-size:15px;font-weight:800;letter-spacing:.4px;color:#6b5b85;display:flex;align-items:center;gap:7px}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;border-radius:16px;font-weight:800;font-size:15px;transition:transform .15s ease, box-shadow .15s ease, opacity .15s;user-select:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;border-radius:16px;font-weight:800;font-size:15px;transition:transform .15s ease,box-shadow .15s ease,opacity .15s;user-select:none}
 .btn:active{transform:scale(.97)}
-.btn-primary{color:#fff;background:linear-gradient(135deg,#ff7ab8 0%,#a78bfa 55%,#7dd3fc 115%);box-shadow:0 14px 26px -12px rgba(167,139,250,.95), inset 0 1px 0 rgba(255,255,255,.35)}
-.btn-primary:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-primary{color:#fff;background:linear-gradient(135deg,#ff7ab8 0%,#a78bfa 55%,#7dd3fc 115%);box-shadow:0 14px 26px -12px rgba(167,139,250,.95),inset 0 1px 0 rgba(255,255,255,.35)}
+.btn-primary:disabled{box-shadow:none}
 .btn-ghost{background:rgba(255,255,255,.85);color:#6b5b85;border:1px solid rgba(167,139,250,.28);box-shadow:0 8px 18px -14px rgba(88,60,150,.7)}
-.btn-danger{background:linear-gradient(135deg,#fb7185,#ef4444);color:#fff;box-shadow:0 12px 22px -12px rgba(239,68,68,.8)}
 .btn-lg{padding:16px 30px;font-size:17px;border-radius:18px;width:100%}
 .btn-roll{width:100%;font-size:16px;padding:14px}
 .setup{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
@@ -57,52 +44,47 @@ input,select{font-family:inherit}
 .hero-emojis{font-size:30px;letter-spacing:10px;margin-bottom:6px}
 .field{display:flex;flex-direction:column;gap:10px}
 .field > label{font-size:13px;font-weight:800;color:#8a7aa6;letter-spacing:.6px;text-transform:uppercase}
-.name-input,.code-input{width:100%;padding:15px 18px;border-radius:16px;font-size:16px;font-weight:700;color:#3b2b52;background:#fff;border:2px solid rgba(167,139,250,.25);outline:none;transition:border-color .18s, box-shadow .18s;text-align:center;letter-spacing:.15em;text-transform:uppercase}
-.name-input{text-align:left;letter-spacing:normal;text-transform:none}
+.name-input,.code-input{width:100%;padding:15px 18px;border-radius:16px;font-size:16px;font-weight:700;color:#3b2b52;background:#fff;border:2px solid rgba(167,139,250,.25);outline:none;transition:border-color .18s,box-shadow .18s}
+.code-input{text-align:center;letter-spacing:.15em;text-transform:uppercase;font-family:ui-monospace,'SF Mono','Cascadia Code','Roboto Mono','Courier New',monospace}
 .name-input:focus,.code-input:focus{border-color:#a78bfa;box-shadow:0 0 0 4px rgba(167,139,250,.16)}
 .play-mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
 @media (max-width:560px){.play-mode-grid{grid-template-columns:1fr}}
-.play-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 12px;border-radius:18px;text-align:center;background:#fff;border:2px solid rgba(167,139,250,.16);transition:all .2s cubic-bezier(.3,.8,.4,1.2);box-shadow:0 8px 20px -18px rgba(88,60,150,.8);cursor:pointer}
+.play-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 12px;border-radius:18px;text-align:center;background:#fff;border:2px solid rgba(167,139,250,.16);transition:all .2s ease;box-shadow:0 8px 20px -18px rgba(88,60,150,.8);cursor:pointer}
 .play-card .pc-emoji{font-size:32px;line-height:1}
 .play-card b{font-size:14px;font-weight:900;color:#4a3a63}
 .play-card small{font-size:11px;color:#9c8fb5;font-weight:700;line-height:1.3}
-.play-card:hover{transform:translateY(-3px);border-color:rgba(167,139,250,.4)}
-.play-card.active{border-color:transparent;background:linear-gradient(150deg,#fff0f8,#f2ecff 60%,#eaf6ff);box-shadow:0 16px 30px -18px rgba(167,139,250,.95), inset 0 0 0 2px rgba(167,139,250,.5);transform:translateY(-3px)}
+.play-card.active{border-color:transparent;background:linear-gradient(150deg,#fff0f8,#f2ecff 60%,#eaf6ff);box-shadow:0 16px 30px -18px rgba(167,139,250,.95),inset 0 0 0 2px rgba(167,139,250,.5);transform:translateY(-3px)}
 .mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 @media (max-width:560px){.mode-grid{grid-template-columns:1fr}}
 .mode-card{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:15px 14px;border-radius:18px;text-align:left;background:#fff;border:2px solid rgba(167,139,250,.16);transition:all .2s ease;box-shadow:0 8px 20px -18px rgba(88,60,150,.8)}
 .mode-card .mode-emoji{font-size:24px;line-height:1;margin-bottom:4px}
 .mode-card b{font-size:15px;font-weight:900;color:#4a3a63}
 .mode-card small{font-size:11.5px;color:#9c8fb5;font-weight:700;line-height:1.35}
-.mode-card.active{border-color:transparent;background:linear-gradient(150deg,#fff0f8,#f2ecff 60%,#eaf6ff);box-shadow:0 16px 30px -18px rgba(167,139,250,.95), inset 0 0 0 2px rgba(167,139,250,.5);transform:translateY(-2px)}
+.mode-card.active{border-color:transparent;background:linear-gradient(150deg,#fff0f8,#f2ecff 60%,#eaf6ff);box-shadow:0 16px 30px -18px rgba(167,139,250,.95),inset 0 0 0 2px rgba(167,139,250,.5)}
 .seg{display:inline-flex;background:#fff;border-radius:16px;padding:5px;gap:4px;border:2px solid rgba(167,139,250,.16);width:fit-content}
 .seg button{width:54px;padding:10px 0;border-radius:12px;font-weight:900;font-size:16px;color:#9c8fb5;transition:all .18s ease}
 .seg button.active{color:#fff;background:linear-gradient(135deg,#ff7ab8,#a78bfa);box-shadow:0 8px 16px -8px rgba(167,139,250,.95)}
-.toggle{display:flex;align-items:center;gap:12px;cursor:pointer;font-weight:800;font-size:14.5px;color:#6b5b85;user-select:none}
-.toggle input{position:absolute;opacity:0;pointer-events:none}
-.toggle .track{width:52px;height:30px;border-radius:999px;background:#e3dbf2;position:relative;transition:background .22s ease;flex:0 0 auto}
-.toggle .thumb{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(88,60,150,.3);transition:transform .22s cubic-bezier(.3,.9,.4,1.4)}
-.toggle input:checked + .track{background:linear-gradient(135deg,#ff7ab8,#a78bfa)}
-.toggle input:checked + .track .thumb{transform:translateX(22px)}
 
-/* Room code display */
-.room-code-box{margin:18px 0;padding:18px;border-radius:20px;background:linear-gradient(150deg,#f0e8ff,#e8f0ff);border:2px dashed rgba(167,139,250,.5);text-align:center}
-.room-code-label{font-size:11px;font-weight:900;color:#8a7aa6;letter-spacing:.15em;text-transform:uppercase;margin-bottom:6px}
-.room-code-value{font-family:'Baloo 2',cursive;font-size:38px;font-weight:900;letter-spacing:.18em;color:#a78bfa;text-shadow:0 4px 12px rgba(167,139,250,.3);cursor:pointer;user-select:all}
-.room-code-hint{font-size:12px;color:#8a7aa6;font-weight:700;margin-top:6px}
-
+/* =============== ROOM CODE (REDESIGNED) =============== */
+.room-code-box{margin:18px 0;padding:20px 16px;border-radius:20px;background:linear-gradient(150deg,#f0e8ff,#e8f0ff);border:2px dashed rgba(167,139,250,.5);text-align:center}
+.room-code-label{font-size:11px;font-weight:900;color:#8a7aa6;letter-spacing:.15em;text-transform:uppercase;margin-bottom:12px}
+.room-code-value{display:inline-flex;gap:6px;padding:4px;cursor:pointer;user-select:all;align-items:center;justify-content:center;flex-wrap:wrap}
+.room-code-char{display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:56px;padding:0 8px;border-radius:12px;background:linear-gradient(180deg,#fff 0%,#f4ecff 100%);border:2px solid rgba(167,139,250,.4);box-shadow:0 4px 12px -6px rgba(167,139,250,.55),inset 0 -2px 0 rgba(167,139,250,.2);font-family:ui-monospace,'SF Mono','Cascadia Code','Roboto Mono','Courier New',monospace;font-size:30px;font-weight:900;color:#6d4bd8;letter-spacing:0;line-height:1;transition:transform .15s ease}
+.room-code-value:hover .room-code-char{transform:translateY(-2px)}
+.room-code-value:active .room-code-char{transform:scale(.96)}
+@media (max-width:380px){.room-code-char{min-width:34px;height:46px;font-size:24px;border-radius:10px;padding:0 6px}.room-code-value{gap:4px}}
+.room-code-hint{font-size:12px;color:#8a7aa6;font-weight:700;margin-top:12px}
 .waiting-players{display:flex;flex-direction:column;gap:8px;margin:16px 0}
 .waiting-player{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;background:#fff;border:2px solid rgba(167,139,250,.15)}
 .waiting-player img{width:42px;height:42px;border-radius:50%;object-fit:cover;background:#f0ecfa}
-.waiting-player .wp-name{flex:1;font-size:14px;font-weight:900;color:#4a3a63}
-.waiting-player .wp-host{font-size:10px;font-weight:900;color:#ff7ab8;background:#ffe4f1;padding:3px 8px;border-radius:999px;letter-spacing:.5px}
-.waiting-player .wp-you{font-size:10px;font-weight:900;color:#4f8dff;background:#e0edff;padding:3px 8px;border-radius:999px;letter-spacing:.5px}
+.waiting-player .wp-name{flex:1;font-size:14px;font-weight:900;color:#4a3a63;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.waiting-player .wp-host{font-size:10px;font-weight:900;color:#ff7ab8;background:#ffe4f1;padding:3px 8px;border-radius:999px;letter-spacing:.5px;flex:0 0 auto}
+.waiting-player .wp-you{font-size:10px;font-weight:900;color:#4f8dff;background:#e0edff;padding:3px 8px;border-radius:999px;letter-spacing:.5px;flex:0 0 auto}
 .host-controls{display:flex;flex-direction:column;gap:10px;margin:16px 0}
 .host-controls select{width:100%;padding:12px 14px;border-radius:12px;border:2px solid rgba(167,139,250,.25);background:#fff;font-size:14px;font-weight:800;color:#4a3a63;outline:none}
 .waiting-actions{display:flex;gap:10px;margin-top:16px}
 .waiting-actions .btn{flex:1}
 
-/* Existing game styles */
 .lb-block{margin-top:6px}
 .lb-block h3{margin:0 0 10px;font-family:'Baloo 2',cursive;font-size:16px;font-weight:800;color:#6b5b85;display:flex;align-items:center;gap:8px}
 .lb-list{display:flex;flex-direction:column;gap:7px}
@@ -120,12 +102,10 @@ input,select{font-family:inherit}
 @media (max-width:1120px){.layout{grid-template-columns:1fr}.col-players{order:3}.col-board{order:1}.col-side{order:2}}
 .player-list{display:flex;flex-direction:column;gap:9px}
 .pcard{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:18px;background:#fff;border:2px solid rgba(167,139,250,.12);transition:all .25s ease;box-shadow:0 10px 22px -20px rgba(88,60,150,.9);position:relative;overflow:hidden}
-.pcard::after{content:'';position:absolute;inset:0;border-radius:16px;pointer-events:none;box-shadow:inset 0 0 0 2px transparent;transition:box-shadow .25s}
 .pcard.active{transform:translateX(3px);background:linear-gradient(100deg,var(--soft,#fff),#fff 75%);border-color:var(--c);box-shadow:0 14px 28px -18px var(--c)}
-.pcard.active::after{box-shadow:inset 0 0 0 2px var(--c)}
-.pav{position:relative;width:44px;height:44px;border-radius:14px;flex:0 0 auto;background:#f7f3ff;display:grid;place-items:center;box-shadow:0 0 0 2.5px var(--c), 0 6px 14px -6px rgba(0,0,0,.25);overflow:visible}
+.pav{position:relative;width:44px;height:44px;border-radius:14px;flex:0 0 auto;background:#f7f3ff;display:grid;place-items:center;box-shadow:0 0 0 2.5px var(--c),0 6px 14px -6px rgba(0,0,0,.25);overflow:visible}
 .pav img{width:100%;height:100%;border-radius:12px;object-fit:cover;display:block}
-.ptag{position:absolute;bottom:-7px;right:-7px;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:var(--c);color:#fff;font-size:11px;font-weight:900;display:grid;place-items:center;border:2px solid #fff;box-shadow:0 4px 10px -4px rgba(0,0,0,.4)}
+.ptag{position:absolute;bottom:-7px;right:-7px;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:var(--c);color:#fff;font-size:11px;font-weight:900;display:grid;place-items:center;border:2px solid #fff}
 .pinfo{min-width:0;flex:1}
 .pname{font-size:13.5px;font-weight:900;color:#4a3a63;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pname .you-badge{font-size:9px;font-weight:900;background:#e0edff;color:#4f8dff;padding:2px 6px;border-radius:5px;margin-left:4px}
@@ -136,7 +116,7 @@ input,select{font-family:inherit}
 .turn-pill{display:flex;align-items:center;gap:10px;padding:10px 18px;border-radius:999px;background:rgba(255,255,255,.9);border:2px solid var(--c,#a78bfa);font-weight:900;font-size:14.5px;color:#4a3a63;box-shadow:0 12px 26px -18px var(--c,#a78bfa);transition:border-color .3s;max-width:100%}
 .turn-pill .dot{width:11px;height:11px;border-radius:50%;background:var(--c,#a78bfa);flex:0 0 auto}
 .turn-pill .txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.board-shell{padding:12px;border-radius:30px;background:linear-gradient(150deg,rgba(255,255,255,.9),rgba(245,240,255,.8));border:1px solid rgba(167,139,250,.22);box-shadow:0 28px 60px -34px rgba(88,60,150,.75), inset 0 1px 0 rgba(255,255,255,.7)}
+.board-shell{padding:12px;border-radius:30px;background:linear-gradient(150deg,rgba(255,255,255,.9),rgba(245,240,255,.8));border:1px solid rgba(167,139,250,.22);box-shadow:0 28px 60px -34px rgba(88,60,150,.75),inset 0 1px 0 rgba(255,255,255,.7)}
 .board{position:relative;width:100%;aspect-ratio:1/1;max-width:640px;margin:0 auto;border-radius:22px;overflow:hidden;background:#fff;box-shadow:inset 0 0 0 1px rgba(167,139,250,.15);container-type:inline-size;isolation:isolate}
 .cells{position:absolute;inset:0;display:grid;grid-template-columns:repeat(10,1fr);grid-template-rows:repeat(10,1fr)}
 .cell{position:relative;display:flex;align-items:flex-start;justify-content:flex-start;padding:3px 5px;border:0.5px solid rgba(167,139,250,.13);font-size:clamp(7px,2.05cqw,13px);font-weight:800;color:rgba(90,70,120,.42);overflow:hidden}
@@ -147,7 +127,7 @@ input,select{font-family:inherit}
 .cell.is-start{background-image:radial-gradient(circle at 50% 50%,#c9f2e2,rgba(201,242,226,0) 78%)}
 #boardSvg{position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none}
 .tokens{position:absolute;inset:0;z-index:3;pointer-events:none}
-.token{position:absolute;width:5.6%;height:5.6%;transform:translate(-50%,-50%);transition:left .19s cubic-bezier(.35,.85,.4,1.15), top .19s cubic-bezier(.35,.85,.4,1.15);border-radius:50%;background:#fff;display:grid;place-items:center;box-shadow:0 0 0 2.5px var(--c), 0 8px 16px -6px rgba(0,0,0,.42);z-index:20;will-change:left,top}
+.token{position:absolute;width:5.6%;height:5.6%;transform:translate(-50%,-50%);transition:left .19s cubic-bezier(.35,.85,.4,1.15),top .19s cubic-bezier(.35,.85,.4,1.15);border-radius:50%;background:#fff;display:grid;place-items:center;box-shadow:0 0 0 2.5px var(--c),0 8px 16px -6px rgba(0,0,0,.42);z-index:20;will-change:left,top}
 .token img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 .token .tok-emoji{font-size:clamp(10px,3.4cqw,20px);line-height:1}
 .token .tok-badge{position:absolute;bottom:-22%;right:-22%;width:46%;height:46%;border-radius:50%;background:var(--c);color:#fff;border:1.5px solid #fff;font-size:clamp(5px,1.5cqw,9px);font-weight:900;display:grid;place-items:center;box-shadow:0 2px 6px rgba(0,0,0,.3)}
@@ -157,8 +137,8 @@ input,select{font-family:inherit}
 .dice-row{display:flex;gap:16px;justify-content:center;align-items:center;min-height:82px;perspective:800px}
 .dice-stage{width:72px;height:72px;perspective:700px;flex:0 0 auto}
 .dice-cube{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform 1.05s cubic-bezier(.22,.9,.28,1)}
-.dice-face{position:absolute;inset:0;border-radius:16px;background:linear-gradient(150deg,#ffffff,#f3edff);box-shadow:inset 0 0 0 2px #e6dcff, inset 0 -7px 14px rgba(167,139,250,.2), 0 4px 10px rgba(88,60,150,.1);display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:9px}
-.pip{width:11px;height:11px;border-radius:50%;align-self:center;justify-self:center;background:radial-gradient(circle at 32% 28%,#b9a3ff,#6d4bd8 78%);box-shadow:inset 0 -1px 2px rgba(0,0,0,.28), 0 1px 2px rgba(255,255,255,.6)}
+.dice-face{position:absolute;inset:0;border-radius:16px;background:linear-gradient(150deg,#fff,#f3edff);box-shadow:inset 0 0 0 2px #e6dcff,inset 0 -7px 14px rgba(167,139,250,.2),0 4px 10px rgba(88,60,150,.1);display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:9px}
+.pip{width:11px;height:11px;border-radius:50%;align-self:center;justify-self:center;background:radial-gradient(circle at 32% 28%,#b9a3ff,#6d4bd8 78%);box-shadow:inset 0 -1px 2px rgba(0,0,0,.28),0 1px 2px rgba(255,255,255,.6)}
 .roll-hint{font-size:12.5px;font-weight:800;color:#a396bd;text-align:center;min-height:18px}
 .log{display:flex;flex-direction:column;gap:6px;max-height:290px;overflow-y:auto;padding-right:4px;scrollbar-width:thin;scrollbar-color:#d9cff0 transparent}
 .log::-webkit-scrollbar{width:6px}
@@ -170,7 +150,7 @@ input,select{font-family:inherit}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .win-card{width:min(520px,100%);max-height:92vh;overflow-y:auto;background:linear-gradient(170deg,#fff,#fdf9ff 55%,#f5f9ff);border-radius:30px;padding:28px 24px;border:1px solid rgba(167,139,250,.25);box-shadow:0 40px 90px -30px rgba(60,30,110,.6);text-align:center;animation:popIn .45s cubic-bezier(.2,1.2,.4,1)}
 @keyframes popIn{from{opacity:0;transform:scale(.86) translateY(20px)}to{opacity:1;transform:none}}
-.win-emoji{font-size:64px;line-height:1;animation:bounce 1.2s ease-in-out infinite;filter:drop-shadow(0 12px 20px rgba(251,191,36,.5))}
+.win-emoji{font-size:64px;line-height:1;animation:bounce 1.2s ease-in-out infinite}
 @keyframes bounce{0%,100%{transform:translateY(0) rotate(-6deg)}50%{transform:translateY(-12px) rotate(6deg)}}
 .win-card h2{margin:12px 0 6px;font-family:'Baloo 2',cursive;font-size:30px;background:linear-gradient(120deg,#ff6fae,#a78bfa,#38bdf8);-webkit-background-clip:text;background-clip:text;color:transparent}
 .win-card > p{margin:0 0 18px;color:#8a7aa6;font-weight:700;font-size:14.5px}
@@ -183,8 +163,6 @@ input,select{font-family:inherit}
 .hint-box{font-size:12px;font-weight:700;color:#9c8fb5;line-height:1.6;background:#faf7ff;border:1px dashed rgba(167,139,250,.35);border-radius:14px;padding:12px 14px}
 .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);padding:12px 22px;border-radius:999px;background:rgba(59,43,82,.94);color:#fff;font-weight:800;font-size:14px;z-index:9500;opacity:0;pointer-events:none;transition:all .32s cubic-bezier(.2,.9,.3,1.2);box-shadow:0 16px 34px -14px rgba(0,0,0,.6);max-width:88vw;text-align:center}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.spinner-inline{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
-@keyframes spin{to{transform:rotate(360deg)}}
 `;
 
   /* ============================ HTML ============================ */
@@ -193,150 +171,77 @@ input,select{font-family:inherit}
   <canvas id="fx"></canvas>
   <div class="shell">
     <header class="topbar">
-      <div class="brand">
-        <span class="logo">🐍</span>
-        <span>Rắn &amp; Thang</span>
-        <span class="badge">ONLINE</span>
-      </div>
-      <div class="top-actions">
-        <button class="icon-btn" id="soundBtn" title="Bật/tắt âm thanh" type="button">🔊</button>
-      </div>
+      <div class="brand"><span class="logo">🐍</span><span>Rắn &amp; Thang</span><span class="badge">ONLINE</span></div>
+      <div class="top-actions"><button class="icon-btn" id="soundBtn" title="Bật/tắt âm thanh" type="button">🔊</button></div>
     </header>
 
-    <!-- ============ MAIN MENU ============ -->
     <section id="menuScreen" class="setup">
       <div class="panel">
-        <div class="hero">
-          <div class="hero-emojis">🪜 🎲 🐍</div>
-          <h1>Leo thang, né rắn!</h1>
-          <p>Chơi online cùng đồng nghiệp, hoặc đấu bot một mình!</p>
-        </div>
-        <div class="field" style="margin-top:20px">
-          <label for="playerName">Tên hiển thị của bạn</label>
-          <input id="playerName" class="name-input" maxlength="16" placeholder="Nhập tên hiệp sĩ..." autocomplete="off" />
-        </div>
-        <div class="field" style="margin-top:18px">
-          <label>Chọn kiểu chơi</label>
+        <div class="hero"><div class="hero-emojis">🪜 🎲 🐍</div><h1>Leo thang, né rắn!</h1><p>Chơi online cùng đồng nghiệp, hoặc đấu bot một mình!</p></div>
+        <div class="field" style="margin-top:20px"><label for="playerName">Tên hiển thị của bạn</label><input id="playerName" class="name-input" maxlength="16" placeholder="Nhập tên hiệp sĩ..." autocomplete="off" /></div>
+        <div class="field" style="margin-top:18px"><label>Chọn kiểu chơi</label>
           <div class="play-mode-grid" id="playModeGrid">
-            <button class="play-card active" data-playmode="online" type="button">
-              <span class="pc-emoji">🌐</span>
-              <b>Online</b>
-              <small>Tạo phòng, rủ đồng nghiệp cùng chơi</small>
-            </button>
-            <button class="play-card" data-playmode="bot" type="button">
-              <span class="pc-emoji">🤖</span>
-              <b>Đấu Bot</b>
-              <small>Một mình với bot, luyện tay</small>
-            </button>
-            <button class="play-card" data-playmode="local" type="button">
-              <span class="pc-emoji">👥</span>
-              <b>Cùng máy</b>
-              <small>Nhiều người chung 1 máy</small>
-            </button>
+            <button class="play-card active" data-playmode="online" type="button"><span class="pc-emoji">🌐</span><b>Online</b><small>Tạo phòng, rủ đồng nghiệp</small></button>
+            <button class="play-card" data-playmode="bot" type="button"><span class="pc-emoji">🤖</span><b>Đấu Bot</b><small>Một mình với bot</small></button>
+            <button class="play-card" data-playmode="local" type="button"><span class="pc-emoji">👥</span><b>Cùng máy</b><small>Nhiều người chung 1 máy</small></button>
           </div>
         </div>
-        <div style="margin-top:20px">
-          <button class="btn btn-primary btn-lg" id="continueBtn" type="button">Tiếp tục →</button>
-        </div>
+        <div style="margin-top:20px"><button class="btn btn-primary btn-lg" id="continueBtn" type="button">Tiếp tục →</button></div>
       </div>
-      <div class="panel lb-block">
-        <h3>🏆 Bảng xếp hạng</h3>
-        <div class="lb-list" id="leaderboardSetup"><div class="lb-empty">Đang tải...</div></div>
-      </div>
+      <div class="panel lb-block"><h3>🏆 Bảng xếp hạng</h3><div class="lb-list" id="leaderboardSetup"><div class="lb-empty">Đang tải...</div></div></div>
     </section>
 
-    <!-- ============ ONLINE: TẠO/JOIN ============ -->
     <section id="onlineScreen" class="setup" hidden>
       <div class="panel">
-        <div style="text-align:center;margin-bottom:20px">
-          <div style="font-size:48px;line-height:1;margin-bottom:6px">🌐</div>
-          <h2 style="margin:0;font-family:'Baloo 2',cursive;font-size:24px;color:#4a3a63">Chơi Online</h2>
-          <p style="margin:8px 0 0;color:#8a7aa6;font-size:13.5px;font-weight:700">Tạo phòng mới hoặc vào phòng bằng mã</p>
-        </div>
+        <div style="text-align:center;margin-bottom:20px"><div style="font-size:48px;line-height:1;margin-bottom:6px">🌐</div><h2 style="margin:0;font-family:'Baloo 2',cursive;font-size:24px;color:#4a3a63">Chơi Online</h2><p style="margin:8px 0 0;color:#8a7aa6;font-size:13.5px;font-weight:700">Tạo phòng mới hoặc vào phòng bằng mã</p></div>
         <button class="btn btn-primary btn-lg" id="createRoomBtn" type="button">➕ Tạo phòng mới</button>
         <div style="text-align:center;color:#a396bd;font-weight:800;font-size:13px;margin:18px 0">— hoặc —</div>
-        <div class="field">
-          <label for="joinCodeInput">Nhập mã phòng</label>
-          <input id="joinCodeInput" class="code-input" maxlength="6" placeholder="ABC123" autocomplete="off" autocapitalize="characters" spellcheck="false" />
-        </div>
-        <div style="margin-top:14px">
-          <button class="btn btn-ghost btn-lg" id="joinRoomBtn" type="button">🔗 Vào phòng</button>
-        </div>
-        <div style="margin-top:16px;text-align:center">
-          <button class="btn" id="backFromOnlineBtn" type="button" style="font-size:13px;padding:8px 16px;color:#8a7aa6">← Quay lại</button>
-        </div>
+        <div class="field"><label for="joinCodeInput">Nhập mã phòng</label><input id="joinCodeInput" class="code-input" maxlength="6" placeholder="ABC123" autocomplete="off" autocapitalize="characters" spellcheck="false" /></div>
+        <div style="margin-top:14px"><button class="btn btn-ghost btn-lg" id="joinRoomBtn" type="button">🔗 Vào phòng</button></div>
+        <div style="margin-top:16px;text-align:center"><button class="btn" id="backFromOnlineBtn" type="button" style="font-size:13px;padding:8px 16px;color:#8a7aa6">← Quay lại</button></div>
       </div>
     </section>
 
-    <!-- ============ WAITING ROOM ============ -->
     <section id="waitingScreen" class="setup" hidden>
       <div class="panel">
         <h2 style="margin:0 0 4px;font-family:'Baloo 2',cursive;font-size:22px;color:#4a3a63;text-align:center">🚪 Phòng chờ</h2>
-        <p style="margin:0;text-align:center;color:#8a7aa6;font-size:13px;font-weight:700">Chia sẻ mã này cho đồng nghiệp để cùng chơi</p>
+        <p style="margin:0;text-align:center;color:#8a7aa6;font-size:13px;font-weight:700">Chia sẻ mã này cho đồng nghiệp</p>
         <div class="room-code-box">
           <div class="room-code-label">MÃ PHÒNG</div>
-          <div class="room-code-value" id="roomCodeValue">------</div>
-          <div class="room-code-hint">Nhấn để copy</div>
+          <div class="room-code-value" id="roomCodeValue"></div>
+          <div class="room-code-hint">👆 Nhấn để copy</div>
         </div>
         <div style="font-size:12px;font-weight:900;color:#8a7aa6;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">👥 Người chơi (<span id="waitingCount">0</span>/4)</div>
         <div class="waiting-players" id="waitingPlayers"></div>
         <div class="host-controls" id="hostControls">
           <div style="font-size:12px;font-weight:900;color:#8a7aa6;letter-spacing:.1em;text-transform:uppercase">Chọn chế độ</div>
-          <select id="hostModeSelect">
-            <option value="classic">🎲 Cổ điển (1 xúc xắc)</option>
-            <option value="speed">⚡ Tốc độ (2 xúc xắc)</option>
-            <option value="chaos">🌪️ Hỗn loạn (sự kiện ngẫu nhiên)</option>
-          </select>
+          <select id="hostModeSelect"><option value="classic">🎲 Cổ điển (1 xúc xắc)</option><option value="speed">⚡ Tốc độ (2 xúc xắc)</option><option value="chaos">🌪️ Hỗn loạn (sự kiện)</option></select>
           <button class="btn btn-primary btn-lg" id="hostStartBtn" type="button">🚀 Bắt đầu trò chơi</button>
         </div>
-        <div class="waiting-actions">
-          <button class="btn btn-ghost" id="leaveRoomBtn" type="button">🚪 Rời phòng</button>
-        </div>
+        <div class="waiting-actions"><button class="btn btn-ghost" id="leaveRoomBtn" type="button">🚪 Rời phòng</button></div>
       </div>
     </section>
 
-    <!-- ============ BOT / LOCAL SETUP ============ -->
     <section id="localSetupScreen" class="setup" hidden>
       <div class="panel">
-        <div style="text-align:center;margin-bottom:16px">
-          <div style="font-size:48px;line-height:1;margin-bottom:6px" id="localSetupEmoji">🤖</div>
-          <h2 style="margin:0;font-family:'Baloo 2',cursive;font-size:22px;color:#4a3a63" id="localSetupTitle">Đấu với Bot</h2>
-        </div>
-        <div class="field">
-          <label>Chế độ chơi</label>
+        <div style="text-align:center;margin-bottom:16px"><div style="font-size:48px;line-height:1;margin-bottom:6px" id="localSetupEmoji">🤖</div><h2 style="margin:0;font-family:'Baloo 2',cursive;font-size:22px;color:#4a3a63" id="localSetupTitle">Đấu với Bot</h2></div>
+        <div class="field"><label>Chế độ chơi</label>
           <div class="mode-grid" id="modeGrid">
             <button class="mode-card active" data-mode="classic" type="button"><span class="mode-emoji">🎲</span><b>Cổ điển</b><small>1 xúc xắc</small></button>
             <button class="mode-card" data-mode="speed" type="button"><span class="mode-emoji">⚡</span><b>Tốc độ</b><small>2 xúc xắc</small></button>
             <button class="mode-card" data-mode="chaos" type="button"><span class="mode-emoji">🌪️</span><b>Hỗn loạn</b><small>Sự kiện</small></button>
           </div>
         </div>
-        <div class="field" style="margin-top:18px">
-          <label>Số người chơi</label>
-          <div class="seg" id="countSeg">
-            <button data-count="2" class="active" type="button">2</button>
-            <button data-count="3" type="button">3</button>
-            <button data-count="4" type="button">4</button>
-          </div>
-        </div>
-        <div style="margin-top:20px">
-          <button class="btn btn-primary btn-lg" id="startLocalBtn" type="button">Bắt đầu chơi 🚀</button>
-        </div>
-        <div style="margin-top:14px;text-align:center">
-          <button class="btn" id="backFromLocalBtn" type="button" style="font-size:13px;padding:8px 16px;color:#8a7aa6">← Quay lại</button>
-        </div>
-        <div class="hint-box" style="margin-top:16px">
-          💡 <b>Luật chơi:</b> Rơi vào <b>chân thang 🪜</b> → leo lên. Rơi vào <b>đầu rắn 🐍</b> → tuột xuống. Ai tới hoặc vượt ô <b>100</b> trước sẽ thắng!
-        </div>
+        <div class="field" style="margin-top:18px"><label>Số người chơi</label><div class="seg" id="countSeg"><button data-count="2" class="active" type="button">2</button><button data-count="3" type="button">3</button><button data-count="4" type="button">4</button></div></div>
+        <div style="margin-top:20px"><button class="btn btn-primary btn-lg" id="startLocalBtn" type="button">Bắt đầu chơi 🚀</button></div>
+        <div style="margin-top:14px;text-align:center"><button class="btn" id="backFromLocalBtn" type="button" style="font-size:13px;padding:8px 16px;color:#8a7aa6">← Quay lại</button></div>
+        <div class="hint-box" style="margin-top:16px">💡 <b>Luật chơi:</b> Rơi vào <b>chân thang 🪜</b> → leo lên. Rơi vào <b>đầu rắn 🐍</b> → tuột xuống. Ai tới hoặc vượt ô <b>100</b> trước sẽ thắng!</div>
       </div>
     </section>
 
-    <!-- ============ GAME SCREEN ============ -->
     <section id="gameScreen" hidden>
       <div class="layout">
-        <aside class="panel col-players">
-          <h3 class="panel-title">👥 Người chơi</h3>
-          <div class="player-list" id="playerList"></div>
-        </aside>
+        <aside class="panel col-players"><h3 class="panel-title">👥 Người chơi</h3><div class="player-list" id="playerList"></div></aside>
         <main class="col-board">
           <div class="turn-bar">
             <div class="turn-pill" id="turnPill"><span class="dot"></span><span class="txt">Sẵn sàng...</span></div>
@@ -352,17 +257,11 @@ input,select{font-family:inherit}
         </main>
         <aside class="col-side" style="display:flex;flex-direction:column;gap:14px">
           <div class="panel dice-panel">
-            <div class="dice-row" id="diceRow">
-              <div class="dice-stage"><div class="dice-cube" id="diceCube0"></div></div>
-              <div class="dice-stage" id="diceStage1"><div class="dice-cube" id="diceCube1"></div></div>
-            </div>
+            <div class="dice-row" id="diceRow"><div class="dice-stage"><div class="dice-cube" id="diceCube0"></div></div><div class="dice-stage" id="diceStage1"><div class="dice-cube" id="diceCube1"></div></div></div>
             <button class="btn btn-primary btn-roll" id="rollBtn" type="button">🎲 Tung xúc xắc</button>
             <div class="roll-hint" id="rollHint">Nhấn để tung!</div>
           </div>
-          <div class="panel">
-            <h3 class="panel-title">📜 Nhật ký</h3>
-            <div class="log" id="log"></div>
-          </div>
+          <div class="panel"><h3 class="panel-title">📜 Nhật ký</h3><div class="log" id="log"></div></div>
         </aside>
       </div>
     </section>
@@ -373,18 +272,9 @@ input,select{font-family:inherit}
       <div class="win-emoji" id="winEmoji">🏆</div>
       <h2 id="winTitle">Chiến thắng!</h2>
       <p id="winSub">Chúc mừng!</p>
-      <div class="win-stats">
-        <div class="stat"><b id="statMoves">0</b><span>Lượt</span></div>
-        <div class="stat"><b id="statTime">0:00</b><span>Thời gian</span></div>
-        <div class="stat"><b id="statMode">—</b><span>Chế độ</span></div>
-      </div>
-      <div class="win-actions">
-        <button class="btn btn-primary" id="playAgainBtn" type="button">Về sảnh 🔁</button>
-      </div>
-      <div class="lb-block">
-        <h3>🏆 Bảng xếp hạng</h3>
-        <div class="lb-list" id="leaderboardWin"></div>
-      </div>
+      <div class="win-stats"><div class="stat"><b id="statMoves">0</b><span>Lượt</span></div><div class="stat"><b id="statTime">0:00</b><span>Thời gian</span></div><div class="stat"><b id="statMode">—</b><span>Chế độ</span></div></div>
+      <div class="win-actions"><button class="btn btn-primary" id="playAgainBtn" type="button">Về sảnh 🏠</button></div>
+      <div class="lb-block"><h3>🏆 Bảng xếp hạng</h3><div class="lb-list" id="leaderboardWin"></div></div>
     </div>
   </div>
 
@@ -392,7 +282,7 @@ input,select{font-family:inherit}
 </div>
 `;
 
-  /* ============================ Build shadow ============================ */
+  /* ============================ Shadow host ============================ */
   var host = document.createElement('div');
   host.id = 'snakeGameHost';
   host.style.cssText = 'position:fixed;inset:0;z-index:9500;display:none;';
@@ -421,6 +311,7 @@ input,select{font-family:inherit}
     var m = Math.floor(sec / 60), s = sec % 60;
     return m + ':' + (s < 10 ? '0' : '') + s;
   }
+  function vibrate(pat) { try { if (navigator.vibrate) navigator.vibrate(pat); } catch (e) {} }
   var toastTimer = null;
   function toast(msg) {
     var el = $('toast');
@@ -450,7 +341,7 @@ input,select{font-family:inherit}
     }
   } catch (e) { console.warn('[SB] init failed:', e); }
 
-  /* ============================ Board geometry ============================ */
+  /* ============================ Geometry ============================ */
   var LADDERS = { 1: 38, 4: 14, 9: 31, 21: 42, 28: 84, 36: 44, 51: 67, 71: 91, 80: 100 };
   var SNAKES  = { 16: 6, 47: 26, 49: 11, 56: 53, 62: 19, 64: 60, 87: 24, 93: 73, 95: 75, 98: 78 };
   function posToXY(pos) {
@@ -481,7 +372,7 @@ input,select{font-family:inherit}
     s += '</g>';
     return s;
   }
-  var SNAKE_COLORS = ['#7c5cff', '#22c98a', '#ff5fa2', '#f6a723', '#38bdf8', '#f97316', '#a855f7', '#14b8a6', '#ef4444', '#8b5cf6'];
+  var SNAKE_COLORS = ['#7c5cff','#22c98a','#ff5fa2','#f6a723','#38bdf8','#f97316','#a855f7','#14b8a6','#ef4444','#8b5cf6'];
   function snakeArt(headPos, tailPos, idx) {
     var H = posToXY(headPos), T = posToXY(tailPos);
     var mx = (H.x + T.x) / 2, my = (H.y + T.y) / 2;
@@ -539,7 +430,7 @@ input,select{font-family:inherit}
     win:    function () { [523, 659, 784, 1046, 1318].forEach(function (f, i) { beep(f, 0.32, 'sine', 0.06, i * 0.11); }); }
   };
 
-  /* ============================ Dice ============================ */
+  /* ============================ Dice 3D ============================ */
   var PIP_MAP = { 1:[[2,2]], 2:[[1,1],[3,3]], 3:[[1,1],[2,2],[3,3]], 4:[[1,1],[1,3],[3,1],[3,3]], 5:[[1,1],[1,3],[2,2],[3,1],[3,3]], 6:[[1,1],[1,3],[2,1],[2,3],[3,1],[3,3]] };
   var FACE_TF = { 1:'translateZ(36px)', 2:'rotateY(90deg) translateZ(36px)', 3:'rotateX(90deg) translateZ(36px)', 4:'rotateX(-90deg) translateZ(36px)', 5:'rotateY(-90deg) translateZ(36px)', 6:'rotateY(180deg) translateZ(36px)' };
   var FACE_ROT = { 1:[0,0], 2:[0,-90], 3:[-90,0], 4:[90,0], 5:[0,90], 6:[0,180] };
@@ -590,27 +481,22 @@ input,select{font-family:inherit}
   var BOT_NAMES = ['Mèo Bông', 'Gấu Mật', 'Thỏ Ngọc'];
 
   var state = {
-    playMode: 'online',  // online | bot | local
-    mode: 'classic',
-    count: 2,
-    players: [],
-    current: 0,
-    busy: false,
-    over: false,
-    moves: 0,
-    startTime: 0
+    playMode: 'online', mode: 'classic', count: 2,
+    players: [], current: 0, busy: false, over: false, moves: 0, startTime: 0
   };
   var dice0 = null, dice1 = null;
 
-  // Online room state
   var room = null;
   var roomPlayers = [];
   var roomChannel = null;
   var myUsername = '';
   var myProfile = null;
   var isHost = false;
-  var lastRollTs = 0;
   var animating = {};
+  var refreshTimer = null;
+  var pendingWinner = null;
+  var wasMyTurn = false;
+  var busyTimeout = null;
 
   function avatarUrl(seed) {
     return 'https://api.dicebear.com/9.x/adventurer/svg?seed=' + encodeURIComponent(seed) +
@@ -662,7 +548,6 @@ input,select{font-family:inherit}
     } catch (e) {
       myProfile = { username: myUsername, display_name: myUsername, avatar_url: avatarUrl(myUsername) };
     }
-    $('playerName').value = myProfile.display_name;
   }
 
   /* ============================ Board ============================ */
@@ -699,7 +584,7 @@ input,select{font-family:inherit}
     svg.innerHTML = html;
   }
 
-  /* ============================ Players UI ============================ */
+  /* ============================ Player cards ============================ */
   function renderPlayers() {
     var el = $('playerList');
     el.innerHTML = '';
@@ -810,7 +695,6 @@ input,select{font-family:inherit}
   }
   function renderLogFromState(logArr) {
     if (!logArr || !logArr.length) return;
-    // render theo thứ tự cũ → mới, để item mới nhất ở trên
     var sorted = logArr.slice().sort(function (a, b) { return a.ts - b.ts; });
     sorted.forEach(function (item) { addLogItem(item); });
   }
@@ -822,7 +706,7 @@ input,select{font-family:inherit}
   async function fetchLeaderboard() {
     if (sb) {
       try {
-        var res = await sb.from(LB_TABLE).select('player_name, mode, moves, duration_ms, created_at').order('moves', { ascending: true }).order('duration_ms', { ascending: true }).limit(10);
+        var res = await sb.from(LB_TABLE).select('player_name,mode,moves,duration_ms').order('moves', { ascending: true }).order('duration_ms', { ascending: true }).limit(10);
         if (res.error) throw res.error;
         if (res.data && res.data.length) return res.data;
         return [];
@@ -843,13 +727,7 @@ input,select{font-family:inherit}
     el.innerHTML = rows.map(function (r, i) {
       var medal = ['🥇','🥈','🥉'][i] || ('#' + (i + 1));
       var secs = Math.max(1, Math.round((r.duration_ms || 0) / 1000));
-      return '<div class="lb-row">' +
-        '<span class="lb-rank">' + medal + '</span>' +
-        '<span class="lb-name">' + escapeHtml(r.player_name) + '</span>' +
-        '<span class="lb-mode">' + (modeNames[r.mode] || escapeHtml(r.mode || '—')) + '</span>' +
-        '<span class="lb-moves">' + (r.moves || 0) + ' lượt</span>' +
-        '<span class="lb-time">' + fmtTime(secs) + '</span>' +
-        '</div>';
+      return '<div class="lb-row"><span class="lb-rank">' + medal + '</span><span class="lb-name">' + escapeHtml(r.player_name) + '</span><span class="lb-mode">' + (modeNames[r.mode] || escapeHtml(r.mode || '—')) + '</span><span class="lb-moves">' + (r.moves || 0) + ' lượt</span><span class="lb-time">' + fmtTime(secs) + '</span></div>';
     }).join('');
   }
   async function refreshLeaderboards() {
@@ -863,7 +741,7 @@ input,select{font-family:inherit}
         var res = await sb.from(LB_TABLE).insert([payload]);
         if (res.error) throw res.error;
         return true;
-      } catch (e) {}
+      } catch (e) { console.warn('[LB] save failed:', e.message || e); }
     }
     try {
       var arr = localScores();
@@ -877,39 +755,39 @@ input,select{font-family:inherit}
   /* ============================ Room: create/join/leave ============================ */
   async function createRoom() {
     if (!sb) { toast('Chưa kết nối Supabase'); return; }
-    var code = genRoomCode();
     var displayName = ($('playerName').value || '').trim().slice(0, 16) || myProfile.display_name;
     try { localStorage.setItem('srank_player_name', displayName); } catch (e) {}
 
-    var ins = await sb.from(ROOMS_T).insert([{
-      code: code,
-      host_username: myUsername,
-      mode: 'classic',
-      status: 'waiting',
-      max_players: 4,
-      state: {},
-      version: 0
-    }]).select().single();
-
-    if (ins.error) { toast('Không tạo được phòng: ' + ins.error.message); return; }
-    room = ins.data;
+    var attempts = 0, created = null;
+    while (attempts < 5 && !created) {
+      var code = genRoomCode();
+      var ins = await sb.from(ROOMS_T).insert([{
+        code: code, host_username: myUsername, mode: 'classic',
+        status: 'waiting', max_players: 4, state: {}, version: 0
+      }]).select().single();
+      if (!ins.error) { created = ins.data; break; }
+      if (ins.error.code === '23505') { attempts++; continue; }
+      toast('Lỗi tạo phòng: ' + (ins.error.message || ins.error.code));
+      return;
+    }
+    if (!created) { toast('Không tạo được phòng, thử lại sau'); return; }
+    room = created;
     isHost = true;
 
     var pIns = await sb.from(ROOM_PLAYERS_T).insert([{
-      room_id: room.id,
-      username: myUsername,
-      display_name: displayName,
-      avatar_url: myProfile.avatar_url,
-      color_index: 0,
-      pos: 0,
-      is_host: true
+      room_id: room.id, username: myUsername, display_name: displayName,
+      avatar_url: myProfile.avatar_url, color_index: 0, pos: 0, is_host: true
     }]).select().single();
-
     if (pIns.error) {
       await sb.from(ROOMS_T).delete().eq('id', room.id);
-      toast('Không vào phòng: ' + pIns.error.message);
+      toast('Lỗi vào phòng: ' + (pIns.error.message || pIns.error.code));
       return;
     }
+
+    // Reset cache
+    renderedLogTs = {};
+    animating = {};
+    pendingWinner = null;
 
     enterWaitingRoom();
     subscribeRoom();
@@ -925,24 +803,22 @@ input,select{font-family:inherit}
     room = rRes.data;
 
     var cnt = await sb.from(ROOM_PLAYERS_T).select('id', { count: 'exact', head: true }).eq('room_id', room.id);
-    if ((cnt.count || 0) >= room.max_players) { toast('Phòng đã đầy'); return; }
+    if ((cnt.count || 0) >= room.max_players) { toast('Phòng đã đầy'); room = null; return; }
 
-    // Đã ở trong phòng chưa?
     var exist = await sb.from(ROOM_PLAYERS_T).select('*').eq('room_id', room.id).eq('username', myUsername).maybeSingle();
     if (!exist.data) {
       var displayName = ($('playerName').value || '').trim().slice(0, 16) || myProfile.display_name;
       var pIns = await sb.from(ROOM_PLAYERS_T).insert([{
-        room_id: room.id,
-        username: myUsername,
-        display_name: displayName,
-        avatar_url: myProfile.avatar_url,
-        color_index: (cnt.count || 0),
-        pos: 0,
-        is_host: false
+        room_id: room.id, username: myUsername, display_name: displayName,
+        avatar_url: myProfile.avatar_url, color_index: (cnt.count || 0), pos: 0, is_host: false
       }]).select().single();
-      if (pIns.error) { toast('Không vào phòng: ' + pIns.error.message); return; }
+      if (pIns.error) { toast('Lỗi vào phòng: ' + (pIns.error.message || pIns.error.code)); room = null; return; }
     }
     isHost = (room.host_username === myUsername);
+
+    renderedLogTs = {};
+    animating = {};
+    pendingWinner = null;
 
     enterWaitingRoom();
     subscribeRoom();
@@ -950,31 +826,49 @@ input,select{font-family:inherit}
 
   async function leaveRoom() {
     if (!room) return;
-    try { if (roomChannel) { await sb.removeChannel(roomChannel); roomChannel = null; } } catch (e) {}
-    try {
-      await sb.from(ROOM_PLAYERS_T).delete().eq('room_id', room.id).eq('username', myUsername);
-      if (isHost) {
-        // Host leave → close room
-        await sb.from(ROOMS_T).delete().eq('id', room.id);
-      }
-    } catch (e) {}
+    var oldRoom = room;
     room = null;
     roomPlayers = [];
     isHost = false;
-    showScreen('menuScreen');
+    pendingWinner = null;
+    animating = {};
+    renderedLogTs = {};
+    if (busyTimeout) { clearTimeout(busyTimeout); busyTimeout = null; }
+    state.busy = false;
+
+    try { if (roomChannel) { await sb.removeChannel(roomChannel); roomChannel = null; } } catch (e) {}
+    try {
+      await sb.from(ROOM_PLAYERS_T).delete().eq('room_id', oldRoom.id).eq('username', myUsername);
+      if (oldRoom.host_username === myUsername) {
+        await sb.from(ROOMS_T).delete().eq('id', oldRoom.id);
+      }
+    } catch (e) {}
+    refreshLeaderboards();
+  }
+
+  /* ============================ Realtime ============================ */
+  function scheduleRefresh() {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(function () {
+      refreshTimer = null;
+      refreshRoomPlayers();
+    }, 80);
   }
 
   async function refreshRoomPlayers() {
     if (!room) return;
-    var res = await sb.from(ROOM_PLAYERS_T).select('*').eq('room_id', room.id).order('joined_at', { ascending: true });
-    if (res.data) roomPlayers = res.data;
-    renderWaitingPlayers();
-    if (room.status === 'playing' || room.status === 'finished') {
-      rebuildPlayersFromRoom();
-    }
+    try {
+      var res = await sb.from(ROOM_PLAYERS_T).select('*').eq('room_id', room.id).order('joined_at', { ascending: true });
+      if (!res.data) return;
+      roomPlayers = res.data;
+      renderWaitingPlayers();
+      if (room && (room.status === 'playing' || room.status === 'finished')) {
+        rebuildPlayersFromRoom();
+        syncTurnUI();
+      }
+    } catch (e) { console.warn('[room] refresh failed:', e); }
   }
 
-  /* ============================ Realtime ============================ */
   function subscribeRoom() {
     if (!room || !sb) return;
     if (roomChannel) { try { sb.removeChannel(roomChannel); } catch (e) {} }
@@ -983,17 +877,17 @@ input,select{font-family:inherit}
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: ROOMS_T, filter: 'id=eq.' + room.id }, function (payload) {
         var oldRoom = room;
         var newRoom = payload.new;
+        if (!room || room.id !== newRoom.id) return;
         room = newRoom;
         handleRoomUpdate(oldRoom, newRoom);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: ROOMS_T, filter: 'id=eq.' + room.id }, function () {
         toast('Phòng đã bị đóng');
-        room = null;
-        roomPlayers = [];
+        room = null; roomPlayers = [];
         showScreen('menuScreen');
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: ROOM_PLAYERS_T, filter: 'room_id=eq.' + room.id }, function () {
-        refreshRoomPlayers();
+        scheduleRefresh();
       })
       .subscribe();
 
@@ -1003,39 +897,51 @@ input,select{font-family:inherit}
   function handleRoomUpdate(oldRoom, newRoom) {
     // Waiting → Playing
     if (oldRoom.status === 'waiting' && newRoom.status === 'playing') {
-      enterGameScreenFromRoom();
+      refreshRoomPlayers().then(function () { enterGameScreenFromRoom(); });
       return;
     }
 
-    // Có winner mới?
-    var oldWinner = (oldRoom.state || {}).winner;
-    var newWinner = (newRoom.state || {}).winner;
-    if (newWinner && newWinner !== oldWinner) {
-      showWinOverlay(newWinner, newRoom);
-    }
-
-    // Có dice mới?
+    // Dice animation from other clients
     var oldRollAt = (oldRoom.state || {}).last_roll_at || 0;
     var newRollAt = (newRoom.state || {}).last_roll_at || 0;
     if (newRollAt > oldRollAt && (newRoom.state || {}).last_roll_by !== myUsername) {
       animateDiceFromRemote((newRoom.state || {}).dice || [1]);
     }
 
-    // Render log
+    // New winner
+    var oldWinner = (oldRoom.state || {}).winner;
+    var newWinner = (newRoom.state || {}).winner;
+    if (newWinner && newWinner !== oldWinner) {
+      pendingWinner = { username: newWinner, roomData: newRoom };
+    }
+
+    // Log
     renderLogFromState((newRoom.state || {}).log || []);
 
-    // Refresh players + turn
-    refreshRoomPlayers();
-    setTimeout(function () {
-      rebuildPlayersFromRoom();
+    // Refresh + rebuild, THEN show winner if pending
+    refreshRoomPlayers().then(function () {
       syncTurnUI();
-    }, 300);
+      if (pendingWinner) {
+        var w = pendingWinner; pendingWinner = null;
+        showWinOverlay(w.username, w.roomData);
+      }
+    });
   }
 
-  /* ============================ Waiting room UI ============================ */
+  /* ============================ Room code render ============================ */
+  function renderRoomCode() {
+    var el = $('roomCodeValue');
+    if (!el) return;
+    var code = room ? String(room.code) : '';
+    el.innerHTML = code.split('').map(function (c) {
+      return '<span class="room-code-char">' + escapeHtml(c) + '</span>';
+    }).join('');
+  }
+
+  /* ============================ Waiting room ============================ */
   function enterWaitingRoom() {
     showScreen('waitingScreen');
-    $('roomCodeValue').textContent = room.code;
+    renderRoomCode();
     renderWaitingPlayers();
     $('hostControls').style.display = isHost ? '' : 'none';
     $('hostModeSelect').value = room.mode || 'classic';
@@ -1052,45 +958,42 @@ input,select{font-family:inherit}
       return '<div class="waiting-player">' +
         '<img src="' + escapeHtml(rp.avatar_url || avatarUrl(rp.display_name)) + '" alt="" onerror="this.src=\'' + avatarUrl('x') + '\'">' +
         '<span class="wp-name">' + escapeHtml(rp.display_name) + '</span>' +
-        badge + youBadge +
-        '</div>';
+        badge + youBadge + '</div>';
     }).join('');
     if (cnt) cnt.textContent = roomPlayers.length;
     if ($('hostControls')) $('hostControls').style.display = (isHost && room && room.status === 'waiting') ? '' : 'none';
   }
 
-  /* ============================ Start game (host) ============================ */
+  /* ============================ Host start ============================ */
   async function hostStartGame() {
     if (!isHost || !room) return;
     if (roomPlayers.length < 2) { toast('Cần ít nhất 2 người chơi'); return; }
-    var mode = $('hostModeSelect').value;
-    var now = Date.now();
-    var initialState = {
-      current_turn: roomPlayers[0].username,
-      dice: [1],
-      last_roll_by: null,
-      last_roll_at: 0,
-      moves: 0,
-      started_at: now,
-      log: [{ text: '🎮 Trò chơi bắt đầu — chế độ ' + ({ classic:'Cổ điển',speed:'Tốc độ',chaos:'Hỗn loạn' }[mode]), color: '#a78bfa', ts: now }],
-      winner: null,
-      winner_at: null
-    };
-    // Reset all players pos=0
-    await sb.from(ROOM_PLAYERS_T).update({ pos: 0, skip_turn: false, extra_turn: false }).eq('room_id', room.id);
-
-    var upd = await sb.from(ROOMS_T).update({
-      mode: mode,
-      status: 'playing',
-      state: initialState,
-      version: (room.version || 0) + 1,
-      updated_at: new Date().toISOString()
-    }).eq('id', room.id);
-    if (upd.error) { toast('Lỗi: ' + upd.error.message); return; }
-    // Realtime sẽ tự chuyển screen
+    var btn = $('hostStartBtn');
+    if (btn.disabled) return;
+    btn.disabled = true;
+    try {
+      var mode = $('hostModeSelect').value;
+      var now = Date.now();
+      var initialState = {
+        current_turn: roomPlayers[0].username,
+        dice: mode === 'speed' ? [1, 1] : [1],
+        last_roll_by: null, last_roll_at: 0, moves: 0, started_at: now,
+        log: [{ text: '🎮 Trò chơi bắt đầu — chế độ ' + ({ classic:'Cổ điển',speed:'Tốc độ',chaos:'Hỗn loạn' }[mode]), color: '#a78bfa', ts: now }],
+        winner: null, winner_at: null, last_move: null
+      };
+      await sb.from(ROOM_PLAYERS_T).update({ pos: 0, skip_turn: false, extra_turn: false }).eq('room_id', room.id);
+      var upd = await sb.from(ROOMS_T).update({
+        mode: mode, status: 'playing', state: initialState,
+        version: (room.version || 0) + 1, updated_at: new Date().toISOString()
+      }).eq('id', room.id);
+      if (upd.error) { toast('Lỗi: ' + upd.error.message); btn.disabled = false; }
+    } catch (e) {
+      toast('Lỗi: ' + e.message);
+      btn.disabled = false;
+    }
   }
 
-  /* ============================ Build local players (bot/local) ============================ */
+  /* ============================ Local players ============================ */
   function createLocalPlayers() {
     var nameInput = $('playerName');
     var myName = (nameInput.value || '').trim().slice(0, 16) || myProfile.display_name || 'Bạn';
@@ -1108,40 +1011,33 @@ input,select{font-family:inherit}
         var nm = BOT_NAMES[bi++];
         players.push({
           id: players.length, username: 'bot_' + players.length, name: nm, bot: true,
-          pos: 0, skip: false, extra: false,
-          color: st.color, soft: st.soft, avatar: avatarUrl(nm + '-' + players.length)
+          pos: 0, skip: false, extra: false, color: st.color, soft: st.soft,
+          avatar: avatarUrl(nm + '-' + players.length)
         });
       }
     } else {
       while (players.length < state.count) {
-        var st = PLAYER_STYLES[players.length];
+        var stl = PLAYER_STYLES[players.length];
         players.push({
           id: players.length, username: 'p' + (players.length + 1),
           name: 'Người chơi ' + (players.length + 1), bot: false,
-          pos: 0, skip: false, extra: false,
-          color: st.color, soft: st.soft, avatar: avatarUrl('P' + (players.length + 1))
+          pos: 0, skip: false, extra: false, color: stl.color, soft: stl.soft,
+          avatar: avatarUrl('P' + (players.length + 1))
         });
       }
     }
     return players;
   }
 
-  /* ============================ Enter game screen ============================ */
+  /* ============================ Enter game ============================ */
   function enterGameScreenFromRoom() {
-    // Build state.players từ roomPlayers
     state.players = roomPlayers.map(function (rp, i) {
       var st = PLAYER_STYLES[rp.color_index % 4];
       return {
-        id: i,
-        username: rp.username,
-        name: rp.display_name,
-        bot: false,
-        pos: rp.pos,
-        skip: rp.skip_turn,
-        extra: rp.extra_turn,
+        id: i, username: rp.username, name: rp.display_name, bot: false,
+        pos: rp.pos, targetPos: rp.pos, skip: rp.skip_turn, extra: rp.extra_turn,
         color: st.color, soft: st.soft,
-        avatar: rp.avatar_url || avatarUrl(rp.display_name),
-        el: null, cardEl: null, posEl: null, barEl: null
+        avatar: rp.avatar_url || avatarUrl(rp.display_name)
       };
     });
     state.mode = room.mode;
@@ -1149,10 +1045,11 @@ input,select{font-family:inherit}
     state.busy = false;
     state.moves = (room.state || {}).moves || 0;
     state.startTime = (room.state || {}).started_at || Date.now();
-    state.current = state.players.findIndex(function (p) { return p.username === (room.state || {}).current_turn; });
-    if (state.current < 0) state.current = 0;
+    var curIdx = state.players.findIndex(function (p) { return p.username === (room.state || {}).current_turn; });
+    state.current = curIdx >= 0 ? curIdx : 0;
+    animating = {};
+    wasMyTurn = false;
 
-    // Reset cache
     renderedLogTs = {};
     $('log').innerHTML = '';
 
@@ -1166,11 +1063,7 @@ input,select{font-family:inherit}
     positionTokens();
     updateTurnPill();
     syncPlayerCards();
-
-    // Render log từ state
     renderLogFromState((room.state || {}).log || []);
-
-    // Turn hint
     syncTurnUI();
   }
 
@@ -1181,7 +1074,7 @@ input,select{font-family:inherit}
     state.moves = 0;
     state.startTime = Date.now();
     state.current = 0;
-
+    wasMyTurn = false;
     renderedLogTs = {};
     $('log').innerHTML = '';
 
@@ -1201,24 +1094,22 @@ input,select{font-family:inherit}
     setTimeout(beginTurnLocal, 400);
   }
 
-  /* ============================ Sync from room ============================ */
+  /* ============================ Sync + animate ============================ */
   function rebuildPlayersFromRoom() {
     if (!room || (room.status !== 'playing' && room.status !== 'finished')) return;
     var oldCache = {};
     state.players.forEach(function (p) { oldCache[p.username] = p; });
 
+    var needsRender = roomPlayers.some(function (rp) { return !oldCache[rp.username]; });
+
     state.players = roomPlayers.map(function (rp, i) {
       var old = oldCache[rp.username];
       var st = PLAYER_STYLES[rp.color_index % 4];
       return {
-        id: i,
-        username: rp.username,
-        name: rp.display_name,
-        bot: false,
+        id: i, username: rp.username, name: rp.display_name, bot: false,
         pos: old ? old.pos : rp.pos,
         targetPos: rp.pos,
-        skip: rp.skip_turn,
-        extra: rp.extra_turn,
+        skip: rp.skip_turn, extra: rp.extra_turn,
         color: st.color, soft: st.soft,
         avatar: rp.avatar_url || avatarUrl(rp.display_name),
         el: old ? old.el : null,
@@ -1228,24 +1119,22 @@ input,select{font-family:inherit}
       };
     });
 
-    // Rebind UI refs còn thiếu (nếu có player mới)
-    if (state.players.some(function (p) { return !p.el; })) {
-      // rebuild toàn bộ list
-      renderPlayers();
-      createTokens();
+    if (needsRender) {
+      renderPlayers(); createTokens(); positionTokens();
+      animating = {};
     }
 
-    // Animate ai có pos thay đổi
-    state.players.forEach(function (p) {
-      if (p.pos !== p.targetPos && !animating[p.username]) {
-        animateRemoteMove(p);
-      }
-    });
-
-    // Update current
     var curUser = (room.state || {}).current_turn;
     var curIdx = state.players.findIndex(function (p) { return p.username === curUser; });
     if (curIdx >= 0) state.current = curIdx;
+
+    var lastMove = (room.state || {}).last_move;
+    state.players.forEach(function (p) {
+      if (p.pos !== p.targetPos && !animating[p.username]) {
+        var moveInfo = (lastMove && lastMove.user === p.username) ? lastMove : null;
+        animateRemoteMove(p, moveInfo);
+      }
+    });
 
     updateTurnPill();
     syncPlayerCards();
@@ -1253,29 +1142,45 @@ input,select{font-family:inherit}
     syncTurnUI();
   }
 
-  async function animateRemoteMove(player) {
+  async function animateRemoteMove(player, moveInfo) {
+    if (animating[player.username]) return;
     animating[player.username] = true;
-    var from = player.pos, to = player.targetPos;
-    var step = to > from ? 1 : -1;
-    if (to === from) { animating[player.username] = false; return; }
-    if (Math.abs(to - from) > 1) {
-      // Thang / rắn / chaos — chờ chút rồi nhảy cóc
-      await sleep(300);
-      player.pos = to;
-      if (to > from) SFX.ladder(); else SFX.snake();
+    try {
+      var from = player.pos, to = player.targetPos;
+      if (from === to) return;
+
+      if (moveInfo && (moveInfo.via === 'ladder' || moveInfo.via === 'snake') && moveInfo.dice_land != null) {
+        var diceLand = moveInfo.dice_land;
+        var safety = 0;
+        while (player.pos !== diceLand && safety < 20) {
+          var dir = diceLand > player.pos ? 1 : -1;
+          player.pos += dir;
+          positionTokens();
+          SFX.tick();
+          await sleep(65);
+          safety++;
+        }
+        await sleep(220);
+        player.pos = to;
+        if (moveInfo.via === 'ladder') SFX.ladder(); else SFX.snake();
+        positionTokens();
+        await sleep(320);
+      } else {
+        var safety2 = 0;
+        while (player.pos !== player.targetPos && safety2 < 25) {
+          var dir2 = player.targetPos > player.pos ? 1 : -1;
+          player.pos += dir2;
+          positionTokens();
+          SFX.tick();
+          await sleep(65);
+          safety2++;
+        }
+      }
+    } finally {
+      player.pos = player.targetPos;
       positionTokens();
       animating[player.username] = false;
-      return;
     }
-    var cur = from;
-    while ((step > 0 && cur !== to) || (step < 0 && cur !== to)) {
-      cur += step;
-      player.pos = cur;
-      positionTokens();
-      SFX.tick();
-      await sleep(90);
-    }
-    animating[player.username] = false;
   }
 
   function animateDiceFromRemote(values) {
@@ -1292,20 +1197,30 @@ input,select{font-family:inherit}
     if (state.playMode !== 'online' || !room) return;
     var isMyTurn = (room.state || {}).current_turn === myUsername;
     var playing = room.status === 'playing';
+
+    // FIX #2: clear busy ONLY when turn has passed to someone else
+    if (!isMyTurn && state.busy) {
+      state.busy = false;
+      if (busyTimeout) { clearTimeout(busyTimeout); busyTimeout = null; }
+    }
+
     $('rollBtn').disabled = !(isMyTurn && playing && !state.busy);
+
+    // Vibrate on new turn
+    if (isMyTurn && !wasMyTurn && playing) vibrate([60, 40, 60]);
+    wasMyTurn = isMyTurn;
+
     if (!playing) {
       $('rollHint').textContent = 'Trò chơi đã kết thúc';
     } else if (isMyTurn) {
-      $('rollHint').textContent = '👉 Lượt của bạn — nhấn để tung!';
+      $('rollHint').textContent = state.busy ? 'Đang xử lý...' : '👉 Lượt của bạn — nhấn để tung!';
     } else {
-      var curName = 'người khác';
       var cur = state.players.find(function (p) { return p.username === (room.state || {}).current_turn; });
-      if (cur) curName = cur.name;
-      $('rollHint').textContent = 'Đang chờ ' + curName + '...';
+      $('rollHint').textContent = 'Đang chờ ' + (cur ? cur.name : 'người khác') + '...';
     }
   }
 
-  /* ============================ ONLINE roll ============================ */
+  /* ============================ Online roll ============================ */
   async function doRollOnline() {
     if (!room || room.status !== 'playing') return;
     if ((room.state || {}).current_turn !== myUsername) return;
@@ -1313,72 +1228,78 @@ input,select{font-family:inherit}
     state.busy = true;
     $('rollBtn').disabled = true;
 
-    var me = roomPlayers.find(function (p) { return p.username === myUsername; });
-    if (!me) { state.busy = false; return; }
+    // Safety: force-clear busy after 6s if realtime fails
+    if (busyTimeout) clearTimeout(busyTimeout);
+    busyTimeout = setTimeout(function () {
+      if (state.busy) { state.busy = false; busyTimeout = null; syncTurnUI(); }
+    }, 6000);
 
-    var nDice = room.mode === 'speed' ? 2 : 1;
-    var values = [];
-    for (var i = 0; i < nDice; i++) values.push(1 + rnd(6));
-    var total = values.reduce(function (a, b) { return a + b; }, 0);
+    try {
+      var me = roomPlayers.find(function (p) { return p.username === myUsername; });
+      if (!me) { state.busy = false; return; }
 
-    // Animate dice local
-    await animateDice(values);
+      var nDice = room.mode === 'speed' ? 2 : 1;
+      var values = [];
+      for (var i = 0; i < nDice; i++) values.push(1 + rnd(6));
+      var total = values.reduce(function (a, b) { return a + b; }, 0);
 
-    var oldPos = me.pos;
-    var newPos = oldPos + total;
-    var reachedGoal = newPos >= 100;
-    if (reachedGoal) newPos = 100;
+      await animateDice(values);
 
-    var newLog = [];
-    var myColor = PLAYER_STYLES[me.color_index % 4].color;
-    newLog.push({ text: '🎲 ' + me.display_name + ' tung ' + values.join(' + ') + (nDice > 1 ? ' = ' + total : ''), color: myColor, ts: Date.now() });
+      var oldPos = me.pos;
+      var diceLand = oldPos + total;
+      var reachedGoal = diceLand >= 100;
+      if (reachedGoal) diceLand = 100;
 
-    // Ladder / snake
-    if (!reachedGoal) {
-      if (LADDERS[newPos]) {
-        newLog.push({ text: '🪜 ' + me.display_name + ' leo thang ' + newPos + ' → ' + LADDERS[newPos] + '!', color: myColor, ts: Date.now() + 1 });
-        newPos = LADDERS[newPos];
-      } else if (SNAKES[newPos]) {
-        newLog.push({ text: '🐍 ' + me.display_name + ' bị rắn cắn ' + newPos + ' → ' + SNAKES[newPos] + '!', color: myColor, ts: Date.now() + 1 });
-        newPos = SNAKES[newPos];
+      var newPos = diceLand;
+      var via = 'normal';
+      var newLog = [];
+      var myColor = PLAYER_STYLES[me.color_index % 4].color;
+      newLog.push({ text: '🎲 ' + me.display_name + ' tung ' + values.join(' + ') + (nDice > 1 ? ' = ' + total : ''), color: myColor, ts: Date.now() });
+
+      if (reachedGoal) { via = 'goal'; }
+      else if (LADDERS[diceLand]) {
+        newPos = LADDERS[diceLand]; via = 'ladder';
+        newLog.push({ text: '🪜 ' + me.display_name + ' leo thang ' + diceLand + ' → ' + newPos + '!', color: myColor, ts: Date.now() + 1 });
+      } else if (SNAKES[diceLand]) {
+        newPos = SNAKES[diceLand]; via = 'snake';
+        newLog.push({ text: '🐍 ' + me.display_name + ' bị rắn cắn ' + diceLand + ' → ' + newPos + '!', color: myColor, ts: Date.now() + 1 });
       }
+
+      var winner = reachedGoal ? myUsername : null;
+
+      await sb.from(ROOM_PLAYERS_T).update({ pos: newPos }).eq('room_id', room.id).eq('username', myUsername);
+
+      var curIdx = roomPlayers.findIndex(function (p) { return p.username === myUsername; });
+      var nextTurn = roomPlayers[(curIdx + 1) % roomPlayers.length].username;
+
+      var newState = {
+        current_turn: winner ? myUsername : nextTurn,
+        dice: values,
+        last_roll_by: myUsername, last_roll_at: Date.now(),
+        moves: ((room.state || {}).moves || 0) + 1,
+        started_at: (room.state || {}).started_at || Date.now(),
+        log: newLog.concat((room.state || {}).log || []).slice(0, 40),
+        winner: winner, winner_at: winner ? Date.now() : null,
+        last_move: { user: myUsername, from: oldPos, dice_land: diceLand, final: newPos, via: via }
+      };
+
+      await sb.from(ROOMS_T).update({
+        state: newState,
+        status: winner ? 'finished' : 'playing',
+        version: (room.version || 0) + 1,
+        updated_at: new Date().toISOString()
+      }).eq('id', room.id);
+
+      // Do NOT reset busy here — syncTurnUI will do it after room update confirms turn passed
+    } catch (e) {
+      console.warn('[roll] failed:', e);
+      state.busy = false;
+      if (busyTimeout) { clearTimeout(busyTimeout); busyTimeout = null; }
+      $('rollBtn').disabled = false;
     }
-
-    var winner = reachedGoal ? myUsername : null;
-
-    // Update DB
-    await sb.from(ROOM_PLAYERS_T).update({ pos: newPos }).eq('room_id', room.id).eq('username', myUsername);
-
-    // Compute next turn
-    var curIdx = roomPlayers.findIndex(function (p) { return p.username === myUsername; });
-    var nextIdx = (curIdx + 1) % roomPlayers.length;
-    var nextTurn = roomPlayers[nextIdx].username;
-
-    var newLogAll = newLog.concat((room.state || {}).log || []).slice(0, 40);
-    var newState = {
-      current_turn: winner ? myUsername : nextTurn,
-      dice: values,
-      last_roll_by: myUsername,
-      last_roll_at: Date.now(),
-      moves: ((room.state || {}).moves || 0) + 1,
-      started_at: (room.state || {}).started_at || Date.now(),
-      log: newLogAll,
-      winner: winner,
-      winner_at: winner ? Date.now() : null
-    };
-
-    await sb.from(ROOMS_T).update({
-      state: newState,
-      status: winner ? 'finished' : 'playing',
-      version: (room.version || 0) + 1,
-      updated_at: new Date().toISOString()
-    }).eq('id', room.id);
-
-    state.busy = false;
-    // Realtime sẽ tự sync state mới
   }
 
-  /* ============================ LOCAL roll (bot + pass-and-play) ============================ */
+  /* ============================ Local roll ============================ */
   function beginTurnLocal() {
     if (state.over) return;
     var p = state.players[state.current];
@@ -1408,7 +1329,6 @@ input,select{font-family:inherit}
     positionTokens();
     beginTurnLocal();
   }
-
   async function doRollLocal() {
     if (state.busy || state.over) return;
     state.busy = true;
@@ -1429,7 +1349,6 @@ input,select{font-family:inherit}
       await sleep(Math.max(60, 130 - (target - p.pos) * 5));
     }
     if (reachedGoal) { await winLocal(p); return; }
-    // ladder/snake
     if (LADDERS[p.pos] && p.pos !== 100) {
       var to = LADDERS[p.pos];
       addLogItem({ text: '🪜 ' + p.name + ' leo thang ' + p.pos + ' → ' + to + '!', color: p.color, ts: Date.now() });
@@ -1440,7 +1359,6 @@ input,select{font-family:inherit}
       SFX.snake(); await sleep(250); p.pos = down; positionTokens(); await sleep(400);
     }
     if (p.pos >= 100) { await winLocal(p); return; }
-    // chaos
     if (state.mode === 'chaos' && Math.random() < 0.38) {
       var roll = Math.random();
       if (roll < 0.25) {
@@ -1469,6 +1387,7 @@ input,select{font-family:inherit}
     state.busy = false;
     advanceTurnLocal();
   }
+
   async function winLocal(winner) {
     state.over = true; state.busy = true;
     $('rollBtn').disabled = true;
@@ -1488,7 +1407,7 @@ input,select{font-family:inherit}
     $('winOverlay').hidden = false;
   }
 
-  /* ============================ Win overlay (online) ============================ */
+  /* ============================ Online win overlay ============================ */
   async function showWinOverlay(winnerUsername, roomData) {
     var winnerPlayer = roomPlayers.find(function (p) { return p.username === winnerUsername; });
     var winnerName = winnerPlayer ? winnerPlayer.display_name : winnerUsername;
@@ -1503,10 +1422,21 @@ input,select{font-family:inherit}
     $('winEmoji').textContent = isMe ? '🏆' : '🎉';
     $('winTitle').textContent = isMe ? 'Bạn thắng rồi! 🎉' : (winnerName + ' thắng!');
     $('winSub').textContent = isMe ? 'Tuyệt vời!' : 'Chơi ván mới nhé!';
-    $('playAgainBtn').textContent = 'Về sảnh 🏠';
 
     SFX.win(); confetti();
-    await saveScore({ player_name: winnerName, mode: roomData.mode, player_count: roomPlayers.length, moves: st.moves || 0, duration_ms: durationMs, result: isMe ? 'human' : 'other' });
+    vibrate([100, 50, 100, 50, 100]);
+
+    // FIX #1: only winner saves score (avoid duplicate inserts from all clients)
+    if (isMe) {
+      try {
+        await saveScore({
+          player_name: winnerName, mode: roomData.mode,
+          player_count: roomPlayers.length, moves: st.moves || 0,
+          duration_ms: durationMs, result: 'human'
+        });
+      } catch (e) { console.warn('[LB] winner save failed:', e); }
+    }
+
     await refreshLeaderboards();
     await sleep(600);
     $('winOverlay').hidden = false;
@@ -1568,7 +1498,7 @@ input,select{font-family:inherit}
     await sleep(500);
   }
 
-  /* ============================ Show screen ============================ */
+  /* ============================ Screen switching ============================ */
   function showScreen(id) {
     ['menuScreen', 'onlineScreen', 'waitingScreen', 'localSetupScreen', 'gameScreen'].forEach(function (s) {
       var el = $(s);
@@ -1579,8 +1509,7 @@ input,select{font-family:inherit}
     if (app) app.scrollTop = 0;
   }
 
-  /* ============================ UI WIRING ============================ */
-  // Play mode cards
+  /* ============================ UI wiring ============================ */
   $('playModeGrid').addEventListener('click', function (e) {
     var btn = e.target.closest('.play-card');
     if (!btn) return;
@@ -1608,15 +1537,18 @@ input,select{font-family:inherit}
   $('backFromOnlineBtn').addEventListener('click', function () { showScreen('menuScreen'); });
   $('backFromLocalBtn').addEventListener('click', function () { showScreen('menuScreen'); });
 
-  // Create / Join
   $('createRoomBtn').addEventListener('click', async function () {
+    if (this.disabled) return;
     this.disabled = true;
-    try { await createRoom(); } finally { this.disabled = false; }
+    try { await createRoom(); } catch (e) { toast('Lỗi: ' + e.message); }
+    finally { this.disabled = false; }
   });
   $('joinRoomBtn').addEventListener('click', async function () {
-    var code = $('joinCodeInput').value;
+    if (this.disabled) return;
     this.disabled = true;
-    try { await joinRoom(code); } finally { this.disabled = false; }
+    try { await joinRoom($('joinCodeInput').value); }
+    catch (e) { toast('Lỗi: ' + e.message); }
+    finally { this.disabled = false; }
   });
   $('joinCodeInput').addEventListener('input', function () {
     this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
@@ -1625,21 +1557,35 @@ input,select{font-family:inherit}
     if (e.key === 'Enter') $('joinRoomBtn').click();
   });
 
-  // Copy room code
   $('roomCodeValue').addEventListener('click', function () {
-    var code = this.textContent;
+    var code = room ? room.code : '';
+    if (!code) return;
+    var done = function () { toast('Đã copy mã: ' + code); };
     try {
-      navigator.clipboard.writeText(code);
-      toast('Đã copy mã: ' + code);
-    } catch (e) {
-      toast('Mã phòng: ' + code);
-    }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(done).catch(function () { fallbackCopy(code, done); });
+      } else fallbackCopy(code, done);
+    } catch (e) { fallbackCopy(code, done); }
   });
+  function fallbackCopy(text, done) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      done();
+    } catch (e) { toast('Mã phòng: ' + text); }
+  }
 
   $('hostStartBtn').addEventListener('click', hostStartGame);
-  $('leaveRoomBtn').addEventListener('click', leaveRoom);
+  $('leaveRoomBtn').addEventListener('click', async function () {
+    await leaveRoom();
+    showScreen('menuScreen');
+  });
 
-  // Local setup
   $('modeGrid').addEventListener('click', function (e) {
     var btn = e.target.closest('.mode-card');
     if (!btn) return;
@@ -1658,21 +1604,20 @@ input,select{font-family:inherit}
   });
   $('startLocalBtn').addEventListener('click', function () {
     ac();
-    if (state.playMode === 'bot' && state.count > 4) state.count = 4;
+    if (state.count > 4) state.count = 4;
     enterGameScreenLocal();
   });
 
-  // Roll button
   $('rollBtn').addEventListener('click', function () {
     ac();
     if (state.playMode === 'online') doRollOnline();
     else doRollLocal();
   });
 
-  // Quit
   $('quitBtn').addEventListener('click', async function () {
     if (state.playMode === 'online' && room) {
       await leaveRoom();
+      showScreen('menuScreen');
     } else {
       state.over = true;
       showScreen('menuScreen');
@@ -1680,10 +1625,9 @@ input,select{font-family:inherit}
     }
   });
 
-  // Play again
   $('playAgainBtn').addEventListener('click', async function () {
     $('winOverlay').hidden = true;
-    if (state.playMode === 'online') {
+    if (state.playMode === 'online' && room) {
       state.over = true; state.busy = false;
       await leaveRoom();
       showScreen('menuScreen');
@@ -1694,14 +1638,12 @@ input,select{font-family:inherit}
     }
   });
 
-  // Sound
   $('soundBtn').addEventListener('click', function () {
     soundOn = !soundOn;
     this.textContent = soundOn ? '🔊' : '🔇';
     if (soundOn) beep(660, 0.08, 'sine', 0.05);
   });
 
-  // Space to roll
   document.addEventListener('keydown', function (e) {
     if (e.code === 'Space' && host.style.display !== 'none' && !$('gameScreen').hidden) {
       e.preventDefault();
@@ -1721,15 +1663,14 @@ input,select{font-family:inherit}
     if (app) app.scrollTop = 0;
     showScreen('menuScreen');
   }
-  async function closeGame() {
-    // Nếu đang trong phòng thì leave
-    if (room) {
-      try { await leaveRoom(); } catch (e) {}
-    }
+  function closeGame() {
+    // FIX #8: hide immediately, leave in background
+    var oldRoom = room;
     host.style.display = 'none';
     closeBtn.style.display = 'none';
     document.body.style.overflow = prevBodyOverflow;
     document.body.classList.remove('snake-game-open');
+    if (oldRoom) leaveRoom().catch(function () {});
   }
   closeBtn.addEventListener('click', closeGame);
   document.addEventListener('keydown', function (e) {
