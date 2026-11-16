@@ -1,6 +1,5 @@
 /* =====================================================================
-   RẮN & THANG — ONLINE MULTIPLAYER (v4.0 FULL)
-   Fixes: Animation lost ref, Turn mismatch, Busy stuck, Realtime fallback
+   RẮN & THANG — v4.1 (debug panel v2 + busy fix)
    ===================================================================== */
 (function () {
   'use strict';
@@ -70,8 +69,27 @@ input,select{font-family:inherit}
 .win-card{background:#fff;padding:28px;border-radius:24px;text-align:center;width:min(400px,90%)}
 .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);padding:12px 22px;border-radius:999px;background:#3b2b52;color:#fff;font-weight:800;z-index:9500;opacity:0;transition:.3s}
 .toast.show{opacity:1}
-#debugPanel{position:fixed;top:60px;right:12px;z-index:9800;width:min(380px,90vw);background:#111;color:#0f0;padding:14px;border-radius:16px;font-family:monospace;font-size:11px;border:1px solid #0f0}
-#debugPanel pre{white-space:pre-wrap;word-break:break-all;margin:4px 0;background:#000;padding:4px;max-height:100px;overflow-y:auto}
+
+/* DEBUG PANEL v2 */
+#debugPanel{position:fixed;top:56px;right:8px;z-index:9800;width:min(420px,calc(100vw - 16px));max-height:calc(100vh - 72px);overflow-y:auto;background:rgba(12,8,24,.98);color:#d0f5d0;padding:12px;border-radius:14px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.5;border:1px solid rgba(0,255,0,.4);box-shadow:0 20px 60px rgba(0,0,0,.8)}
+#debugPanel .dbg-head{display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid rgba(0,255,0,.3);font-weight:900;font-size:12px;color:#00ff88}
+#debugPanel .dbg-tools{display:flex;gap:4px}
+#debugPanel .dbg-tools button{padding:4px 8px;border-radius:6px;background:rgba(0,255,136,.15);color:#00ff88;font-size:10px;font-weight:800;border:1px solid rgba(0,255,136,.4)}
+#debugPanel .dbg-tools button:active{transform:scale(.94)}
+#debugPanel .dbg-sec{margin:8px 0;padding:6px 8px;background:rgba(0,0,0,.4);border-radius:6px;border-left:2px solid rgba(0,255,136,.6)}
+#debugPanel .dbg-sec-title{color:#00ff88;font-weight:900;font-size:10px;letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px}
+#debugPanel .dbg-kv{display:flex;gap:6px;margin:1px 0;font-size:10.5px}
+#debugPanel .dbg-kv .k{color:#7eb4ff;flex:0 0 auto;min-width:88px}
+#debugPanel .dbg-kv .v{color:#d0f5d0;word-break:break-all;flex:1}
+#debugPanel .dbg-kv .v.warn{color:#ffd060}
+#debugPanel .dbg-kv .v.err{color:#ff6b8a}
+#debugPanel .dbg-kv .v.ok{color:#00ff88}
+#debugPanel pre{white-space:pre-wrap;word-break:break-all;margin:4px 0 0;background:rgba(0,0,0,.5);padding:6px;border-radius:4px;font-size:9.5px;max-height:200px;overflow-y:auto;color:#b0d0b0;line-height:1.4}
+#debugPanel .dbg-evts{margin-top:4px}
+#debugPanel .dbg-evt{display:flex;gap:6px;padding:2px 0;font-size:9.5px;border-bottom:1px solid rgba(0,255,136,.1)}
+#debugPanel .dbg-evt .t{color:#7eb4ff;flex:0 0 auto}
+#debugPanel .dbg-evt .ty{color:#ffb060;flex:0 0 auto;font-weight:800}
+#debugPanel .dbg-evt .d{color:#b0d0b0;flex:1;word-break:break-all}
 `;
 
   /* ============================ HTML ============================ */
@@ -186,90 +204,381 @@ input,select{font-family:inherit}
   <div class="toast" id="toast"></div>
 
   <div id="debugPanel" hidden>
-    <b>🐞 DEBUG INFO</b> <button id="dbgClose" style="float:right">✕</button>
-    <div>Me: <span id="dbgMe"></span></div>
-    <div>Room: <span id="dbgRoom"></span></div>
-    <div>Turn: <span id="dbgTurn"></span></div>
-    <div>Busy: <span id="dbgBusy"></span></div>
-    <div>Version: <span id="dbgVer"></span></div>
-    <pre id="dbgEvt"></pre>
-    <button id="dbgForce" style="width:100%;margin-top:5px;padding:5px;background:#333;color:#fff">Force Refresh</button>
+    <div class="dbg-head">
+      <span>🐞 DEBUG v2</span>
+      <div class="dbg-tools">
+        <button id="dbgCopy" type="button">📋 Copy</button>
+        <button id="dbgForce" type="button">🔄 Force</button>
+        <button id="dbgClose" type="button">✕</button>
+      </div>
+    </div>
+    <div id="dbgBody"></div>
   </div>
 </div>
 `;
 
-  /* ============================ SETUP ============================ */
-  const host = document.createElement('div');
+  /* ============================ SHADOW HOST ============================ */
+  var host = document.createElement('div');
   host.id = 'snakeGameHost';
   host.style.cssText = 'position:fixed;inset:0;z-index:9500;display:none;';
-  const shadow = host.attachShadow({ mode: 'open' });
+  var shadow = host.attachShadow({ mode: 'open' });
   shadow.innerHTML = '<style>' + CSS + '</style>' + HTML;
   document.body.appendChild(host);
 
-  const closeBtn = document.createElement('button');
+  var closeBtn = document.createElement('button');
   closeBtn.id = 'snakeGameClose';
   closeBtn.textContent = '✕';
   closeBtn.style.cssText = 'position:fixed;top:10px;right:10px;z-index:9600;width:44px;height:44px;border-radius:50%;background:#000a;color:#fff;font-size:22px;display:none;place-items:center;border:1px solid #fff3;cursor:pointer';
   document.body.appendChild(closeBtn);
 
-  const $ = id => shadow.getElementById(id);
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-  const rnd = n => Math.floor(Math.random() * n);
+  var $ = function (id) { return shadow.getElementById(id); };
+  var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var rnd = function (n) { return Math.floor(Math.random() * n); };
 
   function toast(msg) {
-    const el = $('toast');
-    el.textContent = msg; el.classList.add('show');
-    clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 2500);
+    var el = $('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(el._t);
+    el._t = setTimeout(function () { el.classList.remove('show'); }, 2500);
   }
 
-  /* ============================ DEBUG ============================ */
-  let debugOpen = false, debugLog = [];
-  function dbg(msg) {
-    console.log('[SG]', msg);
-    debugLog.push('[' + new Date().toLocaleTimeString() + '] ' + msg);
-    if (debugLog.length > 20) debugLog.shift();
+  /* ============================ DEBUG STATE ============================ */
+  var debugOpen = false;
+  var dbgEvents = [];  // { time: Date, type: string, detail: string }
+  var lastRtAt = 0;
+  var lastPollAt = 0;
+  var lastRtPayload = null;
+
+  function nowStr() {
+    var d = new Date();
+    return d.toTimeString().slice(0, 8);
+  }
+  function agoStr(ts) {
+    if (!ts) return '—';
+    var s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 1) return 'now';
+    if (s < 60) return s + 's ago';
+    return Math.floor(s / 60) + 'm ago';
+  }
+  function dbgEvent(type, detail) {
+    dbgEvents.push({ time: new Date(), type: type, detail: detail || '' });
+    if (dbgEvents.length > 60) dbgEvents.shift();
+    if (window.console) console.log('[SG]', type, detail || '');
     if (debugOpen) renderDbg();
   }
+  function shortTurn(t) { return t ? String(t).slice(0, 12) : '—'; }
+
+  /* ============================ FULL SNAPSHOT ============================ */
+  function buildSnapshot() {
+    var curP = state.players[state.current];
+    var dbTurn = room && room.state ? room.state.current_turn : null;
+    var localTurn = curP ? curP.username : null;
+    var turnMatch = dbTurn && localTurn && (dbTurn === localTurn);
+
+    return {
+      timestamp: new Date().toISOString(),
+      me: { username: myUsername, display_name: myProfile ? myProfile.display_name : '?' },
+      browser: {
+        ua: navigator.userAgent.slice(0, 120),
+        hidden: document.hidden,
+        online: navigator.onLine
+      },
+      realtime: {
+        channelActive: !!roomChan,
+        channelState: roomChan && roomChan.state ? roomChan.state : 'none',
+        polling: !!pollTimer,
+        last_rt_ago: agoStr(lastRtAt),
+        last_poll_ago: agoStr(lastPollAt),
+        last_rt_payload: lastRtPayload
+      },
+      room: room ? {
+        id: room.id, code: room.code, status: room.status, version: room.version,
+        host: room.host_username, mode: room.mode, max_players: room.max_players
+      } : null,
+      room_state: room && room.state ? {
+        current_turn: room.state.current_turn,
+        moves: room.state.moves,
+        last_roll_by: room.state.last_roll_by,
+        last_roll_at: room.state.last_roll_at,
+        winner: room.state.winner || null,
+        started_at: room.state.started_at,
+        player_count: room.state.player_count,
+        last_move: room.state.last_move || null,
+        log_count: room.state.log ? room.state.log.length : 0
+      } : null,
+      local_state: {
+        mode: state.mode,
+        current_index: state.current,
+        current_username: localTurn,
+        current_name: curP ? curP.name : null,
+        isMyTurn: dbTurn === myUsername,
+        busy: state.busy,
+        over: state.over,
+        turn_match: turnMatch,
+        players: state.players.map(function (p) {
+          return {
+            username: p.username,
+            name: p.name,
+            pos: p.pos,
+            targetPos: p.targetPos,
+            animating: !!animating[p.username],
+            bot: !!p.bot
+          };
+        })
+      },
+      room_players_db: roomPlayers.map(function (p) {
+        return {
+          username: p.username,
+          display_name: p.display_name,
+          pos: p.pos,
+          is_host: !!p.is_host,
+          color_index: p.color_index
+        };
+      }),
+      events: dbgEvents.slice(-30).map(function (e) {
+        return { time: e.time.toTimeString().slice(0, 8), type: e.type, detail: e.detail };
+      })
+    };
+  }
+
+  /* ============================ RENDER DEBUG ============================ */
   function renderDbg() {
     if (!debugOpen) return;
-    $('dbgMe').textContent = myUsername;
-    $('dbgRoom').textContent = room ? room.code : '—';
-    $('dbgTurn').textContent = room?.state?.current_turn || '—';
-    $('dbgBusy').textContent = state.busy;
-    $('dbgVer').textContent = room?.version || 0;
-    $('dbgEvt').textContent = debugLog.join('\n');
+    var s = buildSnapshot();
+    var body = $('dbgBody');
+    var html = '';
+
+    // ME
+    html += '<div class="dbg-sec"><div class="dbg-sec-title">👤 Me</div>';
+    html += '<div class="dbg-kv"><span class="k">username</span><span class="v">' + esc(s.me.username) + '</span></div>';
+    html += '<div class="dbg-kv"><span class="k">display_name</span><span class="v">' + esc(s.me.display_name) + '</span></div>';
+    html += '</div>';
+
+    // ROOM
+    if (s.room) {
+      html += '<div class="dbg-sec"><div class="dbg-sec-title">🏠 Room</div>';
+      html += kv('code', s.room.code);
+      html += kv('status', s.room.status, s.room.status === 'playing' ? 'ok' : 'warn');
+      html += kv('version', s.room.version, 'ok');
+      html += kv('host', s.room.host);
+      html += kv('mode', s.room.mode);
+      html += '</div>';
+
+      html += '<div class="dbg-sec"><div class="dbg-sec-title">📦 Room State (DB)</div>';
+      html += kv('current_turn', s.room_state.current_turn, s.room_state.current_turn === myUsername ? 'ok' : '');
+      html += kv('moves', s.room_state.moves);
+      html += kv('last_roll_by', s.room_state.last_roll_by || '—');
+      html += kv('winner', s.room_state.winner || '—');
+      if (s.room_state.last_move) {
+        var lm = s.room_state.last_move;
+        html += kv('last_move', lm.user + ': ' + lm.from + '→' + lm.dice_land + '→' + lm.final + ' [' + lm.via + ']');
+      }
+      html += '</div>';
+    } else {
+      html += '<div class="dbg-sec"><div class="dbg-sec-title">🏠 Room</div><div class="dbg-kv"><span class="v">— not in room —</span></div></div>';
+    }
+
+    // LOCAL STATE
+    html += '<div class="dbg-sec"><div class="dbg-sec-title">💻 Local State</div>';
+    html += kv('mode', s.local_state.mode);
+    html += kv('current_index', s.local_state.current_index);
+    html += kv('current_user', s.local_state.current_username);
+    html += kv('busy', s.local_state.busy, s.local_state.busy ? 'warn' : 'ok');
+    html += kv('isMyTurn', s.local_state.isMyTurn, s.local_state.isMyTurn ? 'ok' : '');
+    html += kv('turn_match', s.local_state.turn_match, s.local_state.turn_match ? 'ok' : 'err');
+    html += '</div>';
+
+    // PLAYERS COMPARE
+    html += '<div class="dbg-sec"><div class="dbg-sec-title">👥 Players (DB vs Local)</div>';
+    if (s.room_players_db.length) {
+      html += '<pre>';
+      for (var i = 0; i < s.room_players_db.length; i++) {
+        var db = s.room_players_db[i];
+        var lo = s.local_state.players.find(function (p) { return p.username === db.username; });
+        var mark = db.username === myUsername ? '★' : ' ';
+        html += mark + ' ' + db.display_name + ' (' + db.username.slice(0, 10) + ')\n';
+        html += '  DB: pos=' + db.pos + ' host=' + (db.is_host ? 'Y' : 'N') + '\n';
+        if (lo) {
+          html += '  LO: pos=' + lo.pos + ' target=' + lo.targetPos + (lo.animating ? ' 🔄' : '') + '\n';
+        } else {
+          html += '  LO: — MISSING —\n';
+        }
+      }
+      html += '</pre>';
+    } else {
+      html += '<pre>—</pre>';
+    }
+    html += '</div>';
+
+    // REALTIME
+    html += '<div class="dbg-sec"><div class="dbg-sec-title">📡 Realtime</div>';
+    html += kv('channel', s.realtime.channelState, s.realtime.channelState === 'SUBSCRIBED' ? 'ok' : (s.realtime.channelState === 'none' ? '' : 'warn'));
+    html += kv('polling', s.realtime.polling ? 'ON (1.5s)' : 'OFF', s.realtime.polling ? 'ok' : 'warn');
+    html += kv('last_rt', s.realtime.last_rt_ago);
+    html += kv('last_poll', s.realtime.last_poll_ago);
+    if (s.realtime.last_rt_payload) {
+      html += '<pre>' + esc(JSON.stringify(s.realtime.last_rt_payload, null, 2).slice(0, 600)) + '</pre>';
+    }
+    html += '</div>';
+
+    // EVENTS
+    html += '<div class="dbg-sec"><div class="dbg-sec-title">📝 Events (last 30)</div>';
+    if (s.events.length) {
+      html += '<div class="dbg-evts">';
+      for (var j = s.events.length - 1; j >= 0; j--) {
+        var ev = s.events[j];
+        html += '<div class="dbg-evt"><span class="t">' + ev.time + '</span><span class="ty">' + esc(ev.type) + '</span><span class="d">' + esc(ev.detail) + '</span></div>';
+      }
+      html += '</div>';
+    } else {
+      html += '<pre>—</pre>';
+    }
+    html += '</div>';
+
+    body.innerHTML = html;
+  }
+  function kv(k, v, cls) {
+    return '<div class="dbg-kv"><span class="k">' + esc(k) + '</span><span class="v' + (cls ? ' ' + cls : '') + '">' + esc(String(v)) + '</span></div>';
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  /* ============================ COPY DEBUG ============================ */
+  function copyDebugToClipboard() {
+    var s = buildSnapshot();
+    var lines = [];
+    function add(k, v) { lines.push(pad(k) + ': ' + v); }
+    function pad(s) { return (s + ' '.repeat(24)).slice(0, 24); }
+    function h1(t) { lines.push(''); lines.push('═══ ' + t + ' ═══'); }
+
+    h1('SNAKE GAME DEBUG SNAPSHOT');
+    add('Timestamp', s.timestamp);
+    add('User Agent', s.browser.ua);
+    add('Page Hidden', s.browser.hidden);
+    add('Online', s.browser.online);
+
+    h1('ME');
+    add('Username', s.me.username);
+    add('Display Name', s.me.display_name);
+
+    if (s.room) {
+      h1('ROOM');
+      add('ID', s.room.id);
+      add('Code', s.room.code);
+      add('Status', s.room.status);
+      add('Version', s.room.version);
+      add('Host', s.room.host);
+      add('Mode', s.room.mode);
+
+      h1('ROOM STATE (DB)');
+      add('current_turn', s.room_state.current_turn);
+      add('moves', s.room_state.moves);
+      add('last_roll_by', s.room_state.last_roll_by);
+      add('last_roll_at', s.room_state.last_roll_at ? new Date(s.room_state.last_roll_at).toISOString() : '—');
+      add('winner', s.room_state.winner || '—');
+      add('player_count', s.room_state.player_count);
+      add('last_move', s.room_state.last_move ? JSON.stringify(s.room_state.last_move) : '—');
+    }
+
+    h1('LOCAL STATE');
+    add('mode', s.local_state.mode);
+    add('current_index', s.local_state.current_index);
+    add('current_username', s.local_state.current_username);
+    add('current_name', s.local_state.current_name);
+    add('isMyTurn', s.local_state.isMyTurn);
+    add('busy', s.local_state.busy);
+    add('turn_match', s.local_state.turn_match + (s.local_state.turn_match ? ' ✓' : ' ✗ MISMATCH!'));
+
+    h1('PLAYERS COMPARE (DB vs Local)');
+    s.room_players_db.forEach(function (db) {
+      var lo = s.local_state.players.find(function (p) { return p.username === db.username; });
+      lines.push((db.username === myUsername ? '★ ' : '  ') + db.display_name + ' (' + db.username + ')');
+      lines.push('    DB: pos=' + db.pos + ' host=' + db.is_host + ' color=' + db.color_index);
+      if (lo) {
+        lines.push('    LO: pos=' + lo.pos + ' target=' + lo.targetPos + ' animating=' + lo.animating);
+      } else {
+        lines.push('    LO: MISSING!');
+      }
+    });
+
+    h1('REALTIME');
+    add('channelState', s.realtime.channelState);
+    add('polling', s.realtime.polling ? 'ON' : 'OFF');
+    add('last_rt', s.realtime.last_rt_ago);
+    add('last_poll', s.realtime.last_poll_ago);
+    if (s.realtime.last_rt_payload) {
+      lines.push('last_rt_payload:');
+      lines.push(JSON.stringify(s.realtime.last_rt_payload, null, 2));
+    }
+
+    h1('EVENTS (last 30, newest last)');
+    s.events.forEach(function (e) {
+      lines.push('[' + e.time + '] ' + e.type + ' ' + e.detail);
+    });
+
+    lines.push('');
+    lines.push('=== END SNAPSHOT ===');
+
+    var text = lines.join('\n');
+    var done = function () { toast('📋 Đã copy debug — gửi cho dev nhé!'); };
+    var fail = function () { fallbackCopy(text, done); };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(fail);
+      } else fail();
+    } catch (e) { fail(); }
+  }
+  function fallbackCopy(text, done) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) done(); else toast('Không copy được, mở console xem');
+    } catch (e) { toast('Copy fail: ' + e.message); }
   }
 
   /* ============================ CONFIG ============================ */
-  const FALLBACK = {
+  var FALLBACK = {
     URL: 'https://tumjcsaexddioecwjolp.supabase.co',
     KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR1bWpjc2FleGRkaW9lY3dqb2xwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5MjY0MTAsImV4cCI6MjEwNzUwMjQxMH0.hNYdnleEYK5EJFKYxBMxJMdBF1iXsv1aaLHBfb2nPyQ'
   };
-  const CFG = window.__SRANK_CONFIG || FALLBACK;
-  let sb = null;
+  var CFG = window.__SRANK_CONFIG || FALLBACK;
+  var sb = null;
   if (window.supabase && CFG.SUPABASE_URL) {
     sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY, { auth: { persistSession: false } });
   }
 
   /* ============================ STATE ============================ */
-  const LADDERS = { 1:38, 4:14, 9:31, 21:42, 28:84, 36:44, 51:67, 71:91, 80:100 };
-  const SNAKES = { 16:6, 47:26, 49:11, 56:53, 62:19, 64:60, 87:24, 93:73, 95:75, 98:78 };
-  const STYLES = [{c:'#ff5fa2',s:'#ffe4f1'},{c:'#4f8dff',s:'#e0edff'},{c:'#18c08a',s:'#dcf9ee'},{c:'#f6a723',s:'#ffefd4'}];
-  const BOTS = ['Mèo', 'Gấu', 'Thỏ'];
+  var LADDERS = { 1:38, 4:14, 9:31, 21:42, 28:84, 36:44, 51:67, 71:91, 80:100 };
+  var SNAKES = { 16:6, 47:26, 49:11, 56:53, 62:19, 64:60, 87:24, 93:73, 95:75, 98:78 };
+  var STYLES = [{c:'#ff5fa2',s:'#ffe4f1'},{c:'#4f8dff',s:'#e0edff'},{c:'#18c08a',s:'#dcf9ee'},{c:'#f6a723',s:'#ffefd4'}];
+  var BOTS = ['Mèo', 'Gấu', 'Thỏ'];
 
-  let state = { mode: 'online', count: 2, players: [], current: 0, busy: false, over: false, startTime: 0 };
-  let myUsername = '', myProfile = null, room = null, roomPlayers = [];
-  let roomChan = null, roomsChan = null, pollTimer = null, animating = {};
-  let isHost = false, busyTimeout = null, pendingWin = null, wasMyTurn = false;
+  var state = { mode: 'online', count: 2, players: [], current: 0, busy: false, over: false, startTime: 0 };
+  var myUsername = '', myProfile = null, room = null, roomPlayers = [];
+  var roomChan = null, roomsChan = null, pollTimer = null, animating = {};
+  var isHost = false, busyTimeout = null, pendingWin = null, wasMyTurn = false;
+  var refreshTimer = null;
 
   function getMyUsername() {
-    let u = '';
+    var u = '';
     try {
-      let keys = ['srank_username', 'username'];
-      for (let k of keys) { let v = localStorage.getItem(k); if (v) { try { u = JSON.parse(v).username || v; } catch(_) { u = v; } if (u) break; } }
-      if (!u && window.SRANK_STATE?.currentUser) u = window.SRANK_STATE.currentUser.username;
-      if (!u) { let el = document.getElementById('logoutName'); if (el) u = el.textContent.trim(); }
-    } catch(e){}
+      var keys = ['srank_username', 'username'];
+      for (var i = 0; i < keys.length; i++) {
+        var v = localStorage.getItem(keys[i]);
+        if (v) { try { u = JSON.parse(v).username || v; } catch (_) { u = v; } if (u) break; }
+      }
+      if (!u && window.SRANK_STATE && window.SRANK_STATE.currentUser) u = window.SRANK_STATE.currentUser.username;
+      if (!u) { var el = document.getElementById('logoutName'); if (el) u = el.textContent.trim(); }
+    } catch (e) {}
     if (!u) {
       u = localStorage.getItem('srank_guest_id');
       if (!u) { u = 'guest_' + rnd(99999); localStorage.setItem('srank_guest_id', u); }
@@ -279,525 +588,768 @@ input,select{font-family:inherit}
 
   /* ============================ HELPERS ============================ */
   function posToXY(pos) {
-    let idx = pos - 1, r = Math.floor(idx / 10), c = idx % 10;
+    var idx = pos - 1, r = Math.floor(idx / 10), c = idx % 10;
     if (r % 2 !== 0) c = 9 - c;
     return { x: c * 10 + 5, y: (9 - r) * 10 + 5, c: c, r: 9 - r };
   }
   function avt(s) { return 'https://api.dicebear.com/9.x/adventurer/svg?seed=' + encodeURIComponent(s) + '&backgroundColor=ffd5dc,b6e3f4&radius=14'; }
 
   /* ============================ AUDIO ============================ */
-  let actx = null, sfxOn = true;
+  var actx = null, sfxOn = true;
   function beep(f, d, t, v, delay) {
     if (!sfxOn) return;
     try {
-      if (!actx) actx = new AudioContext();
-      let t0 = actx.currentTime + (delay||0), o = actx.createOscillator(), g = actx.createGain();
-      o.type = t||'sine'; o.frequency.setValueAtTime(f, t0);
-      g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(v||.05, t0+.01); g.gain.exponentialRampToValueAtTime(.0001, t0+d);
-      o.connect(g); g.connect(actx.destination); o.start(t0); o.stop(t0+d+.05);
-    } catch(e){}
+      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      var t0 = actx.currentTime + (delay || 0), o = actx.createOscillator(), g = actx.createGain();
+      o.type = t || 'sine'; o.frequency.setValueAtTime(f, t0);
+      g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(v || .05, t0 + .01);
+      g.gain.exponentialRampToValueAtTime(.0001, t0 + d);
+      o.connect(g); g.connect(actx.destination); o.start(t0); o.stop(t0 + d + .05);
+    } catch (e) {}
   }
-  const sfx = {
-    tick: () => beep(600+rnd(100), .05, 'square', .02),
-    roll: () => { for(let i=0;i<6;i++) beep(300+i*80, .05, 'triangle', .03, i*.07); },
-    ladder: () => [500,600,800].forEach((f,i)=>beep(f,.15,'sine',.05,i*.08)),
-    snake: () => [600,500,400].forEach((f,i)=>beep(f,.15,'sawtooth',.04,i*.08)),
-    win: () => [500,600,800,1000].forEach((f,i)=>beep(f,.3,'sine',.05,i*.1))
+  var sfx = {
+    tick: function () { beep(600 + rnd(100), .05, 'square', .02); },
+    roll: function () { for (var i = 0; i < 6; i++) beep(300 + i * 80, .05, 'triangle', .03, i * .07); },
+    ladder: function () { [500, 600, 800].forEach(function (f, i) { beep(f, .15, 'sine', .05, i * .08); }); },
+    snake: function () { [600, 500, 400].forEach(function (f, i) { beep(f, .15, 'sawtooth', .04, i * .08); }); },
+    win: function () { [500, 600, 800, 1000].forEach(function (f, i) { beep(f, .3, 'sine', .05, i * .1); }); }
   };
 
-  /* ============================ DICE UI ============================ */
-  const PIPS = {1:[[2,2]],2:[[1,1],[3,3]],3:[[1,1],[2,2],[3,3]],4:[[1,1],[1,3],[3,1],[3,3]],5:[[1,1],[1,3],[2,2],[3,1],[3,3]],6:[[1,1],[1,3],[2,1],[2,3],[3,1],[3,3]]};
-  const FACE_TF = {1:'translateZ(36px)',2:'rotateY(90deg) translateZ(36px)',3:'rotateX(90deg) translateZ(36px)',4:'rotateX(-90deg) translateZ(36px)',5:'rotateY(-90deg) translateZ(36px)',6:'rotateY(180deg) translateZ(36px)'};
-  const FACE_RT = {1:[0,0],2:[0,-90],3:[-90,0],4:[90,0],5:[0,90],6:[0,180]};
+  /* ============================ DICE ============================ */
+  var PIPS = {1:[[2,2]],2:[[1,1],[3,3]],3:[[1,1],[2,2],[3,3]],4:[[1,1],[1,3],[3,1],[3,3]],5:[[1,1],[1,3],[2,2],[3,1],[3,3]],6:[[1,1],[1,3],[2,1],[2,3],[3,1],[3,3]]};
+  var FACE_TF = {1:'translateZ(36px)',2:'rotateY(90deg) translateZ(36px)',3:'rotateX(90deg) translateZ(36px)',4:'rotateX(-90deg) translateZ(36px)',5:'rotateY(-90deg) translateZ(36px)',6:'rotateY(180deg) translateZ(36px)'};
+  var FACE_RT = {1:[0,0],2:[0,-90],3:[-90,0],4:[90,0],5:[0,90],6:[0,180]};
   function makeDice(el) {
     el.innerHTML = '';
-    for(let f=1; f<=6; f++) {
-      let div = document.createElement('div'); div.className = 'dice-face'; div.style.transform = FACE_TF[f];
-      PIPS[f].forEach(rc => {
-        let p = document.createElement('i'); p.className = 'pip';
-        p.style.gridRow = rc[0]; p.style.gridColumn = rc[1]; div.appendChild(p);
+    for (var f = 1; f <= 6; f++) {
+      var div = document.createElement('div');
+      div.className = 'dice-face';
+      div.style.transform = FACE_TF[f];
+      PIPS[f].forEach(function (rc) {
+        var p = document.createElement('i');
+        p.className = 'pip';
+        p.style.gridRow = rc[0]; p.style.gridColumn = rc[1];
+        div.appendChild(p);
       });
       el.appendChild(div);
     }
-    let sx=0, sy=0;
+    var sx = 0, sy = 0;
     return {
-      show(n, inst) {
-        let rx = FACE_RT[n][0], ry = FACE_RT[n][1];
-        if(inst) { el.style.transition='none'; el.style.transform=`rotateX(${rx}deg) rotateY(${ry}deg)`; sx=rx; sy=ry; void el.offsetWidth; el.style.transition=''; return; }
-        sx += 360*(2+rnd(3)); sy += 360*(2+rnd(3));
-        el.style.transform = `rotateX(${sx + rx}deg) rotateY(${sy + ry}deg)`;
+      show: function (n, inst) {
+        var rx = FACE_RT[n][0], ry = FACE_RT[n][1];
+        if (inst) {
+          el.style.transition = 'none';
+          el.style.transform = 'rotateX(' + rx + 'deg) rotateY(' + ry + 'deg)';
+          sx = rx; sy = ry;
+          void el.offsetWidth;
+          el.style.transition = '';
+          return;
+        }
+        sx += 360 * (2 + rnd(3)); sy += 360 * (2 + rnd(3));
+        el.style.transform = 'rotateX(' + (sx + rx) + 'deg) rotateY(' + (sy + ry) + 'deg)';
       }
     };
   }
-  let dice0, dice1;
+  var dice0, dice1;
 
   /* ============================ RENDER UI ============================ */
   function renderPlayers() {
-    let el = $('playerList'); el.innerHTML = '';
-    state.players.forEach((p, i) => {
-      let card = document.createElement('div'); card.className = 'pcard' + (i === state.current ? ' active' : '');
-      card.style.setProperty('--c', p.color); card.style.setProperty('--soft', p.soft);
-      card.innerHTML = `
-        <div class="pav"><img src="${p.avatar}"><span class="ptag">${p.pos}</span></div>
-        <div style="flex:1"><div class="pname">${p.name} ${p.username===myUsername?'<span style="color:#4f8dff;font-size:9px">(BẠN)</span>':''}</div>
-        <div class="pbar"><span style="width:${p.pos}%"></span></div></div>
-      `;
+    var el = $('playerList'); el.innerHTML = '';
+    state.players.forEach(function (p, i) {
+      var card = document.createElement('div');
+      card.className = 'pcard' + (i === state.current ? ' active' : '');
+      card.style.setProperty('--c', p.color);
+      card.style.setProperty('--soft', p.soft);
+      card.innerHTML = '<div class="pav"><img src="' + p.avatar + '"><span class="ptag">' + p.pos + '</span></div>' +
+        '<div style="flex:1"><div class="pname">' + esc(p.name) + (p.username === myUsername ? ' <span style="color:#4f8dff;font-size:9px">(BẠN)</span>' : '') + '</div>' +
+        '<div class="pbar"><span style="width:' + p.pos + '%"></span></div></div>';
       el.appendChild(card);
-      p.cardEl = card; p.posEl = card.querySelector('.ptag'); p.barEl = card.querySelector('.pbar span');
+      p.cardEl = card;
+      p.posEl = card.querySelector('.ptag');
+      p.barEl = card.querySelector('.pbar span');
     });
   }
   function syncCards() {
-    state.players.forEach(p => {
-      if(p.posEl) p.posEl.textContent = p.pos;
-      if(p.barEl) p.barEl.style.width = Math.min(100, p.pos) + '%';
-      if(p.cardEl) p.cardEl.classList.toggle('active', p === state.players[state.current]);
+    state.players.forEach(function (p) {
+      if (p.posEl) p.posEl.textContent = p.pos;
+      if (p.barEl) p.barEl.style.width = Math.min(100, p.pos) + '%';
+      if (p.cardEl) p.cardEl.classList.toggle('active', p === state.players[state.current]);
     });
   }
   function createTokens() {
-    let el = $('tokens'); el.innerHTML = '';
-    state.players.forEach(p => {
-      let div = document.createElement('div'); div.className = 'token'; div.style.setProperty('--c', p.color);
-      div.innerHTML = `<img src="${p.avatar}"><span style="position:absolute;bottom:-5px;right:-5px;background:${p.color};color:#fff;font-size:8px;border-radius:50%;width:14px;height:14px;display:grid;place-items:center">${p.id+1}</span>`;
-      el.appendChild(div); p.el = div;
+    var el = $('tokens'); el.innerHTML = '';
+    state.players.forEach(function (p) {
+      var div = document.createElement('div');
+      div.className = 'token';
+      div.style.setProperty('--c', p.color);
+      div.innerHTML = '<img src="' + p.avatar + '"><span style="position:absolute;bottom:-5px;right:-5px;background:' + p.color + ';color:#fff;font-size:8px;border-radius:50%;width:14px;height:14px;display:grid;place-items:center">' + (p.id + 1) + '</span>';
+      el.appendChild(div);
+      p.el = div;
     });
   }
   function posTokens() {
-    let groups = {};
-    state.players.forEach(p => { (groups[p.pos] = groups[p.pos]||[]).push(p); });
-    Object.keys(groups).forEach(k => {
-      let pos = +k, g = posToXY(Math.max(1, Math.min(100, pos))), list = groups[k], n = list.length;
-      list.forEach((p, i) => {
-        if(!p.el) return;
-        let ang = n>1 ? (i/n)*Math.PI*2 : 0;
-        let r = n>1 ? 2.5 : 0;
-        p.el.style.left = (g.x + Math.cos(ang)*r) + '%';
-        p.el.style.top = (g.y + Math.sin(ang)*r) + '%';
+    var groups = {};
+    state.players.forEach(function (p) { (groups[p.pos] = groups[p.pos] || []).push(p); });
+    Object.keys(groups).forEach(function (k) {
+      var pos = +k, g = posToXY(Math.max(1, Math.min(100, pos))), list = groups[k], n = list.length;
+      list.forEach(function (p, i) {
+        if (!p.el) return;
+        var ang = n > 1 ? (i / n) * Math.PI * 2 : 0;
+        var r = n > 1 ? 2.5 : 0;
+        p.el.style.left = (g.x + Math.cos(ang) * r) + '%';
+        p.el.style.top = (g.y + Math.sin(ang) * r) + '%';
         p.el.style.zIndex = p === state.players[state.current] ? 60 : 20;
       });
     });
     syncCards();
   }
   function updatePill() {
-    let p = state.players[state.current]; if(!p) return;
+    var p = state.players[state.current]; if (!p) return;
     $('turnPill').style.setProperty('--c', p.color);
-    let isMe = (p.username === myUsername && state.mode === 'online');
+    var isMe = (p.username === myUsername && state.mode === 'online');
     $('turnPill').querySelector('.txt').textContent = state.over ? 'Kết thúc' : (isMe ? '👉 Lượt BẠN!' : 'Lượt: ' + p.name);
   }
   function addLog(text, color) {
-    let div = document.createElement('div'); div.className = 'log-item'; div.style.setProperty('--c', color);
-    div.textContent = text; $('log').prepend(div);
+    var div = document.createElement('div');
+    div.className = 'log-item';
+    div.style.setProperty('--c', color || '#a78bfa');
+    div.textContent = text;
+    $('log').prepend(div);
   }
 
   /* ============================ BOARD ============================ */
   function buildBoard() {
-    let cells = $('cells'); cells.innerHTML = '';
-    for(let i=1; i<=100; i++) {
-      let g = posToXY(i);
-      let c = document.createElement('div'); c.className = 'cell';
-      c.style.gridColumn = g.c+1; c.style.gridRow = g.r+1; c.textContent = i;
-      c.style.background = `hsl(${g.r*30} 90% 97%)`;
-      if(i===1) c.innerHTML += '🏁'; else if(i===100) c.innerHTML += '🏆';
-      else if(LADDERS[i]) c.innerHTML += '<span style="position:absolute;right:2px;bottom:2px">🪜</span>';
-      else if(SNAKES[i]) c.innerHTML += '<span style="position:absolute;right:2px;bottom:2px">🐍</span>';
+    var cells = $('cells'); cells.innerHTML = '';
+    for (var i = 1; i <= 100; i++) {
+      var g = posToXY(i);
+      var c = document.createElement('div');
+      c.className = 'cell';
+      c.style.gridColumn = g.c + 1;
+      c.style.gridRow = g.r + 1;
+      c.textContent = i;
+      c.style.background = 'hsl(' + (g.r * 30) + ' 90% 97%)';
+      if (i === 1) c.innerHTML += '🏁';
+      else if (i === 100) c.innerHTML += '🏆';
+      else if (LADDERS[i]) c.innerHTML += '<span style="position:absolute;right:2px;bottom:2px">🪜</span>';
+      else if (SNAKES[i]) c.innerHTML += '<span style="position:absolute;right:2px;bottom:2px">🐍</span>';
       cells.appendChild(c);
     }
-    let svg = $('boardSvg'), h = '';
-    for(let k in LADDERS) {
-      let A = posToXY(+k), B = posToXY(LADDERS[k]);
-      h += `<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="#f0b429" stroke-width="1.5" opacity=".8"/>`;
+    var svg = $('boardSvg'), h = '';
+    for (var k in LADDERS) {
+      var A = posToXY(+k), B = posToXY(LADDERS[k]);
+      h += '<line x1="' + A.x + '" y1="' + A.y + '" x2="' + B.x + '" y2="' + B.y + '" stroke="#f0b429" stroke-width="1.5" opacity=".8"/>';
     }
-    for(let k in SNAKES) {
-      let A = posToXY(+k), B = posToXY(SNAKES[k]);
-      h += `<path d="M ${A.x} ${A.y} Q ${(A.x+B.x)/2+20} ${(A.y+B.y)/2} ${B.x} ${B.y}" fill="none" stroke="#7c5cff" stroke-width="2.5" opacity=".8"/>`;
+    for (var k2 in SNAKES) {
+      var A2 = posToXY(+k2), B2 = posToXY(SNAKES[k2]);
+      h += '<path d="M ' + A2.x + ' ' + A2.y + ' Q ' + ((A2.x + B2.x) / 2 + 20) + ' ' + ((A2.y + B2.y) / 2) + ' ' + B2.x + ' ' + B2.y + '" fill="none" stroke="#7c5cff" stroke-width="2.5" opacity=".8"/>';
     }
     svg.innerHTML = h;
   }
 
   /* ============================ GAME LOGIC ============================ */
-  async function animateDice(vals) {
-    let cubes = [dice0]; if(vals.length>1) cubes.push(dice1);
-    cubes.forEach(c => c.show(1+rnd(6))); sfx.roll();
-    for(let i=0;i<5;i++) { await sleep(60); cubes.forEach(c => c.show(1+rnd(6))); }
-    await sleep(100); cubes.forEach((c,i) => c.show(vals[i])); await sleep(500);
+  function animateDice(vals) {
+    var cubes = [dice0]; if (vals.length > 1) cubes.push(dice1);
+    cubes.forEach(function (c) { c.show(1 + rnd(6)); });
+    sfx.roll();
+    return (function loop(i) {
+      if (i >= 5) {
+        cubes.forEach(function (c, j) { c.show(vals[j] || 1); });
+        return sleep(500);
+      }
+      return sleep(60).then(function () {
+        cubes.forEach(function (c) { c.show(1 + rnd(6)); });
+        return loop(i + 1);
+      });
+    })(0);
   }
 
   function syncTurnUI() {
-    if(state.mode !== 'online' || !room) return;
-    let isMe = (room.state?.current_turn === myUsername);
-    let play = room.status === 'playing';
-    
-    if(!isMe && state.busy) { state.busy = false; if(busyTimeout) clearTimeout(busyTimeout); }
-    
-    $('rollBtn').disabled = !(isMe && play && !state.busy);
-    if(!play) $('rollHint').textContent = 'Đã kết thúc';
-    else if(isMe) $('rollHint').textContent = state.busy ? 'Đang xử lý...' : '👉 Lượt của bạn!';
+    if (state.mode !== 'online' || !room) return;
+    var isMe = room.state && room.state.current_turn === myUsername;
+    var play = room.status === 'playing';
+    var canRoll = isMe && play && !state.busy && !animating[myUsername];
+    $('rollBtn').disabled = !canRoll;
+    if (!play) $('rollHint').textContent = 'Đã kết thúc';
+    else if (isMe) $('rollHint').textContent = state.busy ? 'Đang xử lý...' : '👉 Lượt của bạn!';
     else {
-      let curP = state.players.find(p => p.username === room.state?.current_turn);
+      var curP = state.players.find(function (p) { return p.username === (room.state && room.state.current_turn); });
       $('rollHint').textContent = 'Đang chờ ' + (curP ? curP.name : '...') + '...';
     }
+    if (debugOpen) renderDbg();
   }
 
   function enterGameRoom() {
     state.players = [];
-    state.over = false; state.busy = false; animating = {};
+    state.over = false;
+    state.busy = false;
+    animating = {};
     $('log').innerHTML = '';
     showScreen('gameScreen');
-    buildBoard(); createTokens();
+    buildBoard();
+    createTokens();
     $('diceStage1').style.display = room.mode === 'speed' ? 'block' : 'none';
-    dice0.show(1, true); if(dice1) dice1.show(1, true);
-    
+    dice0.show(1, true);
+    if (dice1) dice1.show(1, true);
     rebuildRoomState();
-    addLog('Trò chơi bắt đầu!', '#a78bfa');
+    dbgEvent('ENTER_GAME', 'mode=' + room.mode);
   }
 
-  async function rebuildRoomState() {
-    if(!room || (room.status !== 'playing' && room.status !== 'finished')) return;
-    
-    // Giữ tham chiếu object cũ để animation không bị hỏng
-    let oldMap = {};
-    state.players.forEach(p => { oldMap[p.username] = p; });
-    
-    let needRender = false;
-    let newPlayers = roomPlayers.map((rp, i) => {
-      let old = oldMap[rp.username];
-      if(old) {
+  function rebuildRoomState() {
+    if (!room || (room.status !== 'playing' && room.status !== 'finished')) return;
+
+    // Mutate in-place to preserve animation references
+    var oldMap = {};
+    state.players.forEach(function (p) { oldMap[p.username] = p; });
+
+    var needRender = false;
+    var newPlayers = roomPlayers.map(function (rp, i) {
+      var old = oldMap[rp.username];
+      if (old) {
         old.targetPos = rp.pos;
         old.name = rp.display_name;
+        old.skip = rp.skip_turn;
+        old.extra = rp.extra_turn;
         return old;
       } else {
         needRender = true;
-        let st = STYLES[rp.color_index%4];
-        return { id:i, username:rp.username, name:rp.display_name, pos:rp.pos, targetPos:rp.pos, color:st.c, soft:st.s, avatar:rp.avatar_url||avt(rp.display_name) };
+        var st = STYLES[rp.color_index % 4];
+        return {
+          id: i, username: rp.username, name: rp.display_name,
+          pos: rp.pos, targetPos: rp.pos,
+          color: st.c, soft: st.s,
+          avatar: rp.avatar_url || avt(rp.display_name)
+        };
       }
     });
 
-    if(newPlayers.length !== state.players.length) needRender = true;
+    if (newPlayers.length !== state.players.length) needRender = true;
     state.players = newPlayers;
 
-    if(needRender) { renderPlayers(); createTokens(); posTokens(); animating = {}; }
-    
-    let curIdx = state.players.findIndex(p => p.username === room.state?.current_turn);
-    if(curIdx >= 0) state.current = curIdx;
-    updatePill(); syncCards(); posTokens();
+    if (needRender) {
+      renderPlayers();
+      createTokens();
+      posTokens();
+      animating = {};
+    }
 
-    let lastMove = room.state?.last_move;
-    state.players.forEach(p => {
-      if(p.pos !== p.targetPos && !animating[p.username]) {
-        animateMove(p, lastMove && lastMove.user === p.username ? lastMove : null);
+    // Sync current from DB turn
+    var curIdx = state.players.findIndex(function (p) { return p.username === (room.state && room.state.current_turn); });
+    if (curIdx >= 0 && curIdx !== state.current) {
+      state.current = curIdx;
+    }
+    // Fallback if not found
+    if (curIdx < 0 && state.players.length) {
+      state.current = 0;
+    }
+
+    updatePill();
+    syncCards();
+    posTokens();
+
+    // Trigger animations for out-of-sync players
+    var lastMove = room.state && room.state.last_move;
+    state.players.forEach(function (p) {
+      if (p.pos !== p.targetPos && !animating[p.username]) {
+        var mi = (lastMove && lastMove.user === p.username) ? lastMove : null;
+        animateMove(p, mi);
       }
     });
 
-    renderLogs(room.state?.log);
+    renderLogs(room.state && room.state.log);
     syncTurnUI();
-    
-    if(room.state?.winner && $('winOverlay').hidden) {
+
+    // Winner overlay
+    if (room.state && room.state.winner && $('winOverlay').hidden) {
       showWin(room.state.winner);
     }
   }
 
-  async function animateMove(p, move) {
-    if(animating[p.username]) return;
+  function animateMove(p, move) {
+    if (animating[p.username]) return;
     animating[p.username] = true;
-    try {
-      let from = p.pos, to = p.targetPos;
-      if(from === to) return;
-      if(move && move.dice_land != null) {
-        let land = move.dice_land;
-        while(p.pos !== land) { p.pos += (land>p.pos?1:-1); posTokens(); sfx.tick(); await sleep(60); }
-        await sleep(200); p.pos = to;
-        if(move.via === 'ladder') sfx.ladder(); else if(move.via === 'snake') sfx.snake();
-        posTokens(); await sleep(300);
-      } else {
-        while(p.pos !== to) { p.pos += (to>p.pos?1:-1); posTokens(); sfx.tick(); await sleep(60); }
+    dbgEvent('ANIM_START', p.name + ' ' + p.pos + '→' + p.targetPos + (move ? ' [' + move.via + ']' : ''));
+    (function step() {
+      if (p.pos === p.targetPos) {
+        animating[p.username] = false;
+        dbgEvent('ANIM_END', p.name + ' pos=' + p.pos);
+        if (debugOpen) renderDbg();
+        return;
       }
-    } finally { p.pos = p.targetPos; posTokens(); animating[p.username] = false; }
+      // If move has dice_land, first walk to it
+      if (move && move.dice_land != null && move.dice_land !== move.final && p.pos === move.from) {
+        if (p.pos !== move.dice_land) {
+          p.pos += move.dice_land > p.pos ? 1 : -1;
+          posTokens(); sfx.tick();
+          return sleep(60).then(step);
+        }
+        // Reached dice_land, do the jump
+        return sleep(200).then(function () {
+          p.pos = move.final;
+          if (move.via === 'ladder') sfx.ladder();
+          else if (move.via === 'snake') sfx.snake();
+          posTokens();
+          return sleep(300).then(step);
+        });
+      }
+      // Normal step
+      p.pos += p.targetPos > p.pos ? 1 : -1;
+      posTokens(); sfx.tick();
+      return sleep(60).then(step);
+    })();
   }
 
   function renderLogs(logs) {
-    if(!logs || !logs.length) return;
-    let rendered = $('log').children.length;
-    let toRender = logs.slice(0, logs.length - rendered).reverse();
-    toRender.forEach(l => addLog(l.text, l.color));
+    if (!logs || !logs.length) return;
+    var rendered = $('log').children.length;
+    var toRender = logs.slice(0, logs.length - rendered).reverse();
+    toRender.forEach(function (l) { addLog(l.text, l.color); });
   }
 
-  /* ============================ ONLINE ACTIONS ============================ */
+  /* ============================ ONLINE ROLL ============================ */
   async function doRollOnline() {
-    if(state.busy || room.status !== 'playing' || room.state?.current_turn !== myUsername) return;
-    state.busy = true; $('rollBtn').disabled = true;
-    if(busyTimeout) clearTimeout(busyTimeout);
-    busyTimeout = setTimeout(() => { if(state.busy) { state.busy = false; syncTurnUI(); } }, 6000);
+    if (state.busy || !room || room.status !== 'playing') return;
+    if (!room.state || room.state.current_turn !== myUsername) {
+      dbgEvent('ROLL_BLOCKED', 'not my turn');
+      return;
+    }
+    state.busy = true;
+    $('rollBtn').disabled = true;
+    if (busyTimeout) clearTimeout(busyTimeout);
+    busyTimeout = setTimeout(function () {
+      if (state.busy) {
+        state.busy = false;
+        dbgEvent('BUSY_TIMEOUT', 'force reset');
+        syncTurnUI();
+      }
+    }, 8000);
 
     try {
-      let me = roomPlayers.find(p => p.username === myUsername);
-      if(!me) return;
-      let n = room.mode === 'speed' ? 2 : 1, vals = [], total = 0;
-      for(let i=0;i<n;i++) { let v = 1+rnd(6); vals.push(v); total+=v; }
+      var me = roomPlayers.find(function (p) { return p.username === myUsername; });
+      if (!me) { state.busy = false; return; }
+
+      var n = room.mode === 'speed' ? 2 : 1, vals = [], total = 0;
+      for (var i = 0; i < n; i++) { var v = 1 + rnd(6); vals.push(v); total += v; }
+      dbgEvent('ROLL_DICE', vals.join('+') + '=' + total);
       await animateDice(vals);
 
-      let land = me.pos + total, goal = land >= 100;
-      if(goal) land = 100;
-      let final = land, via = 'normal';
-      let myColor = STYLES[me.color_index%4].c;
-      let newLogs = [{ text: `🎲 ${me.display_name} tung ${vals.join('+')}${n>1?'='+total:''}`, color: myColor, ts: Date.now() }];
+      var land = me.pos + total;
+      var goal = land >= 100;
+      if (goal) land = 100;
+      var final = land, via = 'normal';
+      var myColor = STYLES[me.color_index % 4].c;
+      var newLogs = [{ text: '🎲 ' + me.display_name + ' tung ' + vals.join('+') + (n > 1 ? '=' + total : ''), color: myColor, ts: Date.now() }];
 
-      if(goal) via = 'goal';
-      else if(LADDERS[land]) { final = LADDERS[land]; via = 'ladder'; newLogs.push({ text: `🪜 Leo thang ${land} → ${final}`, color: myColor, ts: Date.now()+1 }); }
-      else if(SNAKES[land]) { final = SNAKES[land]; via = 'snake'; newLogs.push({ text: `🐍 Rắn cắn ${land} → ${final}`, color: myColor, ts: Date.now()+1 }); }
+      if (goal) via = 'goal';
+      else if (LADDERS[land]) { final = LADDERS[land]; via = 'ladder'; newLogs.push({ text: '🪜 Leo thang ' + land + ' → ' + final, color: myColor, ts: Date.now() + 1 }); }
+      else if (SNAKES[land]) { final = SNAKES[land]; via = 'snake'; newLogs.push({ text: '🐍 Rắn cắn ' + land + ' → ' + final, color: myColor, ts: Date.now() + 1 }); }
 
-      let winner = goal ? myUsername : null;
-      let curIdx = roomPlayers.findIndex(p => p.username === myUsername);
-      let next = roomPlayers[(curIdx+1) % roomPlayers.length].username;
+      var winner = goal ? myUsername : null;
+      var curIdx = roomPlayers.findIndex(function (p) { return p.username === myUsername; });
+      var next = roomPlayers[(curIdx + 1) % roomPlayers.length].username;
 
-      await sb.from('snake_room_players').update({ pos: final }).eq('room_id', room.id).eq('username', myUsername);
-      
-      let newState = {
-        current_turn: winner ? myUsername : next,
+      var updPlayer = await sb.from('snake_room_players').update({ pos: final }).eq('room_id', room.id).eq('username', myUsername);
+      if (updPlayer.error) throw updPlayer.error;
+
+      var newState = {
+        current_turn: winner || next,
         dice: vals, last_roll_by: myUsername, last_roll_at: Date.now(),
-        moves: (room.state?.moves||0) + 1, started_at: room.state?.started_at || Date.now(),
-        log: newLogs.concat(room.state?.log || []).slice(0, 40),
+        moves: ((room.state && room.state.moves) || 0) + 1,
+        started_at: (room.state && room.state.started_at) || Date.now(),
+        player_count: (room.state && room.state.player_count) || roomPlayers.length,
+        log: newLogs.concat((room.state && room.state.log) || []).slice(0, 40),
         winner: winner, last_move: { user: myUsername, from: me.pos, dice_land: land, final: final, via: via }
       };
 
-      await sb.from('snake_rooms').update({
+      var updRoom = await sb.from('snake_rooms').update({
         state: newState, status: winner ? 'finished' : 'playing',
-        version: (room.version||0) + 1, updated_at: new Date().toISOString()
+        version: ((room.version || 0) + 1), updated_at: new Date().toISOString()
       }).eq('id', room.id);
-      
-      dbg('ROLL sent');
-    } catch(e) {
-      state.busy = false; $('rollBtn').disabled = false; toast('Lỗi mạng');
+      if (updRoom.error) throw updRoom.error;
+
+      dbgEvent('ROLL_SENT', 'v' + (room.version + 1) + ' ' + vals.join('+') + ' pos=' + final + ' next=' + shortTurn(next));
+
+      // FIX: reset busy immediately after successful write — realtime will sync state
+      state.busy = false;
+      if (busyTimeout) { clearTimeout(busyTimeout); busyTimeout = null; }
+      syncTurnUI();
+    } catch (e) {
+      state.busy = false;
+      if (busyTimeout) { clearTimeout(busyTimeout); busyTimeout = null; }
+      $('rollBtn').disabled = false;
+      dbgEvent('ROLL_ERR', e.message || String(e));
+      toast('Lỗi: ' + (e.message || 'không rõ'));
     }
   }
 
-  /* ============================ REALTIME & ROOMS ============================ */
+  /* ============================ REALTIME ============================ */
   function handleRoomUpdate(oldR, newR) {
-    let oldV = oldR.version || 0, newV = newR.version || 0;
-    if(newV <= oldV) return;
-    dbg(`Update v${oldV}→v${newV}`);
-    
+    var oldV = oldR.version || 0, newV = newR.version || 0;
+    if (newV <= oldV) {
+      dbgEvent('RT_STALE', 'v' + newV + ' ≤ v' + oldV);
+      return;
+    }
+    dbgEvent('RT_UPDATE', 'v' + oldV + '→v' + newV + ' turn=' + shortTurn(newR.state && newR.state.current_turn));
+
     room = newR;
-    if(oldR.status === 'waiting' && newR.status === 'playing') {
+    if (oldR.status === 'waiting' && newR.status === 'playing') {
       refreshPlayers().then(enterGameRoom);
       return;
     }
-    if(newR.state?.last_roll_by !== myUsername && newR.state?.last_roll_at > (oldR.state?.last_roll_at||0)) {
-      animateDice(newR.state.dice);
+
+    // Remote dice animation
+    var newRollAt = (newR.state && newR.state.last_roll_at) || 0;
+    var oldRollAt = (oldR.state && oldR.state.last_roll_at) || 0;
+    if (newRollAt > oldRollAt && newR.state.last_roll_by !== myUsername) {
+      animateDice(newR.state.dice || [1]);
     }
+
     refreshPlayers().then(rebuildRoomState);
   }
 
   function startRealtime() {
-    if(!room || !sb) return;
-    if(roomChan) sb.removeChannel(roomChan);
-    
-    roomChan = sb.channel('r:'+room.id)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'snake_rooms', filter: 'id=eq.'+room.id }, p => handleRoomUpdate(room, p.new))
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'snake_rooms', filter: 'id=eq.'+room.id }, () => { toast('Phòng đã đóng'); leaveRoom(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'snake_room_players', filter: 'room_id=eq.'+room.id }, () => { clearTimeout(refreshTimer); refreshTimer = setTimeout(refreshPlayers, 80); })
-      .subscribe(s => dbg('RT:'+s));
+    if (!room || !sb) return;
+    if (roomChan) { try { sb.removeChannel(roomChan); } catch (e) {} }
+    dbgEvent('RT_SUBSCRIBE', 'room=' + room.code);
+    roomChan = sb.channel('r:' + room.id)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'snake_rooms', filter: 'id=eq.' + room.id }, function (p) {
+        lastRtAt = Date.now();
+        lastRtPayload = { newVersion: p.new && p.new.version, newTurn: p.new && p.new.state && p.new.state.current_turn };
+        handleRoomUpdate(room, p.new);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'snake_rooms', filter: 'id=eq.' + room.id }, function () {
+        lastRtAt = Date.now();
+        dbgEvent('RT_DELETE', 'room closed');
+        if ($('winOverlay').hidden) { toast('Phòng đã đóng'); leaveRoom(); }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'snake_room_players', filter: 'room_id=eq.' + room.id }, function (p) {
+        lastRtAt = Date.now();
+        dbgEvent('RT_PLAYER', (p.eventType || p.event) + ' ' + (p.new && p.new.username || ''));
+        clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(refreshPlayers, 80);
+      })
+      .subscribe(function (status) {
+        dbgEvent('RT_STATUS', status);
+      });
 
-    if(pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(async () => {
-      if(!room || document.hidden) return;
-      let r = await sb.from('snake_rooms').select('*').eq('id', room.id).maybeSingle();
-      if(r.data) handleRoomUpdate(room, r.data);
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(async function () {
+      if (!room || document.hidden) return;
+      lastPollAt = Date.now();
+      try {
+        var r = await sb.from('snake_rooms').select('*').eq('id', room.id).maybeSingle();
+        if (r.data) handleRoomUpdate(room, r.data);
+      } catch (e) {}
     }, 1500);
   }
 
-  let refreshTimer = null;
   async function refreshPlayers() {
-    if(!room) return;
-    let r = await sb.from('snake_room_players').select('*').eq('room_id', room.id).order('joined_at');
-    if(r.data) { roomPlayers = r.data; if(room.status==='waiting') renderWait(); }
+    if (!room) return;
+    try {
+      var r = await sb.from('snake_room_players').select('*').eq('room_id', room.id).order('joined_at');
+      if (r.data) { roomPlayers = r.data; if (room.status === 'waiting') renderWait(); }
+    } catch (e) { dbgEvent('REFRESH_ERR', e.message); }
   }
 
   /* ============================ LOCAL GAME ============================ */
   function startLocalGame() {
-    state.players = []; state.over = false; state.busy = false; state.current = 0; state.moves = 0; state.startTime = Date.now();
-    let me = { id:0, username: myUsername, name: myProfile.display_name, pos:0, targetPos:0, color:STYLES[0].c, soft:STYLES[0].s, avatar: myProfile.avatar_url, bot:false };
+    state.players = [];
+    state.over = false; state.busy = false;
+    state.current = 0; state.startTime = Date.now();
+    var me = { id: 0, username: myUsername, name: myProfile.display_name, pos: 0, targetPos: 0, color: STYLES[0].c, soft: STYLES[0].s, avatar: myProfile.avatar_url, bot: false };
     state.players.push(me);
-    for(let i=1; i<state.count; i++) {
-      let bot = state.mode==='bot';
-      state.players.push({ id:i, username:bot?'bot_'+i:'p'+i, name:bot?BOTS[i-1]:'Người chơi '+i, pos:0, targetPos:0, color:STYLES[i].c, soft:STYLES[i].s, avatar:avt('bot'+i), bot:bot });
+    for (var i = 1; i < state.count; i++) {
+      var bot = state.mode === 'bot';
+      state.players.push({
+        id: i, username: bot ? 'bot_' + i : 'p' + i,
+        name: bot ? BOTS[i - 1] : 'Người chơi ' + i,
+        pos: 0, targetPos: 0,
+        color: STYLES[i].c, soft: STYLES[i].s,
+        avatar: avt('bot' + i), bot: bot
+      });
     }
-    $('log').innerHTML = ''; showScreen('gameScreen'); buildBoard(); renderPlayers(); createTokens();
+    $('log').innerHTML = '';
+    showScreen('gameScreen');
+    buildBoard(); renderPlayers(); createTokens();
     $('diceStage1').style.display = state.mode === 'speed' ? 'block' : 'none';
-    posTokens(); updatePill(); syncCards(); beginTurnLocal();
+    posTokens(); updatePill(); syncCards();
+    beginTurnLocal();
   }
 
   function beginTurnLocal() {
-    let p = state.players[state.current]; if(!p) return;
+    var p = state.players[state.current]; if (!p) return;
     updatePill(); syncCards(); posTokens();
-    if(p.bot) {
-      $('rollBtn').disabled = true; $('rollHint').textContent = 'Bot đang suy nghĩ...';
+    if (p.bot) {
+      $('rollBtn').disabled = true;
+      $('rollHint').textContent = 'Bot đang suy nghĩ...';
       setTimeout(doRollLocal, 800);
     } else {
-      $('rollBtn').disabled = false; $('rollHint').textContent = 'Lượt của bạn!';
+      $('rollBtn').disabled = false;
+      $('rollHint').textContent = 'Lượt của bạn!';
     }
   }
 
   async function doRollLocal() {
-    if(state.busy || state.over) return;
-    state.busy = true; $('rollBtn').disabled = true;
-    let p = state.players[state.current], n = state.mode==='speed'?2:1;
-    let vals = []; for(let i=0;i<n;i++) vals.push(1+rnd(6));
+    if (state.busy || state.over) return;
+    state.busy = true;
+    $('rollBtn').disabled = true;
+    var p = state.players[state.current], n = state.mode === 'speed' ? 2 : 1;
+    var vals = []; for (var i = 0; i < n; i++) vals.push(1 + rnd(6));
     await animateDice(vals);
-    let tot = vals.reduce((a,b)=>a+b,0);
-    addLog(`🎲 ${p.name} tung ${tot}`, p.color);
-    
-    let land = p.pos + tot, goal = land >= 100;
-    if(goal) land = 100;
-    while(p.pos < land) { p.pos++; posTokens(); sfx.tick(); await sleep(50); }
-    
-    if(goal) { winLocal(p); return; }
-    if(LADDERS[p.pos]) { p.pos = LADDERS[p.pos]; sfx.ladder(); posTokens(); await sleep(300); }
-    else if(SNAKES[p.pos]) { p.pos = SNAKES[p.pos]; sfx.snake(); posTokens(); await sleep(300); }
-    if(p.pos >= 100) { winLocal(p); return; }
-    
-    state.busy = false; state.current = (state.current+1)%state.players.length; beginTurnLocal();
+    var tot = vals.reduce(function (a, b) { return a + b; }, 0);
+    addLog('🎲 ' + p.name + ' tung ' + tot, p.color);
+    var land = p.pos + tot, goal = land >= 100;
+    if (goal) land = 100;
+    while (p.pos < land) { p.pos++; posTokens(); sfx.tick(); await sleep(50); }
+    if (goal) { winLocal(p); return; }
+    if (LADDERS[p.pos]) { p.pos = LADDERS[p.pos]; sfx.ladder(); posTokens(); await sleep(300); }
+    else if (SNAKES[p.pos]) { p.pos = SNAKES[p.pos]; sfx.snake(); posTokens(); await sleep(300); }
+    if (p.pos >= 100) { winLocal(p); return; }
+    state.busy = false;
+    state.current = (state.current + 1) % state.players.length;
+    beginTurnLocal();
   }
 
   function winLocal(p) {
-    state.over = true; sfx.win();
-    $('winTitle').textContent = p.username===myUsername?'Bạn thắng!':p.name+' thắng!';
+    state.over = true;
+    sfx.win();
+    $('winTitle').textContent = p.username === myUsername ? 'Bạn thắng!' : p.name + ' thắng!';
+    $('winOverlay').hidden = false;
+  }
+
+  function showWin(winner) {
+    var wp = roomPlayers.find(function (p) { return p.username === winner; });
+    var wName = wp ? wp.display_name : winner;
+    var isMe = winner === myUsername;
+    $('winTitle').textContent = isMe ? 'Bạn thắng! 🎉' : wName + ' thắng!';
+    $('winSub').textContent = isMe ? 'Tuyệt vời!' : 'Chơi ván mới nhé!';
+    sfx.win();
     $('winOverlay').hidden = false;
   }
 
   /* ============================ UI BINDINGS ============================ */
   function showScreen(id) {
-    ['menuScreen','onlineScreen','waitingScreen','localSetupScreen','gameScreen'].forEach(s => $(s).hidden = (s!==id));
-    if(id!=='gameScreen') $('winOverlay').hidden = true;
+    ['menuScreen', 'onlineScreen', 'waitingScreen', 'localSetupScreen', 'gameScreen'].forEach(function (s) {
+      $(s).hidden = (s !== id);
+    });
+    if (id !== 'gameScreen') $('winOverlay').hidden = true;
   }
 
-  $('debugBtn').onclick = () => { debugOpen = !debugOpen; $('debugPanel').hidden = !debugOpen; renderDbg(); };
-  $('dbgClose').onclick = () => { debugOpen = false; $('debugPanel').hidden = true; };
-  $('dbgForce').onclick = async () => {
-    if(!room) return toast('Chưa vào phòng');
-    let r = await sb.from('snake_rooms').select('*').eq('id', room.id).maybeSingle();
-    if(r.data) handleRoomUpdate(room, r.data);
-    refreshPlayers().then(rebuildRoomState);
+  $('debugBtn').onclick = function () {
+    debugOpen = !debugOpen;
+    $('debugPanel').hidden = !debugOpen;
+    if (debugOpen) renderDbg();
+  };
+  $('dbgClose').onclick = function () { debugOpen = false; $('debugPanel').hidden = true; };
+  $('dbgCopy').onclick = copyDebugToClipboard;
+  $('dbgForce').onclick = async function () {
+    if (!room) return toast('Chưa vào phòng');
+    dbgEvent('FORCE_REFRESH', 'manual');
+    try {
+      var r = await sb.from('snake_rooms').select('*').eq('id', room.id).maybeSingle();
+      if (r.data) handleRoomUpdate(room, r.data);
+      await refreshPlayers();
+      rebuildRoomState();
+      renderDbg();
+    } catch (e) { toast('Lỗi: ' + e.message); }
   };
 
-  $('playModeGrid').onclick = e => {
-    let btn = e.target.closest('.play-card'); if(!btn) return;
-    [...e.currentTarget.children].forEach(c => c.classList.remove('active')); btn.classList.add('active');
+  $('playModeGrid').onclick = function (e) {
+    var btn = e.target.closest('.play-card'); if (!btn) return;
+    Array.prototype.forEach.call(e.currentTarget.children, function (c) { c.classList.remove('active'); });
+    btn.classList.add('active');
     state.mode = btn.dataset.mode;
   };
-  
-  $('continueBtn').onclick = async () => {
-    let name = $('playerName').value.trim() || myUsername;
+
+  $('continueBtn').onclick = async function () {
+    var name = $('playerName').value.trim() || myUsername;
     localStorage.setItem('srank_player_name', name);
-    if(state.mode === 'online') {
-      if(!sb) return toast('Lỗi Supabase');
-      showScreen('onlineScreen'); fetchRooms();
-      if(roomsChan) sb.removeChannel(roomsChan);
-      roomsChan = sb.channel('rooms').on('postgres_changes', {event:'*',schema:'public',table:'snake_rooms'}, fetchRooms).subscribe();
+    if (state.mode === 'online') {
+      if (!sb) return toast('Lỗi Supabase');
+      showScreen('onlineScreen');
+      fetchRooms();
+      if (roomsChan) { try { sb.removeChannel(roomsChan); } catch (e) {} }
+      roomsChan = sb.channel('rooms-list')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'snake_rooms' }, fetchRooms)
+        .subscribe();
     } else {
-      $('localSetupTitle').textContent = state.mode==='bot'?'Đấu với Bot':'Cùng máy';
+      $('localSetupTitle').textContent = state.mode === 'bot' ? 'Đấu với Bot' : 'Cùng máy';
       showScreen('localSetupScreen');
     }
   };
 
-  $('backFromOnlineBtn').onclick = () => { showScreen('menuScreen'); if(roomsChan) sb.removeChannel(roomsChan); };
-  $('backFromLocalBtn').onclick = () => showScreen('menuScreen');
-  $('refreshRoomsBtn').onclick = () => fetchRooms();
+  $('backFromOnlineBtn').onclick = function () {
+    showScreen('menuScreen');
+    if (roomsChan) { try { sb.removeChannel(roomsChan); } catch (e) {} roomsChan = null; }
+  };
+  $('backFromLocalBtn').onclick = function () { showScreen('menuScreen'); };
+  $('refreshRoomsBtn').onclick = fetchRooms;
 
-  $('createRoomBtn').onclick = async () => {
-    if(room) return toast('Đang ở phòng khác');
-    let code = Array.from({length:6}, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[rnd(32)]).join('');
-    let r = await sb.from('snake_rooms').insert({ code, host_username: myUsername, status: 'waiting', max_players: 4, state: {}, version: 0 }).select().single();
-    if(r.error) return toast('Lỗi tạo phòng');
+  $('createRoomBtn').onclick = async function () {
+    if (room) return toast('Đang ở phòng khác');
+    var code = Array.from({ length: 6 }, function () { return 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[rnd(32)]; }).join('');
+    var r = await sb.from('snake_rooms').insert({ code: code, host_username: myUsername, status: 'waiting', max_players: 4, mode: 'classic', state: {}, version: 0 }).select().single();
+    if (r.error) return toast('Lỗi tạo phòng');
     room = r.data; isHost = true;
-    await sb.from('snake_room_players').insert({ room_id: room.id, username: myUsername, display_name: $('playerName').value || myUsername, avatar_url: myProfile.avatar_url, color_index: 0, pos: 0, is_host: true });
+    await sb.from('snake_room_players').insert({
+      room_id: room.id, username: myUsername,
+      display_name: $('playerName').value || myUsername,
+      avatar_url: myProfile.avatar_url, color_index: 0, pos: 0, is_host: true
+    });
     enterWait();
   };
 
-  $('roomsList').onclick = async e => {
-    let btn = e.target.closest('.room-item-join'); if(!btn) return;
-    let rid = btn.dataset.id;
-    let r = await sb.from('snake_rooms').select('*').eq('id', rid).eq('status','waiting').single();
-    if(r.error) return toast('Phòng đã đóng');
+  $('roomsList').onclick = async function (e) {
+    var btn = e.target.closest('.room-item-join'); if (!btn) return;
+    var rid = btn.dataset.id;
+    var r = await sb.from('snake_rooms').select('*').eq('id', rid).eq('status', 'waiting').maybeSingle();
+    if (r.error || !r.data) return toast('Phòng đã đóng');
     room = r.data; isHost = (room.host_username === myUsername);
-    let ex = await sb.from('snake_room_players').select('id').eq('room_id', rid).eq('username', myUsername).maybeSingle();
-    if(!ex.data) {
-      let count = (await sb.from('snake_room_players').select('id',{count:'exact'}).eq('room_id', rid)).count || 0;
-      await sb.from('snake_room_players').insert({ room_id: rid, username: myUsername, display_name: $('playerName').value || myUsername, avatar_url: myProfile.avatar_url, color_index: count, pos: 0 });
+    var ex = await sb.from('snake_room_players').select('id').eq('room_id', rid).eq('username', myUsername).maybeSingle();
+    if (!ex.data) {
+      var cnt = await sb.from('snake_room_players').select('id', { count: 'exact', head: true }).eq('room_id', rid);
+      await sb.from('snake_room_players').insert({
+        room_id: rid, username: myUsername,
+        display_name: $('playerName').value || myUsername,
+        avatar_url: myProfile.avatar_url, color_index: cnt.count || 0, pos: 0
+      });
     }
     enterWait();
   };
 
   $('leaveRoomBtn').onclick = leaveRoom;
   async function leaveRoom() {
-    if(room) {
-      if(roomChan) sb.removeChannel(roomChan);
-      clearInterval(pollTimer);
-      await sb.from('snake_room_players').delete().eq('room_id', room.id).eq('username', myUsername);
-      if(isHost) await sb.from('snake_rooms').delete().eq('id', room.id);
+    dbgEvent('LEAVE', room ? room.code : 'none');
+    if (room) {
+      if (roomChan) { try { sb.removeChannel(roomChan); } catch (e) {} roomChan = null; }
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      try {
+        await sb.from('snake_room_players').delete().eq('room_id', room.id).eq('username', myUsername);
+        if (isHost) await sb.from('snake_rooms').delete().eq('id', room.id);
+      } catch (e) {}
     }
-    room = null; showScreen('menuScreen'); if(roomsChan) { sb.removeChannel(roomsChan); roomsChan = null; }
+    room = null; isHost = false; roomPlayers = [];
+    showScreen('menuScreen');
+    if (roomsChan) { try { sb.removeChannel(roomsChan); } catch (e) {} roomsChan = null; }
   }
 
-  $('hostStartBtn').onclick = async () => {
-    if(roomPlayers.length < 2) return;
-    let mode = $('hostModeSelect').value, now = Date.now();
-    await sb.from('snake_room_players').update({ pos:0 }).eq('room_id', room.id);
+  $('hostStartBtn').onclick = async function () {
+    if (roomPlayers.length < 2) return;
+    var mode = $('hostModeSelect').value, now = Date.now();
+    await sb.from('snake_room_players').update({ pos: 0, skip_turn: false, extra_turn: false }).eq('room_id', room.id);
     await sb.from('snake_rooms').update({
-      status: 'playing', mode: mode, version: 1, updated_at: new Date().toISOString(),
-      state: { current_turn: roomPlayers[0].username, dice:[1], moves:0, started_at: now, log: [{text:'Trò chơi bắt đầu!',color:'#a78bfa',ts:now}], last_roll_at: 0 }
+      status: 'playing', mode: mode, version: ((room.version || 0) + 1), updated_at: new Date().toISOString(),
+      state: {
+        current_turn: roomPlayers[0].username, dice: [1], moves: 0,
+        started_at: now, last_roll_at: 0, player_count: roomPlayers.length,
+        log: [{ text: 'Trò chơi bắt đầu!', color: '#a78bfa', ts: now }],
+        winner: null, last_move: null
+      }
     }).eq('id', room.id);
+    dbgEvent('HOST_START', 'mode=' + mode + ' players=' + roomPlayers.length);
   };
 
+  $('modeGrid').onclick = function (e) {
+    var btn = e.target.closest('.play-card'); if (!btn) return;
+    Array.prototype.forEach.call(e.currentTarget.children, function (c) { c.classList.remove('active'); });
+    btn.classList.add('active');
+    state.mode = btn.dataset.mode;
+  };
+  $('countSeg').onclick = function (e) {
+    var btn = e.target.closest('button'); if (!btn) return;
+    Array.prototype.forEach.call(e.currentTarget.children, function (c) { c.classList.remove('active'); });
+    btn.classList.add('active');
+    state.count = +btn.dataset.c;
+  };
   $('startLocalBtn').onclick = startLocalGame;
-  $('quitBtn').onclick = () => { if(room) leaveRoom(); else showScreen('menuScreen'); };
-  $('rollBtn').onclick = () => { if(state.mode==='online') doRollOnline(); else doRollLocal(); };
-  $('playAgainBtn').onclick = () => { $('winOverlay').hidden = true; if(room) leaveRoom(); else showScreen('menuScreen'); };
-  $('soundBtn').onclick = e => { sfxOn = !sfxOn; e.target.textContent = sfxOn?'🔊':'🔇'; };
+  $('quitBtn').onclick = function () { if (room) leaveRoom(); else showScreen('menuScreen'); };
+  $('rollBtn').onclick = function () {
+    if (state.mode === 'online' && room) doRollOnline();
+    else doRollLocal();
+  };
+  $('playAgainBtn').onclick = function () {
+    $('winOverlay').hidden = true;
+    if (room) leaveRoom(); else showScreen('menuScreen');
+  };
+  $('soundBtn').onclick = function (e) {
+    sfxOn = !sfxOn;
+    e.currentTarget.textContent = sfxOn ? '🔊' : '🔇';
+  };
 
   function enterWait() {
-    showScreen('waitingScreen'); $('hostControls').style.display = isHost ? 'block' : 'none';
-    renderWait(); startRealtime();
+    showScreen('waitingScreen');
+    $('hostControls').style.display = isHost ? 'block' : 'none';
+    renderWait();
+    startRealtime();
+    refreshPlayers();
+    dbgEvent('ENTER_WAIT', room ? room.code : 'none');
   }
   function renderWait() {
     $('waitingCount').textContent = roomPlayers.length;
-    $('waitingPlayers').innerHTML = roomPlayers.map(p => `<div class="waiting-player"><img src="${p.avatar_url||avt(p.display_name)}"><span>${p.display_name} ${p.username===myUsername?'(Bạn)':''}</span> ${p.is_host?'<span style="color:#ff7ab8;font-size:10px">HOST</span>':''}</div>`).join('');
+    $('waitingPlayers').innerHTML = roomPlayers.map(function (p) {
+      return '<div class="waiting-player"><img src="' + (p.avatar_url || avt(p.display_name)) + '">' +
+        '<span>' + esc(p.display_name) + (p.username === myUsername ? ' (Bạn)' : '') + '</span>' +
+        (p.is_host ? '<span style="color:#ff7ab8;font-size:10px">HOST</span>' : '') + '</div>';
+    }).join('');
     $('hostStartBtn').disabled = roomPlayers.length < 2;
-    $('hostStartBtn').textContent = roomPlayers.length >= 2 ? '🚀 Bắt đầu ('+roomPlayers.length+')' : '⏳ Cần 2 người';
+    $('hostStartBtn').textContent = roomPlayers.length >= 2 ? '🚀 Bắt đầu (' + roomPlayers.length + ')' : '⏳ Cần 2 người';
   }
 
   async function fetchRooms() {
-    let r = await sb.from('snake_rooms').select('*').eq('status','waiting').order('created_at',{ascending:false}).limit(20);
-    if(!r.data) return;
-    $('roomsList').innerHTML = r.data.map(rm => `
-      <div class="room-item">
-        <div class="room-item-info"><div class="room-item-host">🐱 ${rm.host_username}</div><div class="room-item-meta">Đang chờ...</div></div>
-        <button class="room-item-join" data-id="${rm.id}">Vào</button>
-      </div>
-    `).join('') || '<div style="text-align:center;padding:20px;color:#888">Chưa có phòng nào</div>';
+    if (!sb) return;
+    var r = await sb.from('snake_rooms').select('*').eq('status', 'waiting').order('created_at', { ascending: false }).limit(20);
+    if (!r.data) return;
+    var ids = r.data.map(function (x) { return x.id; });
+    var counts = {};
+    if (ids.length) {
+      var p = await sb.from('snake_room_players').select('room_id').in('room_id', ids);
+      if (p.data) p.data.forEach(function (row) { counts[row.room_id] = (counts[row.room_id] || 0) + 1; });
+    }
+    $('roomsList').innerHTML = r.data.map(function (rm) {
+      var cnt = counts[rm.id] || 1;
+      var mine = rm.host_username === myUsername;
+      var full = cnt >= rm.max_players;
+      var label = mine ? 'Của bạn' : (full ? 'Đầy' : 'Vào');
+      return '<div class="room-item">' +
+        '<div class="room-item-info"><div class="room-item-host">🐱 ' + esc(rm.host_username) + '</div>' +
+        '<div class="room-item-meta">' + cnt + '/' + rm.max_players + ' người · ' + esc(rm.mode) + '</div></div>' +
+        '<button class="room-item-join" data-id="' + rm.id + '"' + ((mine || full) ? ' disabled' : '') + '>' + label + '</button></div>';
+    }).join('') || '<div style="text-align:center;padding:20px;color:#888">Chưa có phòng nào</div>';
   }
 
   /* ============================ INIT ============================ */
-  dice0 = makeDice($('dice0')); dice1 = makeDice($('dice1'));
-  
-  async function init() {
+  dice0 = makeDice($('dice0'));
+  dice1 = makeDice($('dice1'));
+
+  (async function init() {
     myUsername = getMyUsername();
-    let saved = localStorage.getItem('srank_player_name');
+    var saved = localStorage.getItem('srank_player_name');
     $('playerName').value = saved || myUsername;
-    if(sb) {
-      let p = await sb.from('public_players').select('*').eq('username', myUsername).maybeSingle();
-      myProfile = p.data || { display_name: myUsername, avatar_url: avt(myUsername) };
-    } else myProfile = { display_name: myUsername, avatar_url: avt(myUsername) };
-  }
-  init();
+    if (sb) {
+      try {
+        var p = await sb.from('public_players').select('*').eq('username', myUsername).maybeSingle();
+        myProfile = p.data || { display_name: myUsername, avatar_url: avt(myUsername) };
+      } catch (e) { myProfile = { display_name: myUsername, avatar_url: avt(myUsername) }; }
+    } else {
+      myProfile = { display_name: myUsername, avatar_url: avt(myUsername) };
+    }
+    dbgEvent('INIT', 'user=' + myUsername);
+  })();
 
   function openGame() {
-    document.body.style.overflow = 'hidden'; host.style.display = 'block'; closeBtn.style.display = 'grid'; showScreen('menuScreen');
+    document.body.style.overflow = 'hidden';
+    host.style.display = 'block';
+    closeBtn.style.display = 'grid';
+    showScreen('menuScreen');
   }
-  closeBtn.onclick = () => {
-    host.style.display = 'none'; closeBtn.style.display = 'none'; document.body.style.overflow = '';
-    if(room) leaveRoom();
+  closeBtn.onclick = function () {
+    host.style.display = 'none';
+    closeBtn.style.display = 'none';
+    document.body.style.overflow = '';
+    debugOpen = false;
+    $('debugPanel').hidden = true;
+    if (room) leaveRoom();
   };
-  
-  let btn = document.getElementById('snakeLadderBtn');
-  if(btn) btn.onclick = openGame;
 
+  var launcher = document.getElementById('snakeLadderBtn');
+  if (launcher) launcher.onclick = openGame;
 })();
