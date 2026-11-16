@@ -1,7 +1,9 @@
 /* =====================================================================
-   RẮN & THANG — PREMIUM EDITION
-   Self-contained: inject CSS + HTML vào Shadow DOM.
-   Tích hợp multiplayer: chọn đối thủ từ Supabase view public_players.
+   RẮN & THANG — ONLINE MULTIPLAYER EDITION
+   - Tạo phòng / Join phòng qua Supabase
+   - Realtime sync state
+   - Chỉ current_turn mới roll được
+   - Bonus: pass-and-play local mode
    ===================================================================== */
 (function () {
   'use strict';
@@ -12,145 +14,70 @@
   var GAME_CSS = `
 *,*::before,*::after{box-sizing:border-box}
 #sgApp{
-  margin:0;
-  font-family:'Nunito',system-ui,-apple-system,'Segoe UI',sans-serif;
+  margin:0;font-family:'Nunito',system-ui,-apple-system,'Segoe UI',sans-serif;
   color:#3b2b52;
   background:
     radial-gradient(1200px 700px at 8% -12%, #ffe4f5 0%, transparent 58%),
     radial-gradient(1000px 700px at 108% -4%, #dceeff 0%, transparent 55%),
     radial-gradient(900px 800px at 50% 118%, #fff1d8 0%, transparent 60%),
     linear-gradient(165deg,#fdf8ff 0%, #eff6ff 46%, #fff8f1 100%);
-  min-height:100vh;
-  overflow-x:hidden;
-  -webkit-tap-highlight-color:transparent;
-  position:absolute;
-  inset:0;
-  overflow-y:auto;
-  -webkit-overflow-scrolling:touch;
+  min-height:100vh;overflow-x:hidden;-webkit-tap-highlight-color:transparent;
+  position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
 }
 [hidden]{display:none!important}
 button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit}
-input{font-family:inherit}
-
-#sgApp::before,#sgApp::after{
-  content:'';position:fixed;border-radius:50%;filter:blur(60px);opacity:.55;pointer-events:none;z-index:0;
-}
-#sgApp::before{width:420px;height:420px;background:#ffc4e6;top:-140px;left:-140px;animation:sgFloat1 16s ease-in-out infinite}
-#sgApp::after{width:460px;height:460px;background:#bfe0ff;bottom:-180px;right:-160px;animation:sgFloat2 20s ease-in-out infinite}
-@keyframes sgFloat1{0%,100%{transform:translate(0,0)}50%{transform:translate(40px,50px)}}
-@keyframes sgFloat2{0%,100%{transform:translate(0,0)}50%{transform:translate(-50px,-40px)}}
-
+input,select{font-family:inherit}
+#sgApp::before,#sgApp::after{content:'';position:fixed;border-radius:50%;filter:blur(60px);opacity:.55;pointer-events:none;z-index:0}
+#sgApp::before{width:420px;height:420px;background:#ffc4e6;top:-140px;left:-140px;animation:sgF1 16s ease-in-out infinite}
+#sgApp::after{width:460px;height:460px;background:#bfe0ff;bottom:-180px;right:-160px;animation:sgF2 20s ease-in-out infinite}
+@keyframes sgF1{0%,100%{transform:translate(0,0)}50%{transform:translate(40px,50px)}}
+@keyframes sgF2{0%,100%{transform:translate(0,0)}50%{transform:translate(-50px,-40px)}}
 .shell{position:relative;z-index:1;max-width:1440px;margin:0 auto;padding:16px 18px 46px}
-
-.topbar{
-  display:flex;align-items:center;justify-content:space-between;gap:14px;
-  padding:12px 18px;margin-bottom:18px;
-  background:rgba(255,255,255,.72);
-  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-  border:1px solid rgba(167,139,250,.22);
-  border-radius:22px;
-  box-shadow:0 16px 40px -26px rgba(88,60,150,.55);
-}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 18px;margin-bottom:18px;background:rgba(255,255,255,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(167,139,250,.22);border-radius:22px;box-shadow:0 16px 40px -26px rgba(88,60,150,.55)}
 .brand{display:flex;align-items:center;gap:10px;font-family:'Baloo 2',cursive;font-weight:800;font-size:22px;letter-spacing:.3px}
 .brand .logo{font-size:26px;filter:drop-shadow(0 4px 8px rgba(255,111,174,.45))}
-.badge{
-  font-family:'Nunito',sans-serif;font-size:10px;font-weight:900;letter-spacing:1.4px;
-  padding:4px 9px;border-radius:999px;color:#fff;
-  background:linear-gradient(135deg,#ff6fae,#a78bfa);
-  box-shadow:0 6px 14px -6px rgba(167,139,250,.9);
-}
+.badge{font-size:10px;font-weight:900;letter-spacing:1.4px;padding:4px 9px;border-radius:999px;color:#fff;background:linear-gradient(135deg,#ff6fae,#a78bfa);box-shadow:0 6px 14px -6px rgba(167,139,250,.9)}
 .top-actions{display:flex;align-items:center;gap:8px}
-
-.icon-btn{
-  width:40px;height:40px;border-radius:14px;display:grid;place-items:center;font-size:18px;
-  background:rgba(255,255,255,.9);
-  border:1px solid rgba(167,139,250,.24);
-  box-shadow:0 8px 18px -12px rgba(88,60,150,.6);
-  transition:transform .16s ease, box-shadow .16s ease;
-}
-.icon-btn:hover{transform:translateY(-2px);box-shadow:0 12px 22px -12px rgba(88,60,150,.7)}
-
-.panel{
-  background:rgba(255,255,255,.82);
-  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-  border:1px solid rgba(167,139,250,.2);
-  border-radius:24px;
-  box-shadow:0 20px 46px -28px rgba(88,60,150,.62);
-  padding:18px;
-}
-.panel-title{
-  margin:0 0 12px;font-family:'Baloo 2',cursive;font-size:15px;font-weight:800;
-  letter-spacing:.4px;color:#6b5b85;display:flex;align-items:center;gap:7px;
-}
-
-.btn{
-  display:inline-flex;align-items:center;justify-content:center;gap:8px;
-  padding:12px 20px;border-radius:16px;font-weight:800;font-size:15px;
-  transition:transform .15s ease, box-shadow .15s ease, opacity .15s;
-  user-select:none;
-}
+.icon-btn{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;font-size:18px;background:rgba(255,255,255,.9);border:1px solid rgba(167,139,250,.24);box-shadow:0 8px 18px -12px rgba(88,60,150,.6);transition:transform .16s ease}
+.icon-btn:hover{transform:translateY(-2px)}
+.panel{background:rgba(255,255,255,.82);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(167,139,250,.2);border-radius:24px;box-shadow:0 20px 46px -28px rgba(88,60,150,.62);padding:18px}
+.panel-title{margin:0 0 12px;font-family:'Baloo 2',cursive;font-size:15px;font-weight:800;letter-spacing:.4px;color:#6b5b85;display:flex;align-items:center;gap:7px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;border-radius:16px;font-weight:800;font-size:15px;transition:transform .15s ease, box-shadow .15s ease, opacity .15s;user-select:none}
 .btn:active{transform:scale(.97)}
-.btn-primary{
-  color:#fff;
-  background:linear-gradient(135deg,#ff7ab8 0%,#a78bfa 55%,#7dd3fc 115%);
-  box-shadow:0 14px 26px -12px rgba(167,139,250,.95), inset 0 1px 0 rgba(255,255,255,.35);
-}
-.btn-primary:hover{box-shadow:0 18px 32px -12px rgba(167,139,250,1), inset 0 1px 0 rgba(255,255,255,.35)}
+.btn-primary{color:#fff;background:linear-gradient(135deg,#ff7ab8 0%,#a78bfa 55%,#7dd3fc 115%);box-shadow:0 14px 26px -12px rgba(167,139,250,.95), inset 0 1px 0 rgba(255,255,255,.35)}
 .btn-primary:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
-.btn-ghost{
-  background:rgba(255,255,255,.85);color:#6b5b85;
-  border:1px solid rgba(167,139,250,.28);
-  box-shadow:0 8px 18px -14px rgba(88,60,150,.7);
-}
+.btn-ghost{background:rgba(255,255,255,.85);color:#6b5b85;border:1px solid rgba(167,139,250,.28);box-shadow:0 8px 18px -14px rgba(88,60,150,.7)}
+.btn-danger{background:linear-gradient(135deg,#fb7185,#ef4444);color:#fff;box-shadow:0 12px 22px -12px rgba(239,68,68,.8)}
 .btn-lg{padding:16px 30px;font-size:17px;border-radius:18px;width:100%}
 .btn-roll{width:100%;font-size:16px;padding:14px}
-
 .setup{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
 .hero{text-align:center;padding:26px 18px 8px}
-.hero h1{
-  margin:0 0 8px;font-family:'Baloo 2',cursive;font-size:clamp(28px,5vw,44px);line-height:1.1;
-  background:linear-gradient(120deg,#ff6fae,#a78bfa 48%,#38bdf8);
-  -webkit-background-clip:text;background-clip:text;color:transparent;
-  filter:drop-shadow(0 6px 16px rgba(167,139,250,.25));
-}
+.hero h1{margin:0 0 8px;font-family:'Baloo 2',cursive;font-size:clamp(28px,5vw,44px);line-height:1.1;background:linear-gradient(120deg,#ff6fae,#a78bfa 48%,#38bdf8);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 6px 16px rgba(167,139,250,.25))}
 .hero p{margin:0;color:#7a6b93;font-size:15px;font-weight:600;max-width:520px;margin-inline:auto;line-height:1.6}
-.hero-emojis{font-size:30px;letter-spacing:10px;margin-bottom:6px;filter:drop-shadow(0 6px 10px rgba(255,111,174,.3))}
-
+.hero-emojis{font-size:30px;letter-spacing:10px;margin-bottom:6px}
 .field{display:flex;flex-direction:column;gap:10px}
 .field > label{font-size:13px;font-weight:800;color:#8a7aa6;letter-spacing:.6px;text-transform:uppercase}
-
-.name-input{
-  width:100%;padding:15px 18px;border-radius:16px;font-size:16px;font-weight:700;color:#3b2b52;
-  background:#fff;border:2px solid rgba(167,139,250,.25);
-  outline:none;transition:border-color .18s, box-shadow .18s;
-}
-.name-input:focus{border-color:#a78bfa;box-shadow:0 0 0 4px rgba(167,139,250,.16)}
-.name-input::placeholder{color:#c3b8d8;font-weight:600}
-
+.name-input,.code-input{width:100%;padding:15px 18px;border-radius:16px;font-size:16px;font-weight:700;color:#3b2b52;background:#fff;border:2px solid rgba(167,139,250,.25);outline:none;transition:border-color .18s, box-shadow .18s;text-align:center;letter-spacing:.15em;text-transform:uppercase}
+.name-input{text-align:left;letter-spacing:normal;text-transform:none}
+.name-input:focus,.code-input:focus{border-color:#a78bfa;box-shadow:0 0 0 4px rgba(167,139,250,.16)}
+.play-mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+@media (max-width:560px){.play-mode-grid{grid-template-columns:1fr}}
+.play-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 12px;border-radius:18px;text-align:center;background:#fff;border:2px solid rgba(167,139,250,.16);transition:all .2s cubic-bezier(.3,.8,.4,1.2);box-shadow:0 8px 20px -18px rgba(88,60,150,.8);cursor:pointer}
+.play-card .pc-emoji{font-size:32px;line-height:1}
+.play-card b{font-size:14px;font-weight:900;color:#4a3a63}
+.play-card small{font-size:11px;color:#9c8fb5;font-weight:700;line-height:1.3}
+.play-card:hover{transform:translateY(-3px);border-color:rgba(167,139,250,.4)}
+.play-card.active{border-color:transparent;background:linear-gradient(150deg,#fff0f8,#f2ecff 60%,#eaf6ff);box-shadow:0 16px 30px -18px rgba(167,139,250,.95), inset 0 0 0 2px rgba(167,139,250,.5);transform:translateY(-3px)}
 .mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 @media (max-width:560px){.mode-grid{grid-template-columns:1fr}}
-.mode-card{
-  display:flex;flex-direction:column;align-items:flex-start;gap:3px;
-  padding:15px 14px;border-radius:18px;text-align:left;
-  background:#fff;border:2px solid rgba(167,139,250,.16);
-  transition:all .2s cubic-bezier(.3,.8,.4,1.2);
-  box-shadow:0 8px 20px -18px rgba(88,60,150,.8);
-}
+.mode-card{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:15px 14px;border-radius:18px;text-align:left;background:#fff;border:2px solid rgba(167,139,250,.16);transition:all .2s ease;box-shadow:0 8px 20px -18px rgba(88,60,150,.8)}
 .mode-card .mode-emoji{font-size:24px;line-height:1;margin-bottom:4px}
 .mode-card b{font-size:15px;font-weight:900;color:#4a3a63}
 .mode-card small{font-size:11.5px;color:#9c8fb5;font-weight:700;line-height:1.35}
-.mode-card:hover{transform:translateY(-3px);border-color:rgba(167,139,250,.4)}
-.mode-card.active{
-  border-color:transparent;
-  background:linear-gradient(150deg,#fff0f8,#f2ecff 60%,#eaf6ff);
-  box-shadow:0 16px 30px -18px rgba(167,139,250,.95), inset 0 0 0 2px rgba(167,139,250,.5);
-  transform:translateY(-3px);
-}
-
+.mode-card.active{border-color:transparent;background:linear-gradient(150deg,#fff0f8,#f2ecff 60%,#eaf6ff);box-shadow:0 16px 30px -18px rgba(167,139,250,.95), inset 0 0 0 2px rgba(167,139,250,.5);transform:translateY(-2px)}
 .seg{display:inline-flex;background:#fff;border-radius:16px;padding:5px;gap:4px;border:2px solid rgba(167,139,250,.16);width:fit-content}
 .seg button{width:54px;padding:10px 0;border-radius:12px;font-weight:900;font-size:16px;color:#9c8fb5;transition:all .18s ease}
 .seg button.active{color:#fff;background:linear-gradient(135deg,#ff7ab8,#a78bfa);box-shadow:0 8px 16px -8px rgba(167,139,250,.95)}
-
 .toggle{display:flex;align-items:center;gap:12px;cursor:pointer;font-weight:800;font-size:14.5px;color:#6b5b85;user-select:none}
 .toggle input{position:absolute;opacity:0;pointer-events:none}
 .toggle .track{width:52px;height:30px;border-radius:999px;background:#e3dbf2;position:relative;transition:background .22s ease;flex:0 0 auto}
@@ -158,46 +85,28 @@ input{font-family:inherit}
 .toggle input:checked + .track{background:linear-gradient(135deg,#ff7ab8,#a78bfa)}
 .toggle input:checked + .track .thumb{transform:translateX(22px)}
 
-/* System users */
-.system-users-block{
-  margin-top:16px;padding:14px;
-  background:rgba(255,255,255,.6);
-  border:2px dashed rgba(167,139,250,.3);
-  border-radius:18px;
-}
-.system-users-head{
-  display:flex;justify-content:space-between;align-items:center;
-  font-size:13px;font-weight:800;color:#6b5b85;margin-bottom:10px;
-}
-.system-users-head .sys-count{font-size:11px;color:#a78bfa;font-weight:900;letter-spacing:.3px}
-.system-users-list{display:flex;flex-wrap:wrap;gap:8px;max-height:180px;overflow-y:auto;padding-right:2px}
-.sys-user-chip{
-  display:inline-flex;align-items:center;gap:8px;
-  padding:6px 12px 6px 6px;border-radius:999px;background:#fff;
-  border:2px solid rgba(167,139,250,.18);font-size:13px;font-weight:800;color:#4a3a63;
-  cursor:pointer;transition:all .15s ease;max-width:100%;
-}
-.sys-user-chip:hover{border-color:rgba(167,139,250,.5);transform:translateY(-1px)}
-.sys-user-chip.selected{
-  background:linear-gradient(135deg,#f0e8ff,#e8f0ff);
-  border-color:#a78bfa;box-shadow:0 6px 14px -8px rgba(167,139,250,.8);
-}
-.sys-user-chip img{width:28px;height:28px;border-radius:50%;object-fit:cover;background:#f0ecfa;flex:0 0 auto}
-.sys-user-chip .sys-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sys-user-chip .sys-check{font-size:12px;color:#a78bfa;opacity:0;transition:opacity .15s}
-.sys-user-chip.selected .sys-check{opacity:1}
-.sys-empty{font-size:12px;color:#a396bd;font-style:italic;padding:8px 4px}
+/* Room code display */
+.room-code-box{margin:18px 0;padding:18px;border-radius:20px;background:linear-gradient(150deg,#f0e8ff,#e8f0ff);border:2px dashed rgba(167,139,250,.5);text-align:center}
+.room-code-label{font-size:11px;font-weight:900;color:#8a7aa6;letter-spacing:.15em;text-transform:uppercase;margin-bottom:6px}
+.room-code-value{font-family:'Baloo 2',cursive;font-size:38px;font-weight:900;letter-spacing:.18em;color:#a78bfa;text-shadow:0 4px 12px rgba(167,139,250,.3);cursor:pointer;user-select:all}
+.room-code-hint{font-size:12px;color:#8a7aa6;font-weight:700;margin-top:6px}
 
+.waiting-players{display:flex;flex-direction:column;gap:8px;margin:16px 0}
+.waiting-player{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;background:#fff;border:2px solid rgba(167,139,250,.15)}
+.waiting-player img{width:42px;height:42px;border-radius:50%;object-fit:cover;background:#f0ecfa}
+.waiting-player .wp-name{flex:1;font-size:14px;font-weight:900;color:#4a3a63}
+.waiting-player .wp-host{font-size:10px;font-weight:900;color:#ff7ab8;background:#ffe4f1;padding:3px 8px;border-radius:999px;letter-spacing:.5px}
+.waiting-player .wp-you{font-size:10px;font-weight:900;color:#4f8dff;background:#e0edff;padding:3px 8px;border-radius:999px;letter-spacing:.5px}
+.host-controls{display:flex;flex-direction:column;gap:10px;margin:16px 0}
+.host-controls select{width:100%;padding:12px 14px;border-radius:12px;border:2px solid rgba(167,139,250,.25);background:#fff;font-size:14px;font-weight:800;color:#4a3a63;outline:none}
+.waiting-actions{display:flex;gap:10px;margin-top:16px}
+.waiting-actions .btn{flex:1}
+
+/* Existing game styles */
 .lb-block{margin-top:6px}
 .lb-block h3{margin:0 0 10px;font-family:'Baloo 2',cursive;font-size:16px;font-weight:800;color:#6b5b85;display:flex;align-items:center;gap:8px}
 .lb-list{display:flex;flex-direction:column;gap:7px}
-.lb-row{
-  display:grid;grid-template-columns:34px minmax(0,1fr) auto auto auto;gap:10px;align-items:center;
-  padding:11px 14px;border-radius:14px;background:#fff;
-  border:1px solid rgba(167,139,250,.14);
-  font-size:13px;font-weight:700;
-  box-shadow:0 6px 16px -16px rgba(88,60,150,.9);
-}
+.lb-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto auto auto;gap:10px;align-items:center;padding:11px 14px;border-radius:14px;background:#fff;border:1px solid rgba(167,139,250,.14);font-size:13px;font-weight:700;box-shadow:0 6px 16px -16px rgba(88,60,150,.9)}
 .lb-row:nth-child(1){background:linear-gradient(100deg,#fff7e0,#fffdf5);border-color:#f6d98a}
 .lb-row:nth-child(2){background:linear-gradient(100deg,#f5f7fb,#fdfdff);border-color:#d8dfeb}
 .lb-row:nth-child(3){background:linear-gradient(100deg,#fff2ea,#fffaf6);border-color:#f3cdb2}
@@ -207,193 +116,75 @@ input{font-family:inherit}
 .lb-moves{color:#8a7aa6;white-space:nowrap;font-size:12px}
 .lb-time{color:#b0a4c7;white-space:nowrap;font-size:12px}
 .lb-empty{padding:22px;text-align:center;color:#b0a4c7;font-weight:700;font-size:13.5px;background:#fff;border-radius:16px;border:1px dashed rgba(167,139,250,.3)}
-
 .layout{display:grid;grid-template-columns:242px minmax(0,1fr) 296px;gap:16px;align-items:start}
 @media (max-width:1120px){.layout{grid-template-columns:1fr}.col-players{order:3}.col-board{order:1}.col-side{order:2}}
-
 .player-list{display:flex;flex-direction:column;gap:9px}
-.pcard{
-  display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:18px;
-  background:#fff;border:2px solid rgba(167,139,250,.12);
-  transition:all .25s cubic-bezier(.3,.8,.4,1.2);
-  box-shadow:0 10px 22px -20px rgba(88,60,150,.9);
-  position:relative;overflow:hidden;
-}
+.pcard{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:18px;background:#fff;border:2px solid rgba(167,139,250,.12);transition:all .25s ease;box-shadow:0 10px 22px -20px rgba(88,60,150,.9);position:relative;overflow:hidden}
 .pcard::after{content:'';position:absolute;inset:0;border-radius:16px;pointer-events:none;box-shadow:inset 0 0 0 2px transparent;transition:box-shadow .25s}
 .pcard.active{transform:translateX(3px);background:linear-gradient(100deg,var(--soft,#fff),#fff 75%);border-color:var(--c);box-shadow:0 14px 28px -18px var(--c)}
 .pcard.active::after{box-shadow:inset 0 0 0 2px var(--c)}
-.pcard.active .pav{animation:pulseRing 1.6s ease-in-out infinite}
-@keyframes pulseRing{0%,100%{box-shadow:0 0 0 0 var(--c),0 6px 14px -6px rgba(0,0,0,.3)}50%{box-shadow:0 0 0 6px transparent,0 6px 14px -6px rgba(0,0,0,.3)}}
-.pav{
-  position:relative;width:44px;height:44px;border-radius:14px;flex:0 0 auto;
-  background:#f7f3ff;display:grid;place-items:center;
-  box-shadow:0 0 0 2.5px var(--c), 0 6px 14px -6px rgba(0,0,0,.25);
-  overflow:visible;
-}
+.pav{position:relative;width:44px;height:44px;border-radius:14px;flex:0 0 auto;background:#f7f3ff;display:grid;place-items:center;box-shadow:0 0 0 2.5px var(--c), 0 6px 14px -6px rgba(0,0,0,.25);overflow:visible}
 .pav img{width:100%;height:100%;border-radius:12px;object-fit:cover;display:block}
-.pav .av-emoji{font-size:22px;line-height:1}
-.ptag{
-  position:absolute;bottom:-7px;right:-7px;min-width:22px;height:22px;padding:0 6px;
-  border-radius:999px;background:var(--c);color:#fff;font-size:11px;font-weight:900;
-  display:grid;place-items:center;border:2px solid #fff;
-  box-shadow:0 4px 10px -4px rgba(0,0,0,.4);
-}
+.ptag{position:absolute;bottom:-7px;right:-7px;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:var(--c);color:#fff;font-size:11px;font-weight:900;display:grid;place-items:center;border:2px solid #fff;box-shadow:0 4px 10px -4px rgba(0,0,0,.4)}
 .pinfo{min-width:0;flex:1}
 .pname{font-size:13.5px;font-weight:900;color:#4a3a63;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bot-tag{font-size:9px;font-weight:900;letter-spacing:.6px;background:#eef2ff;color:#6366f1;padding:2px 5px;border-radius:5px;vertical-align:middle;margin-left:4px}
+.pname .you-badge{font-size:9px;font-weight:900;background:#e0edff;color:#4f8dff;padding:2px 6px;border-radius:5px;margin-left:4px}
+.bot-tag{font-size:9px;font-weight:900;background:#eef2ff;color:#6366f1;padding:2px 5px;border-radius:5px;vertical-align:middle;margin-left:4px}
 .pbar{height:6px;border-radius:999px;background:#f0ecfa;margin-top:6px;overflow:hidden}
 .pbar > span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--c),#a78bfa);transition:width .3s ease}
-
 .turn-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
-.turn-pill{
-  display:flex;align-items:center;gap:10px;padding:10px 18px;border-radius:999px;
-  background:rgba(255,255,255,.9);border:2px solid var(--c,#a78bfa);
-  font-weight:900;font-size:14.5px;color:#4a3a63;
-  box-shadow:0 12px 26px -18px var(--c,#a78bfa);
-  transition:border-color .3s, box-shadow .3s;
-  max-width:100%;
-}
+.turn-pill{display:flex;align-items:center;gap:10px;padding:10px 18px;border-radius:999px;background:rgba(255,255,255,.9);border:2px solid var(--c,#a78bfa);font-weight:900;font-size:14.5px;color:#4a3a63;box-shadow:0 12px 26px -18px var(--c,#a78bfa);transition:border-color .3s;max-width:100%}
 .turn-pill .dot{width:11px;height:11px;border-radius:50%;background:var(--c,#a78bfa);flex:0 0 auto}
 .turn-pill .txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
-.board-shell{
-  padding:12px;border-radius:30px;
-  background:linear-gradient(150deg,rgba(255,255,255,.9),rgba(245,240,255,.8));
-  border:1px solid rgba(167,139,250,.22);
-  box-shadow:0 28px 60px -34px rgba(88,60,150,.75), inset 0 1px 0 rgba(255,255,255,.7);
-}
-.board{
-  position:relative;width:100%;aspect-ratio:1/1;max-width:640px;margin:0 auto;
-  border-radius:22px;overflow:hidden;
-  background:#fff;
-  box-shadow:inset 0 0 0 1px rgba(167,139,250,.15);
-  container-type:inline-size;
-  isolation:isolate;
-}
+.board-shell{padding:12px;border-radius:30px;background:linear-gradient(150deg,rgba(255,255,255,.9),rgba(245,240,255,.8));border:1px solid rgba(167,139,250,.22);box-shadow:0 28px 60px -34px rgba(88,60,150,.75), inset 0 1px 0 rgba(255,255,255,.7)}
+.board{position:relative;width:100%;aspect-ratio:1/1;max-width:640px;margin:0 auto;border-radius:22px;overflow:hidden;background:#fff;box-shadow:inset 0 0 0 1px rgba(167,139,250,.15);container-type:inline-size;isolation:isolate}
 .cells{position:absolute;inset:0;display:grid;grid-template-columns:repeat(10,1fr);grid-template-rows:repeat(10,1fr)}
-.cell{
-  position:relative;display:flex;align-items:flex-start;justify-content:flex-start;
-  padding:3px 5px;
-  border:0.5px solid rgba(167,139,250,.13);
-  font-size:clamp(7px,2.05cqw,13px);
-  font-weight:800;color:rgba(90,70,120,.42);
-  overflow:hidden;
-}
-.cell .mark{position:absolute;right:2px;bottom:1px;font-size:clamp(8px,2.6cqw,15px);line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.12))}
+.cell{position:relative;display:flex;align-items:flex-start;justify-content:flex-start;padding:3px 5px;border:0.5px solid rgba(167,139,250,.13);font-size:clamp(7px,2.05cqw,13px);font-weight:800;color:rgba(90,70,120,.42);overflow:hidden}
+.cell .mark{position:absolute;right:2px;bottom:1px;font-size:clamp(8px,2.6cqw,15px);line-height:1}
 .cell.is-ladder{background-image:linear-gradient(135deg,rgba(251,191,36,.16),transparent 62%)}
 .cell.is-snake{background-image:linear-gradient(135deg,rgba(239,68,68,.13),transparent 62%)}
 .cell.is-goal{background-image:radial-gradient(circle at 50% 50%,#ffe9a8,rgba(255,233,168,0) 78%)}
 .cell.is-start{background-image:radial-gradient(circle at 50% 50%,#c9f2e2,rgba(201,242,226,0) 78%)}
-
 #boardSvg{position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none}
 .tokens{position:absolute;inset:0;z-index:3;pointer-events:none}
-
-.token{
-  position:absolute;width:5.6%;height:5.6%;
-  transform:translate(-50%,-50%);
-  transition:left .19s cubic-bezier(.35,.85,.4,1.15), top .19s cubic-bezier(.35,.85,.4,1.15);
-  border-radius:50%;background:#fff;
-  display:grid;place-items:center;
-  box-shadow:0 0 0 2.5px var(--c), 0 8px 16px -6px rgba(0,0,0,.42);
-  z-index:20;
-  will-change:left,top;
-}
+.token{position:absolute;width:5.6%;height:5.6%;transform:translate(-50%,-50%);transition:left .19s cubic-bezier(.35,.85,.4,1.15), top .19s cubic-bezier(.35,.85,.4,1.15);border-radius:50%;background:#fff;display:grid;place-items:center;box-shadow:0 0 0 2.5px var(--c), 0 8px 16px -6px rgba(0,0,0,.42);z-index:20;will-change:left,top}
 .token img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 .token .tok-emoji{font-size:clamp(10px,3.4cqw,20px);line-height:1}
-.token .tok-badge{
-  position:absolute;bottom:-22%;right:-22%;
-  width:46%;height:46%;border-radius:50%;
-  background:var(--c);color:#fff;border:1.5px solid #fff;
-  font-size:clamp(5px,1.5cqw,9px);font-weight:900;
-  display:grid;place-items:center;
-  box-shadow:0 2px 6px rgba(0,0,0,.3);
-}
+.token .tok-badge{position:absolute;bottom:-22%;right:-22%;width:46%;height:46%;border-radius:50%;background:var(--c);color:#fff;border:1.5px solid #fff;font-size:clamp(5px,1.5cqw,9px);font-weight:900;display:grid;place-items:center;box-shadow:0 2px 6px rgba(0,0,0,.3)}
 .token.active{animation:tokenBounce 1.1s ease-in-out infinite}
 @keyframes tokenBounce{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-58%) scale(1.1)}}
-
 .dice-panel{display:flex;flex-direction:column;align-items:center;gap:14px}
 .dice-row{display:flex;gap:16px;justify-content:center;align-items:center;min-height:82px;perspective:800px}
 .dice-stage{width:72px;height:72px;perspective:700px;flex:0 0 auto}
 .dice-cube{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform 1.05s cubic-bezier(.22,.9,.28,1)}
-.dice-cube.rolling{animation:diceShake .5s ease-in-out}
-@keyframes diceShake{0%,100%{filter:blur(0)}30%{filter:blur(.6px)}60%{filter:blur(.3px)}}
-.dice-face{
-  position:absolute;inset:0;border-radius:16px;
-  background:linear-gradient(150deg,#ffffff,#f3edff);
-  box-shadow:inset 0 0 0 2px #e6dcff, inset 0 -7px 14px rgba(167,139,250,.2), 0 4px 10px rgba(88,60,150,.1);
-  display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);
-  padding:9px;
-}
-.pip{
-  width:11px;height:11px;border-radius:50%;align-self:center;justify-self:center;
-  background:radial-gradient(circle at 32% 28%,#b9a3ff,#6d4bd8 78%);
-  box-shadow:inset 0 -1px 2px rgba(0,0,0,.28), 0 1px 2px rgba(255,255,255,.6);
-}
+.dice-face{position:absolute;inset:0;border-radius:16px;background:linear-gradient(150deg,#ffffff,#f3edff);box-shadow:inset 0 0 0 2px #e6dcff, inset 0 -7px 14px rgba(167,139,250,.2), 0 4px 10px rgba(88,60,150,.1);display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:9px}
+.pip{width:11px;height:11px;border-radius:50%;align-self:center;justify-self:center;background:radial-gradient(circle at 32% 28%,#b9a3ff,#6d4bd8 78%);box-shadow:inset 0 -1px 2px rgba(0,0,0,.28), 0 1px 2px rgba(255,255,255,.6)}
 .roll-hint{font-size:12.5px;font-weight:800;color:#a396bd;text-align:center;min-height:18px}
-
-.log{
-  display:flex;flex-direction:column;gap:6px;max-height:290px;overflow-y:auto;
-  padding-right:4px;scrollbar-width:thin;scrollbar-color:#d9cff0 transparent;
-}
+.log{display:flex;flex-direction:column;gap:6px;max-height:290px;overflow-y:auto;padding-right:4px;scrollbar-width:thin;scrollbar-color:#d9cff0 transparent}
 .log::-webkit-scrollbar{width:6px}
 .log::-webkit-scrollbar-thumb{background:#d9cff0;border-radius:99px}
-.log-item{
-  font-size:12.5px;font-weight:700;line-height:1.45;color:#6b5b85;
-  padding:8px 11px;border-radius:11px;background:#fff;
-  border-left:3px solid var(--c,#c9bde8);
-  box-shadow:0 4px 12px -12px rgba(88,60,150,.9);
-  animation:logIn .3s ease;
-}
+.log-item{font-size:12.5px;font-weight:700;line-height:1.45;color:#6b5b85;padding:8px 11px;border-radius:11px;background:#fff;border-left:3px solid var(--c,#c9bde8);box-shadow:0 4px 12px -12px rgba(88,60,150,.9);animation:logIn .3s ease}
 @keyframes logIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
-
 #fx{position:fixed;inset:0;pointer-events:none;z-index:9000}
-.overlay{
-  position:fixed;inset:0;z-index:8000;display:grid;place-items:center;
-  padding:20px;background:rgba(60,40,95,.42);
-  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-  animation:fadeIn .3s ease;
-}
+.overlay{position:fixed;inset:0;z-index:8000;display:grid;place-items:center;padding:20px;background:rgba(60,40,95,.42);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);animation:fadeIn .3s ease}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-.win-card{
-  width:min(520px,100%);max-height:92vh;overflow-y:auto;
-  background:linear-gradient(170deg,#fff,#fdf9ff 55%,#f5f9ff);
-  border-radius:30px;padding:28px 24px;
-  border:1px solid rgba(167,139,250,.25);
-  box-shadow:0 40px 90px -30px rgba(60,30,110,.6);
-  text-align:center;
-  animation:popIn .45s cubic-bezier(.2,1.2,.4,1);
-}
+.win-card{width:min(520px,100%);max-height:92vh;overflow-y:auto;background:linear-gradient(170deg,#fff,#fdf9ff 55%,#f5f9ff);border-radius:30px;padding:28px 24px;border:1px solid rgba(167,139,250,.25);box-shadow:0 40px 90px -30px rgba(60,30,110,.6);text-align:center;animation:popIn .45s cubic-bezier(.2,1.2,.4,1)}
 @keyframes popIn{from{opacity:0;transform:scale(.86) translateY(20px)}to{opacity:1;transform:none}}
 .win-emoji{font-size:64px;line-height:1;animation:bounce 1.2s ease-in-out infinite;filter:drop-shadow(0 12px 20px rgba(251,191,36,.5))}
 @keyframes bounce{0%,100%{transform:translateY(0) rotate(-6deg)}50%{transform:translateY(-12px) rotate(6deg)}}
-.win-card h2{
-  margin:12px 0 6px;font-family:'Baloo 2',cursive;font-size:30px;
-  background:linear-gradient(120deg,#ff6fae,#a78bfa,#38bdf8);
-  -webkit-background-clip:text;background-clip:text;color:transparent;
-}
+.win-card h2{margin:12px 0 6px;font-family:'Baloo 2',cursive;font-size:30px;background:linear-gradient(120deg,#ff6fae,#a78bfa,#38bdf8);-webkit-background-clip:text;background-clip:text;color:transparent}
 .win-card > p{margin:0 0 18px;color:#8a7aa6;font-weight:700;font-size:14.5px}
 .win-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:20px}
-.stat{background:#fff;border-radius:16px;padding:13px 8px;border:1px solid rgba(167,139,250,.18);box-shadow:0 8px 20px -20px rgba(88,60,150,.9)}
+.stat{background:#fff;border-radius:16px;padding:13px 8px;border:1px solid rgba(167,139,250,.18)}
 .stat b{display:block;font-size:19px;font-family:'Baloo 2',cursive;color:#4a3a63;line-height:1.2}
 .stat span{font-size:10.5px;font-weight:800;color:#a396bd;letter-spacing:.5px;text-transform:uppercase}
 .win-actions{display:flex;gap:10px;margin-bottom:22px}
 .win-actions .btn{flex:1}
-.win-card .lb-block{text-align:left}
-
-.hint-box{
-  font-size:12px;font-weight:700;color:#9c8fb5;line-height:1.6;
-  background:#faf7ff;border:1px dashed rgba(167,139,250,.35);
-  border-radius:14px;padding:12px 14px;
-}
-.toast{
-  position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
-  padding:12px 22px;border-radius:999px;background:rgba(59,43,82,.94);color:#fff;
-  font-weight:800;font-size:14px;z-index:9500;opacity:0;pointer-events:none;
-  transition:all .32s cubic-bezier(.2,.9,.3,1.2);
-  box-shadow:0 16px 34px -14px rgba(0,0,0,.6);
-  max-width:88vw;text-align:center;
-}
+.hint-box{font-size:12px;font-weight:700;color:#9c8fb5;line-height:1.6;background:#faf7ff;border:1px dashed rgba(167,139,250,.35);border-radius:14px;padding:12px 14px}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);padding:12px 22px;border-radius:999px;background:rgba(59,43,82,.94);color:#fff;font-weight:800;font-size:14px;z-index:9500;opacity:0;pointer-events:none;transition:all .32s cubic-bezier(.2,.9,.3,1.2);box-shadow:0 16px 34px -14px rgba(0,0,0,.6);max-width:88vw;text-align:center}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.spinner-inline{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
 `;
 
   /* ============================ HTML ============================ */
@@ -405,30 +196,118 @@ input{font-family:inherit}
       <div class="brand">
         <span class="logo">🐍</span>
         <span>Rắn &amp; Thang</span>
-        <span class="badge">PREMIUM</span>
+        <span class="badge">ONLINE</span>
       </div>
       <div class="top-actions">
         <button class="icon-btn" id="soundBtn" title="Bật/tắt âm thanh" type="button">🔊</button>
       </div>
     </header>
 
-    <section id="setupScreen" class="setup">
+    <!-- ============ MAIN MENU ============ -->
+    <section id="menuScreen" class="setup">
       <div class="panel">
         <div class="hero">
           <div class="hero-emojis">🪜 🎲 🐍</div>
           <h1>Leo thang, né rắn!</h1>
-          <p>Đổ xúc xắc, phiêu lưu qua 100 ô, leo những chiếc thang lên tận mây và đừng để rắn cắn nhé!</p>
+          <p>Chơi online cùng đồng nghiệp, hoặc đấu bot một mình!</p>
         </div>
         <div class="field" style="margin-top:20px">
-          <label for="playerName">Tên của bạn</label>
+          <label for="playerName">Tên hiển thị của bạn</label>
           <input id="playerName" class="name-input" maxlength="16" placeholder="Nhập tên hiệp sĩ..." autocomplete="off" />
         </div>
         <div class="field" style="margin-top:18px">
+          <label>Chọn kiểu chơi</label>
+          <div class="play-mode-grid" id="playModeGrid">
+            <button class="play-card active" data-playmode="online" type="button">
+              <span class="pc-emoji">🌐</span>
+              <b>Online</b>
+              <small>Tạo phòng, rủ đồng nghiệp cùng chơi</small>
+            </button>
+            <button class="play-card" data-playmode="bot" type="button">
+              <span class="pc-emoji">🤖</span>
+              <b>Đấu Bot</b>
+              <small>Một mình với bot, luyện tay</small>
+            </button>
+            <button class="play-card" data-playmode="local" type="button">
+              <span class="pc-emoji">👥</span>
+              <b>Cùng máy</b>
+              <small>Nhiều người chung 1 máy</small>
+            </button>
+          </div>
+        </div>
+        <div style="margin-top:20px">
+          <button class="btn btn-primary btn-lg" id="continueBtn" type="button">Tiếp tục →</button>
+        </div>
+      </div>
+      <div class="panel lb-block">
+        <h3>🏆 Bảng xếp hạng</h3>
+        <div class="lb-list" id="leaderboardSetup"><div class="lb-empty">Đang tải...</div></div>
+      </div>
+    </section>
+
+    <!-- ============ ONLINE: TẠO/JOIN ============ -->
+    <section id="onlineScreen" class="setup" hidden>
+      <div class="panel">
+        <div style="text-align:center;margin-bottom:20px">
+          <div style="font-size:48px;line-height:1;margin-bottom:6px">🌐</div>
+          <h2 style="margin:0;font-family:'Baloo 2',cursive;font-size:24px;color:#4a3a63">Chơi Online</h2>
+          <p style="margin:8px 0 0;color:#8a7aa6;font-size:13.5px;font-weight:700">Tạo phòng mới hoặc vào phòng bằng mã</p>
+        </div>
+        <button class="btn btn-primary btn-lg" id="createRoomBtn" type="button">➕ Tạo phòng mới</button>
+        <div style="text-align:center;color:#a396bd;font-weight:800;font-size:13px;margin:18px 0">— hoặc —</div>
+        <div class="field">
+          <label for="joinCodeInput">Nhập mã phòng</label>
+          <input id="joinCodeInput" class="code-input" maxlength="6" placeholder="ABC123" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        </div>
+        <div style="margin-top:14px">
+          <button class="btn btn-ghost btn-lg" id="joinRoomBtn" type="button">🔗 Vào phòng</button>
+        </div>
+        <div style="margin-top:16px;text-align:center">
+          <button class="btn" id="backFromOnlineBtn" type="button" style="font-size:13px;padding:8px 16px;color:#8a7aa6">← Quay lại</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ WAITING ROOM ============ -->
+    <section id="waitingScreen" class="setup" hidden>
+      <div class="panel">
+        <h2 style="margin:0 0 4px;font-family:'Baloo 2',cursive;font-size:22px;color:#4a3a63;text-align:center">🚪 Phòng chờ</h2>
+        <p style="margin:0;text-align:center;color:#8a7aa6;font-size:13px;font-weight:700">Chia sẻ mã này cho đồng nghiệp để cùng chơi</p>
+        <div class="room-code-box">
+          <div class="room-code-label">MÃ PHÒNG</div>
+          <div class="room-code-value" id="roomCodeValue">------</div>
+          <div class="room-code-hint">Nhấn để copy</div>
+        </div>
+        <div style="font-size:12px;font-weight:900;color:#8a7aa6;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">👥 Người chơi (<span id="waitingCount">0</span>/4)</div>
+        <div class="waiting-players" id="waitingPlayers"></div>
+        <div class="host-controls" id="hostControls">
+          <div style="font-size:12px;font-weight:900;color:#8a7aa6;letter-spacing:.1em;text-transform:uppercase">Chọn chế độ</div>
+          <select id="hostModeSelect">
+            <option value="classic">🎲 Cổ điển (1 xúc xắc)</option>
+            <option value="speed">⚡ Tốc độ (2 xúc xắc)</option>
+            <option value="chaos">🌪️ Hỗn loạn (sự kiện ngẫu nhiên)</option>
+          </select>
+          <button class="btn btn-primary btn-lg" id="hostStartBtn" type="button">🚀 Bắt đầu trò chơi</button>
+        </div>
+        <div class="waiting-actions">
+          <button class="btn btn-ghost" id="leaveRoomBtn" type="button">🚪 Rời phòng</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ BOT / LOCAL SETUP ============ -->
+    <section id="localSetupScreen" class="setup" hidden>
+      <div class="panel">
+        <div style="text-align:center;margin-bottom:16px">
+          <div style="font-size:48px;line-height:1;margin-bottom:6px" id="localSetupEmoji">🤖</div>
+          <h2 style="margin:0;font-family:'Baloo 2',cursive;font-size:22px;color:#4a3a63" id="localSetupTitle">Đấu với Bot</h2>
+        </div>
+        <div class="field">
           <label>Chế độ chơi</label>
           <div class="mode-grid" id="modeGrid">
-            <button class="mode-card active" data-mode="classic" type="button"><span class="mode-emoji">🎲</span><b>Cổ điển</b><small>1 xúc xắc · nhịp thư giãn</small></button>
-            <button class="mode-card" data-mode="speed" type="button"><span class="mode-emoji">⚡</span><b>Tốc độ</b><small>2 xúc xắc · về đích nhanh</small></button>
-            <button class="mode-card" data-mode="chaos" type="button"><span class="mode-emoji">🌪️</span><b>Hỗn loạn</b><small>Sự kiện ngẫu nhiên · lật kèo</small></button>
+            <button class="mode-card active" data-mode="classic" type="button"><span class="mode-emoji">🎲</span><b>Cổ điển</b><small>1 xúc xắc</small></button>
+            <button class="mode-card" data-mode="speed" type="button"><span class="mode-emoji">⚡</span><b>Tốc độ</b><small>2 xúc xắc</small></button>
+            <button class="mode-card" data-mode="chaos" type="button"><span class="mode-emoji">🌪️</span><b>Hỗn loạn</b><small>Sự kiện</small></button>
           </div>
         </div>
         <div class="field" style="margin-top:18px">
@@ -439,37 +318,19 @@ input{font-family:inherit}
             <button data-count="4" type="button">4</button>
           </div>
         </div>
-        <div style="margin-top:18px">
-          <label class="toggle">
-            <input type="checkbox" id="vsBot" checked />
-            <span class="track"><span class="thumb"></span></span>
-            <span>Đấu với máy 🤖 &nbsp;<em style="font-style:normal;color:#b0a4c7;font-weight:700">(tắt = chơi chung một máy)</em></span>
-          </label>
-        </div>
-
-        <div class="system-users-block">
-          <div class="system-users-head">
-            <span>👥 Đối thủ từ hệ thống</span>
-            <span class="sys-count" id="sysCount">0/3</span>
-          </div>
-          <div class="system-users-list" id="systemUsersList">
-            <div class="sys-empty">Đang tải user…</div>
-          </div>
-        </div>
-
         <div style="margin-top:20px">
-          <button class="btn btn-primary btn-lg" id="startBtn" type="button">Bắt đầu chơi 🚀</button>
+          <button class="btn btn-primary btn-lg" id="startLocalBtn" type="button">Bắt đầu chơi 🚀</button>
+        </div>
+        <div style="margin-top:14px;text-align:center">
+          <button class="btn" id="backFromLocalBtn" type="button" style="font-size:13px;padding:8px 16px;color:#8a7aa6">← Quay lại</button>
         </div>
         <div class="hint-box" style="margin-top:16px">
-          💡 <b>Luật chơi:</b> Tung xúc xắc để di chuyển. Rơi vào <b>chân thang 🪜</b> → leo lên. Rơi vào <b>đầu rắn 🐍</b> → tuột xuống. Ai tới hoặc vượt ô <b>100</b> trước sẽ thắng!
+          💡 <b>Luật chơi:</b> Rơi vào <b>chân thang 🪜</b> → leo lên. Rơi vào <b>đầu rắn 🐍</b> → tuột xuống. Ai tới hoặc vượt ô <b>100</b> trước sẽ thắng!
         </div>
-      </div>
-      <div class="panel lb-block">
-        <h3>🏆 Bảng xếp hạng</h3>
-        <div class="lb-list" id="leaderboardSetup"><div class="lb-empty">Đang tải...</div></div>
       </div>
     </section>
 
+    <!-- ============ GAME SCREEN ============ -->
     <section id="gameScreen" hidden>
       <div class="layout">
         <aside class="panel col-players">
@@ -511,15 +372,14 @@ input{font-family:inherit}
     <div class="win-card">
       <div class="win-emoji" id="winEmoji">🏆</div>
       <h2 id="winTitle">Chiến thắng!</h2>
-      <p id="winSub">Chúc mừng bạn đã chạm tới ô 100!</p>
+      <p id="winSub">Chúc mừng!</p>
       <div class="win-stats">
         <div class="stat"><b id="statMoves">0</b><span>Lượt</span></div>
         <div class="stat"><b id="statTime">0:00</b><span>Thời gian</span></div>
         <div class="stat"><b id="statMode">—</b><span>Chế độ</span></div>
       </div>
       <div class="win-actions">
-        <button class="btn btn-primary" id="playAgainBtn" type="button">Chơi lại 🔁</button>
-        <button class="btn btn-ghost" id="homeBtn" type="button">Trang chủ 🏠</button>
+        <button class="btn btn-primary" id="playAgainBtn" type="button">Về sảnh 🔁</button>
       </div>
       <div class="lb-block">
         <h3>🏆 Bảng xếp hạng</h3>
@@ -532,7 +392,7 @@ input{font-family:inherit}
 </div>
 `;
 
-  /* ============================ Build host + shadow ============================ */
+  /* ============================ Build shadow ============================ */
   var host = document.createElement('div');
   host.id = 'snakeGameHost';
   host.style.cssText = 'position:fixed;inset:0;z-index:9500;display:none;';
@@ -540,27 +400,18 @@ input{font-family:inherit}
   shadow.innerHTML = '<style>' + GAME_CSS + '</style>' + GAME_HTML;
   document.body.appendChild(host);
 
-  /* Close button (ngoài shadow) */
   var closeBtn = document.createElement('button');
   closeBtn.id = 'snakeGameClose';
   closeBtn.type = 'button';
   closeBtn.setAttribute('aria-label', 'Đóng game');
   closeBtn.textContent = '✕';
-  closeBtn.style.cssText =
-    'position:fixed;top:calc(10px + env(safe-area-inset-top,0px));right:10px;' +
-    'z-index:9600;width:44px;height:44px;border-radius:50%;' +
-    'background:rgba(59,43,82,.72);color:#fff;font-size:22px;font-weight:700;' +
-    'display:none;place-items:center;border:1px solid rgba(255,255,255,.25);' +
-    'box-shadow:0 6px 18px -6px rgba(0,0,0,.5);' +
-    'backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);' +
-    'cursor:pointer;padding:0;line-height:1;font-family:system-ui,-apple-system,sans-serif';
+  closeBtn.style.cssText = 'position:fixed;top:calc(10px + env(safe-area-inset-top,0px));right:10px;z-index:9600;width:44px;height:44px;border-radius:50%;background:rgba(59,43,82,.72);color:#fff;font-size:22px;font-weight:700;display:none;place-items:center;border:1px solid rgba(255,255,255,.25);box-shadow:0 6px 18px -6px rgba(0,0,0,.5);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);cursor:pointer;padding:0;line-height:1;font-family:system-ui,-apple-system,sans-serif';
   document.body.appendChild(closeBtn);
 
   /* ============================ Helpers ============================ */
   var $ = function (id) { return shadow.getElementById(id); };
   var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
   var rnd = function (n) { return Math.floor(Math.random() * n); };
-
   function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -587,6 +438,8 @@ input{font-family:inherit}
   var CFG = (typeof window !== 'undefined' && window.__SRANK_CONFIG) || FALLBACK;
   var LB_TABLE = 'snake_ladder_scores';
   var LS_KEY = 'srank_snake_ladder_scores';
+  var ROOMS_T = 'snake_rooms';
+  var ROOM_PLAYERS_T = 'snake_room_players';
 
   var sb = null;
   try {
@@ -600,7 +453,6 @@ input{font-family:inherit}
   /* ============================ Board geometry ============================ */
   var LADDERS = { 1: 38, 4: 14, 9: 31, 21: 42, 28: 84, 36: 44, 51: 67, 71: 91, 80: 100 };
   var SNAKES  = { 16: 6, 47: 26, 49: 11, 56: 53, 62: 19, 64: 60, 87: 24, 93: 73, 95: 75, 98: 78 };
-
   function posToXY(pos) {
     var idx = pos - 1;
     var rowFromBottom = Math.floor(idx / 10);
@@ -615,8 +467,7 @@ input{font-family:inherit}
     var A = posToXY(a), B = posToXY(b);
     var dx = B.x - A.x, dy = B.y - A.y;
     var len = Math.hypot(dx, dy) || 1;
-    var px = -dy / len, py = dx / len;
-    var w = 1.7;
+    var px = -dy / len, py = dx / len, w = 1.7;
     var a1 = [A.x + px * w, A.y + py * w], a2 = [A.x - px * w, A.y - py * w];
     var b1 = [B.x + px * w, B.y + py * w], b2 = [B.x - px * w, B.y - py * w];
     var s = '<g stroke="#f0b429" stroke-linecap="round" opacity="0.95">';
@@ -625,39 +476,31 @@ input{font-family:inherit}
     var n = Math.max(2, Math.round(len / 7));
     for (var i = 1; i < n; i++) {
       var t = i / n;
-      var p1x = a1[0] + (b1[0] - a1[0]) * t, p1y = a1[1] + (b1[1] - a1[1]) * t;
-      var p2x = a2[0] + (b2[0] - a2[0]) * t, p2y = a2[1] + (b2[1] - a2[1]) * t;
-      s += '<line x1="' + p1x + '" y1="' + p1y + '" x2="' + p2x + '" y2="' + p2y + '" stroke-width="0.85" stroke="#fbd97a"/>';
+      s += '<line x1="' + (a1[0] + (b1[0] - a1[0]) * t) + '" y1="' + (a1[1] + (b1[1] - a1[1]) * t) + '" x2="' + (a2[0] + (b2[0] - a2[0]) * t) + '" y2="' + (a2[1] + (b2[1] - a2[1]) * t) + '" stroke-width="0.85" stroke="#fbd97a"/>';
     }
     s += '</g>';
     return s;
   }
-
   var SNAKE_COLORS = ['#7c5cff', '#22c98a', '#ff5fa2', '#f6a723', '#38bdf8', '#f97316', '#a855f7', '#14b8a6', '#ef4444', '#8b5cf6'];
-
   function snakeArt(headPos, tailPos, idx) {
     var H = posToXY(headPos), T = posToXY(tailPos);
     var mx = (H.x + T.x) / 2, my = (H.y + T.y) / 2;
     var dx = T.x - H.x, dy = T.y - H.y;
     var len = Math.hypot(dx, dy) || 1;
     var off = Math.min(17, len * 0.42) * (idx % 2 ? 1 : -1);
-    var cx = mx + (-dy / len) * off;
-    var cy = my + (dx / len) * off;
+    var cx = mx + (-dy / len) * off, cy = my + (dx / len) * off;
     var color = SNAKE_COLORS[idx % SNAKE_COLORS.length];
-    var hdx = H.x - cx, hdy = H.y - cy;
-    var hl = Math.hypot(hdx, hdy) || 1;
-    var ux = hdx / hl, uy = hdy / hl;
-    var ex = -uy, ey = ux;
+    var hdx = H.x - cx, hdy = H.y - cy, hl = Math.hypot(hdx, hdy) || 1;
+    var ux = hdx / hl, uy = hdy / hl, ex = -uy, ey = ux;
     var d = 'M ' + H.x + ' ' + H.y + ' Q ' + cx + ' ' + cy + ' ' + T.x + ' ' + T.y;
     var s = '<g>';
     s += '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2.7" stroke-linecap="round" opacity="0.9"/>';
-    s += '<path d="' + d + '" fill="none" stroke="#ffffff" stroke-width="0.75" stroke-linecap="round" stroke-dasharray="1.3 1.9" opacity="0.6"/>';
+    s += '<path d="' + d + '" fill="none" stroke="#fff" stroke-width="0.75" stroke-linecap="round" stroke-dasharray="1.3 1.9" opacity="0.6"/>';
     s += '<circle cx="' + T.x + '" cy="' + T.y + '" r="1.05" fill="' + color + '"/>';
     s += '<circle cx="' + H.x + '" cy="' + H.y + '" r="2.5" fill="' + color + '"/>';
     s += '<circle cx="' + H.x + '" cy="' + H.y + '" r="2.5" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="0.4"/>';
-    var eo = 1.05;
-    var hx1 = H.x + ex * eo + ux * 0.55, hy1 = H.y + ey * eo + uy * 0.55;
-    var hx2 = H.x - ex * eo + ux * 0.55, hy2 = H.y - ey * eo + uy * 0.55;
+    var hx1 = H.x + ex * 1.05 + ux * 0.55, hy1 = H.y + ey * 1.05 + uy * 0.55;
+    var hx2 = H.x - ex * 1.05 + ux * 0.55, hy2 = H.y - ey * 1.05 + uy * 0.55;
     s += '<circle cx="' + hx1 + '" cy="' + hy1 + '" r="0.62" fill="#fff"/>';
     s += '<circle cx="' + hx2 + '" cy="' + hy2 + '" r="0.62" fill="#fff"/>';
     s += '<circle cx="' + (hx1 + ux * 0.16) + '" cy="' + (hy1 + uy * 0.16) + '" r="0.31" fill="#241242"/>';
@@ -693,8 +536,6 @@ input{font-family:inherit}
     roll: function () { for (var i = 0; i < 6; i++) beep(320 + i * 90, 0.06, 'triangle', 0.03, i * 0.07); },
     ladder: function () { [523, 659, 784, 1046].forEach(function (f, i) { beep(f, 0.16, 'sine', 0.055, i * 0.075); }); },
     snake:  function () { [700, 560, 440, 330].forEach(function (f, i) { beep(f, 0.16, 'sawtooth', 0.045, i * 0.08); }); },
-    swap:   function () { beep(520, 0.1, 'triangle', 0.05); beep(780, 0.14, 'triangle', 0.05, 0.09); },
-    boost:  function () { [440, 660, 880].forEach(function (f, i) { beep(f, 0.12, 'sine', 0.05, i * 0.06); }); },
     win:    function () { [523, 659, 784, 1046, 1318].forEach(function (f, i) { beep(f, 0.32, 'sine', 0.06, i * 0.11); }); }
   };
 
@@ -702,7 +543,6 @@ input{font-family:inherit}
   var PIP_MAP = { 1:[[2,2]], 2:[[1,1],[3,3]], 3:[[1,1],[2,2],[3,3]], 4:[[1,1],[1,3],[3,1],[3,3]], 5:[[1,1],[1,3],[2,2],[3,1],[3,3]], 6:[[1,1],[1,3],[2,1],[2,3],[3,1],[3,3]] };
   var FACE_TF = { 1:'translateZ(36px)', 2:'rotateY(90deg) translateZ(36px)', 3:'rotateX(90deg) translateZ(36px)', 4:'rotateX(-90deg) translateZ(36px)', 5:'rotateY(-90deg) translateZ(36px)', 6:'rotateY(180deg) translateZ(36px)' };
   var FACE_ROT = { 1:[0,0], 2:[0,-90], 3:[-90,0], 4:[90,0], 5:[0,90], 6:[0,180] };
-
   function makeDice(el) {
     el.innerHTML = '';
     for (var f = 1; f <= 6; f++) {
@@ -742,131 +582,91 @@ input{font-family:inherit}
 
   /* ============================ State ============================ */
   var PLAYER_STYLES = [
-    { color: '#ff5fa2', soft: '#ffe4f1', emoji: '🦄' },
-    { color: '#4f8dff', soft: '#e0edff', emoji: '🐬' },
-    { color: '#18c08a', soft: '#dcf9ee', emoji: '🐸' },
-    { color: '#f6a723', soft: '#ffefd4', emoji: '🦊' }
+    { color: '#ff5fa2', soft: '#ffe4f1' },
+    { color: '#4f8dff', soft: '#e0edff' },
+    { color: '#18c08a', soft: '#dcf9ee' },
+    { color: '#f6a723', soft: '#ffefd4' }
   ];
-  var BOT_NAMES = ['Mèo Bông', 'Gấu Mật', 'Thỏ Ngọc', 'Cáo Lửa'];
+  var BOT_NAMES = ['Mèo Bông', 'Gấu Mật', 'Thỏ Ngọc'];
 
   var state = {
-    mode: 'classic', count: 2, vsBot: true,
-    players: [], current: 0, busy: false, over: false, moves: 0, startTime: 0
+    playMode: 'online',  // online | bot | local
+    mode: 'classic',
+    count: 2,
+    players: [],
+    current: 0,
+    busy: false,
+    over: false,
+    moves: 0,
+    startTime: 0
   };
   var dice0 = null, dice1 = null;
 
-  var systemUsers = [];          // [{id, username, name, avatar}]
-  var selectedUserIds = new Set();
+  // Online room state
+  var room = null;
+  var roomPlayers = [];
+  var roomChannel = null;
+  var myUsername = '';
+  var myProfile = null;
+  var isHost = false;
+  var lastRollTs = 0;
+  var animating = {};
 
   function avatarUrl(seed) {
     return 'https://api.dicebear.com/9.x/adventurer/svg?seed=' + encodeURIComponent(seed) +
       '&backgroundColor=ffd5dc,ffdfbf,c0aede,b6e3f4,d1d4f9&radius=14';
   }
-
-  /* ============================ System users ============================ */
   function getCurrentUsername() {
     try {
       var keys = ['srank_username', 'srank_user', 'auth_username', 'username'];
       for (var i = 0; i < keys.length; i++) {
         var v = localStorage.getItem(keys[i]);
         if (v) {
-          try { var obj = JSON.parse(v); return obj.username || obj.name || v; } catch (_) { return v; }
+          try { var o = JSON.parse(v); return o.username || o.name || v; } catch (_) { return v; }
         }
       }
       if (window.SRANK_STATE && window.SRANK_STATE.currentUser) {
         return window.SRANK_STATE.currentUser.username || window.SRANK_STATE.currentUser.name || '';
       }
       var el = document.getElementById('logoutName');
-      if (el && el.textContent && el.textContent.trim()) return el.textContent.trim();
+      if (el && el.textContent.trim()) return el.textContent.trim();
     } catch (e) {}
     return '';
   }
-
-  async function fetchSystemUsers() {
-    var el = $('systemUsersList');
-    if (!sb) { el.innerHTML = '<div class="sys-empty">Chưa kết nối Supabase</div>'; return; }
-
-    var me = getCurrentUsername().toLowerCase();
-    var usersTable = (CFG && CFG.USERS_TABLE) || 'public_players';
-
-    el.innerHTML = '<div class="sys-empty">Đang tải user…</div>';
-
-    try {
-      var res = await sb.from(usersTable).select('*').limit(500);
-      if (res.error) throw res.error;
-
-      systemUsers = (res.data || [])
-        .filter(function (u) {
-          var uname = (u.username || '').toLowerCase();
-          var dname = (u.display_name || '').toLowerCase();
-          if (!uname && !dname) return false;
-          if (me && (uname === me || dname === me)) return false;
-          return true;
-        })
-        .map(function (u, i) {
-          var uname = String(u.username || '').toLowerCase();
-          var dname = String(u.display_name || u.username || ('User ' + i)).slice(0, 32);
-          return {
-            id: String(u.id || uname || i),
-            username: uname,
-            name: dname,
-            avatar: u.avatar_url || avatarUrl(dname + '-' + (u.id || i))
-          };
-        })
-        .sort(function (a, b) { return a.name.localeCompare(b.name, 'vi'); });
-
-      if (!systemUsers.length) {
-        el.innerHTML = '<div class="sys-empty">Chưa có user nào khác trong hệ thống</div>';
-        return;
-      }
-      renderSystemUsers();
-    } catch (e) {
-      console.warn('[sys] fetch failed:', e.message || e);
-      el.innerHTML = '<div class="sys-empty">Không tải được user — kiểm tra console</div>';
-    }
+  function genRoomCode() {
+    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    var s = '';
+    for (var i = 0; i < 6; i++) s += chars[rnd(chars.length)];
+    return s;
   }
 
-  function renderSystemUsers() {
-    var el = $('systemUsersList');
-    var cnt = $('sysCount');
-    if (!el) return;
-    if (!systemUsers.length) {
-      el.innerHTML = '<div class="sys-empty">Chưa có user nào khác trong hệ thống</div>';
-      if (cnt) cnt.textContent = '0/3';
+  /* ============================ Load profile ============================ */
+  async function loadMyProfile() {
+    myUsername = getCurrentUsername();
+    if (!myUsername) myUsername = 'guest_' + rnd(999999);
+    if (!sb) {
+      myProfile = { username: myUsername, display_name: myUsername, avatar_url: avatarUrl(myUsername) };
       return;
     }
-    el.innerHTML = systemUsers.map(function (u) {
-      var sel = selectedUserIds.has(u.id);
-      return '<button type="button" class="sys-user-chip' + (sel ? ' selected' : '') + '" data-uid="' + escapeHtml(u.id) + '">' +
-        '<img src="' + escapeHtml(u.avatar) + '" alt="" onerror="this.style.opacity=\'0\'">' +
-        '<span class="sys-name">' + escapeHtml(u.name) + '</span>' +
-        '<span class="sys-check">✓</span>' +
-        '</button>';
-    }).join('');
-    if (cnt) cnt.textContent = selectedUserIds.size + '/3';
-  }
-
-  function syncCountFromSelection() {
-    if (selectedUserIds.size === 0) return;
-    var want = 1 + selectedUserIds.size;
-    if (want < 2) want = 2;
-    if (want > 4) want = 4;
-    state.count = want;
-    var seg = $('countSeg');
-    if (seg) {
-      Array.prototype.forEach.call(seg.children, function (b) {
-        b.classList.toggle('active', +b.dataset.count === state.count);
-      });
+    try {
+      var res = await sb.from('public_players').select('*').eq('username', myUsername).maybeSingle();
+      if (res.data) {
+        myProfile = {
+          username: res.data.username,
+          display_name: res.data.display_name || res.data.username,
+          avatar_url: res.data.avatar_url || avatarUrl(res.data.username)
+        };
+      } else {
+        myProfile = { username: myUsername, display_name: myUsername, avatar_url: avatarUrl(myUsername) };
+      }
+    } catch (e) {
+      myProfile = { username: myUsername, display_name: myUsername, avatar_url: avatarUrl(myUsername) };
     }
+    $('playerName').value = myProfile.display_name;
   }
 
-  /* ============================ Board build ============================ */
-  var PASTELS = [
-    'hsl(330 90% 97%)','hsl(280 90% 97%)','hsl(215 90% 97%)','hsl(165 80% 96%)',
-    'hsl(45 95% 96%)','hsl(15 95% 97%)','hsl(255 90% 97%)','hsl(190 85% 96%)',
-    'hsl(345 90% 97%)','hsl(225 90% 97%)'
-  ];
-
+  /* ============================ Board ============================ */
+  var PASTELS = ['hsl(330 90% 97%)','hsl(280 90% 97%)','hsl(215 90% 97%)','hsl(165 80% 96%)','hsl(45 95% 96%)','hsl(15 95% 97%)','hsl(255 90% 97%)','hsl(190 85% 96%)','hsl(345 90% 97%)','hsl(225 90% 97%)'];
   function buildBoard() {
     var cellsEl = $('cells');
     cellsEl.innerHTML = '';
@@ -899,7 +699,7 @@ input{font-family:inherit}
     svg.innerHTML = html;
   }
 
-  /* ============================ Player UI ============================ */
+  /* ============================ Players UI ============================ */
   function renderPlayers() {
     var el = $('playerList');
     el.innerHTML = '';
@@ -912,9 +712,7 @@ input{font-family:inherit}
       pav.className = 'pav';
       var img = document.createElement('img');
       img.src = p.avatar; img.alt = p.name;
-      img.onerror = function () {
-        this.replaceWith(Object.assign(document.createElement('span'), { className: 'av-emoji', textContent: p.emoji }));
-      };
+      img.onerror = function () { this.replaceWith(Object.assign(document.createElement('span'), { className: 'av-emoji', textContent: '🐱' })); };
       pav.appendChild(img);
       var tag = document.createElement('span');
       tag.className = 'ptag'; tag.textContent = p.pos;
@@ -923,7 +721,10 @@ input{font-family:inherit}
       info.className = 'pinfo';
       var nm = document.createElement('div');
       nm.className = 'pname';
-      nm.innerHTML = escapeHtml(p.name) + (p.bot ? '<span class="bot-tag">BOT</span>' : '');
+      var extra = '';
+      if (p.username === myUsername) extra = '<span class="you-badge">BẠN</span>';
+      else if (p.bot) extra = '<span class="bot-tag">BOT</span>';
+      nm.innerHTML = escapeHtml(p.name) + extra;
       var bar = document.createElement('div');
       bar.className = 'pbar';
       var fill = document.createElement('span');
@@ -935,7 +736,6 @@ input{font-family:inherit}
       p.cardEl = card; p.posEl = tag; p.barEl = fill;
     });
   }
-
   function syncPlayerCards() {
     state.players.forEach(function (p) {
       if (p.posEl) p.posEl.textContent = p.pos;
@@ -943,13 +743,14 @@ input{font-family:inherit}
       if (p.cardEl) p.cardEl.classList.toggle('active', p === state.players[state.current]);
     });
   }
-
   function updateTurnPill() {
     var pill = $('turnPill');
     var p = state.players[state.current];
     if (!p) return;
     pill.style.setProperty('--c', p.color);
-    pill.querySelector('.txt').textContent = state.over ? 'Kết thúc' : ('Lượt của ' + p.name);
+    var isMyTurn = (p.username === myUsername && state.playMode === 'online');
+    var prefix = isMyTurn ? '👉 LƯỢT BẠN! · ' : 'Lượt của ';
+    pill.querySelector('.txt').textContent = state.over ? 'Kết thúc' : (prefix + p.name);
   }
 
   /* ============================ Tokens ============================ */
@@ -962,9 +763,7 @@ input{font-family:inherit}
       node.style.setProperty('--c', p.color);
       var img = document.createElement('img');
       img.src = p.avatar; img.alt = p.name;
-      img.onerror = function () {
-        this.replaceWith(Object.assign(document.createElement('span'), { className: 'tok-emoji', textContent: p.emoji }));
-      };
+      img.onerror = function () { this.replaceWith(Object.assign(document.createElement('span'), { className: 'tok-emoji', textContent: '🐱' })); };
       node.appendChild(img);
       var badge = document.createElement('span');
       badge.className = 'tok-badge';
@@ -974,7 +773,6 @@ input{font-family:inherit}
       p.el = node;
     });
   }
-
   function positionTokens() {
     if (!state.players.length) return;
     var groups = {};
@@ -998,39 +796,42 @@ input{font-family:inherit}
   }
 
   /* ============================ Log ============================ */
-  function addLog(text, color) {
+  var renderedLogTs = {};
+  function addLogItem(item) {
+    if (renderedLogTs[item.ts]) return;
+    renderedLogTs[item.ts] = true;
     var el = $('log');
     var div = document.createElement('div');
     div.className = 'log-item';
-    if (color) div.style.setProperty('--c', color);
-    div.textContent = text;
+    if (item.color) div.style.setProperty('--c', item.color);
+    div.textContent = item.text;
     el.prepend(div);
     while (el.children.length > 40) el.removeChild(el.lastChild);
+  }
+  function renderLogFromState(logArr) {
+    if (!logArr || !logArr.length) return;
+    // render theo thứ tự cũ → mới, để item mới nhất ở trên
+    var sorted = logArr.slice().sort(function (a, b) { return a.ts - b.ts; });
+    sorted.forEach(function (item) { addLogItem(item); });
   }
 
   /* ============================ Leaderboard ============================ */
   function localScores() {
     try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch (e) { return []; }
   }
-
   async function fetchLeaderboard() {
     if (sb) {
       try {
-        var res = await sb.from(LB_TABLE)
-          .select('player_name, mode, moves, duration_ms, created_at')
-          .order('moves', { ascending: true })
-          .order('duration_ms', { ascending: true })
-          .limit(10);
+        var res = await sb.from(LB_TABLE).select('player_name, mode, moves, duration_ms, created_at').order('moves', { ascending: true }).order('duration_ms', { ascending: true }).limit(10);
         if (res.error) throw res.error;
         if (res.data && res.data.length) return res.data;
         return [];
-      } catch (e) { console.warn('[LB] remote failed:', e.message || e); }
+      } catch (e) {}
     }
     var local = localScores();
     local.sort(function (a, b) { return a.moves - b.moves || a.duration_ms - b.duration_ms; });
     return local.slice(0, 10);
   }
-
   function renderLeaderboard(elId, rows) {
     var el = $(elId);
     if (!el) return;
@@ -1051,20 +852,18 @@ input{font-family:inherit}
         '</div>';
     }).join('');
   }
-
   async function refreshLeaderboards() {
     var rows = await fetchLeaderboard();
     renderLeaderboard('leaderboardSetup', rows);
     renderLeaderboard('leaderboardWin', rows);
   }
-
   async function saveScore(payload) {
     if (sb) {
       try {
         var res = await sb.from(LB_TABLE).insert([payload]);
         if (res.error) throw res.error;
         return true;
-      } catch (e) { console.warn('[LB] insert failed:', e.message || e); }
+      } catch (e) {}
     }
     try {
       var arr = localScores();
@@ -1075,176 +874,545 @@ input{font-family:inherit}
     } catch (e) { return false; }
   }
 
-  /* ============================ Game flow ============================ */
-  function setRollEnabled(on) {
-    var btn = $('rollBtn');
-    btn.disabled = !on;
-    $('rollHint').textContent = on ? 'Nhấn để tung!' : 'Đang chờ...';
+  /* ============================ Room: create/join/leave ============================ */
+  async function createRoom() {
+    if (!sb) { toast('Chưa kết nối Supabase'); return; }
+    var code = genRoomCode();
+    var displayName = ($('playerName').value || '').trim().slice(0, 16) || myProfile.display_name;
+    try { localStorage.setItem('srank_player_name', displayName); } catch (e) {}
+
+    var ins = await sb.from(ROOMS_T).insert([{
+      code: code,
+      host_username: myUsername,
+      mode: 'classic',
+      status: 'waiting',
+      max_players: 4,
+      state: {},
+      version: 0
+    }]).select().single();
+
+    if (ins.error) { toast('Không tạo được phòng: ' + ins.error.message); return; }
+    room = ins.data;
+    isHost = true;
+
+    var pIns = await sb.from(ROOM_PLAYERS_T).insert([{
+      room_id: room.id,
+      username: myUsername,
+      display_name: displayName,
+      avatar_url: myProfile.avatar_url,
+      color_index: 0,
+      pos: 0,
+      is_host: true
+    }]).select().single();
+
+    if (pIns.error) {
+      await sb.from(ROOMS_T).delete().eq('id', room.id);
+      toast('Không vào phòng: ' + pIns.error.message);
+      return;
+    }
+
+    enterWaitingRoom();
+    subscribeRoom();
   }
 
-  function setupDiceForMode() {
-    $('diceStage1').style.display = (state.mode === 'speed') ? '' : 'none';
+  async function joinRoom(code) {
+    code = (code || '').trim().toUpperCase();
+    if (!code) { toast('Nhập mã phòng'); return; }
+    if (!sb) { toast('Chưa kết nối Supabase'); return; }
+
+    var rRes = await sb.from(ROOMS_T).select('*').eq('code', code).eq('status', 'waiting').maybeSingle();
+    if (rRes.error || !rRes.data) { toast('Không tìm thấy phòng hoặc phòng đã bắt đầu'); return; }
+    room = rRes.data;
+
+    var cnt = await sb.from(ROOM_PLAYERS_T).select('id', { count: 'exact', head: true }).eq('room_id', room.id);
+    if ((cnt.count || 0) >= room.max_players) { toast('Phòng đã đầy'); return; }
+
+    // Đã ở trong phòng chưa?
+    var exist = await sb.from(ROOM_PLAYERS_T).select('*').eq('room_id', room.id).eq('username', myUsername).maybeSingle();
+    if (!exist.data) {
+      var displayName = ($('playerName').value || '').trim().slice(0, 16) || myProfile.display_name;
+      var pIns = await sb.from(ROOM_PLAYERS_T).insert([{
+        room_id: room.id,
+        username: myUsername,
+        display_name: displayName,
+        avatar_url: myProfile.avatar_url,
+        color_index: (cnt.count || 0),
+        pos: 0,
+        is_host: false
+      }]).select().single();
+      if (pIns.error) { toast('Không vào phòng: ' + pIns.error.message); return; }
+    }
+    isHost = (room.host_username === myUsername);
+
+    enterWaitingRoom();
+    subscribeRoom();
   }
 
-  function createPlayers() {
+  async function leaveRoom() {
+    if (!room) return;
+    try { if (roomChannel) { await sb.removeChannel(roomChannel); roomChannel = null; } } catch (e) {}
+    try {
+      await sb.from(ROOM_PLAYERS_T).delete().eq('room_id', room.id).eq('username', myUsername);
+      if (isHost) {
+        // Host leave → close room
+        await sb.from(ROOMS_T).delete().eq('id', room.id);
+      }
+    } catch (e) {}
+    room = null;
+    roomPlayers = [];
+    isHost = false;
+    showScreen('menuScreen');
+  }
+
+  async function refreshRoomPlayers() {
+    if (!room) return;
+    var res = await sb.from(ROOM_PLAYERS_T).select('*').eq('room_id', room.id).order('joined_at', { ascending: true });
+    if (res.data) roomPlayers = res.data;
+    renderWaitingPlayers();
+    if (room.status === 'playing' || room.status === 'finished') {
+      rebuildPlayersFromRoom();
+    }
+  }
+
+  /* ============================ Realtime ============================ */
+  function subscribeRoom() {
+    if (!room || !sb) return;
+    if (roomChannel) { try { sb.removeChannel(roomChannel); } catch (e) {} }
+
+    roomChannel = sb.channel('room:' + room.id, { config: { broadcast: { self: false } } })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: ROOMS_T, filter: 'id=eq.' + room.id }, function (payload) {
+        var oldRoom = room;
+        var newRoom = payload.new;
+        room = newRoom;
+        handleRoomUpdate(oldRoom, newRoom);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: ROOMS_T, filter: 'id=eq.' + room.id }, function () {
+        toast('Phòng đã bị đóng');
+        room = null;
+        roomPlayers = [];
+        showScreen('menuScreen');
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: ROOM_PLAYERS_T, filter: 'room_id=eq.' + room.id }, function () {
+        refreshRoomPlayers();
+      })
+      .subscribe();
+
+    refreshRoomPlayers();
+  }
+
+  function handleRoomUpdate(oldRoom, newRoom) {
+    // Waiting → Playing
+    if (oldRoom.status === 'waiting' && newRoom.status === 'playing') {
+      enterGameScreenFromRoom();
+      return;
+    }
+
+    // Có winner mới?
+    var oldWinner = (oldRoom.state || {}).winner;
+    var newWinner = (newRoom.state || {}).winner;
+    if (newWinner && newWinner !== oldWinner) {
+      showWinOverlay(newWinner, newRoom);
+    }
+
+    // Có dice mới?
+    var oldRollAt = (oldRoom.state || {}).last_roll_at || 0;
+    var newRollAt = (newRoom.state || {}).last_roll_at || 0;
+    if (newRollAt > oldRollAt && (newRoom.state || {}).last_roll_by !== myUsername) {
+      animateDiceFromRemote((newRoom.state || {}).dice || [1]);
+    }
+
+    // Render log
+    renderLogFromState((newRoom.state || {}).log || []);
+
+    // Refresh players + turn
+    refreshRoomPlayers();
+    setTimeout(function () {
+      rebuildPlayersFromRoom();
+      syncTurnUI();
+    }, 300);
+  }
+
+  /* ============================ Waiting room UI ============================ */
+  function enterWaitingRoom() {
+    showScreen('waitingScreen');
+    $('roomCodeValue').textContent = room.code;
+    renderWaitingPlayers();
+    $('hostControls').style.display = isHost ? '' : 'none';
+    $('hostModeSelect').value = room.mode || 'classic';
+  }
+
+  function renderWaitingPlayers() {
+    var el = $('waitingPlayers');
+    var cnt = $('waitingCount');
+    if (!el) return;
+    el.innerHTML = roomPlayers.map(function (rp) {
+      var isYou = rp.username === myUsername;
+      var badge = rp.is_host ? '<span class="wp-host">HOST</span>' : '';
+      var youBadge = isYou ? '<span class="wp-you">BẠN</span>' : '';
+      return '<div class="waiting-player">' +
+        '<img src="' + escapeHtml(rp.avatar_url || avatarUrl(rp.display_name)) + '" alt="" onerror="this.src=\'' + avatarUrl('x') + '\'">' +
+        '<span class="wp-name">' + escapeHtml(rp.display_name) + '</span>' +
+        badge + youBadge +
+        '</div>';
+    }).join('');
+    if (cnt) cnt.textContent = roomPlayers.length;
+    if ($('hostControls')) $('hostControls').style.display = (isHost && room && room.status === 'waiting') ? '' : 'none';
+  }
+
+  /* ============================ Start game (host) ============================ */
+  async function hostStartGame() {
+    if (!isHost || !room) return;
+    if (roomPlayers.length < 2) { toast('Cần ít nhất 2 người chơi'); return; }
+    var mode = $('hostModeSelect').value;
+    var now = Date.now();
+    var initialState = {
+      current_turn: roomPlayers[0].username,
+      dice: [1],
+      last_roll_by: null,
+      last_roll_at: 0,
+      moves: 0,
+      started_at: now,
+      log: [{ text: '🎮 Trò chơi bắt đầu — chế độ ' + ({ classic:'Cổ điển',speed:'Tốc độ',chaos:'Hỗn loạn' }[mode]), color: '#a78bfa', ts: now }],
+      winner: null,
+      winner_at: null
+    };
+    // Reset all players pos=0
+    await sb.from(ROOM_PLAYERS_T).update({ pos: 0, skip_turn: false, extra_turn: false }).eq('room_id', room.id);
+
+    var upd = await sb.from(ROOMS_T).update({
+      mode: mode,
+      status: 'playing',
+      state: initialState,
+      version: (room.version || 0) + 1,
+      updated_at: new Date().toISOString()
+    }).eq('id', room.id);
+    if (upd.error) { toast('Lỗi: ' + upd.error.message); return; }
+    // Realtime sẽ tự chuyển screen
+  }
+
+  /* ============================ Build local players (bot/local) ============================ */
+  function createLocalPlayers() {
     var nameInput = $('playerName');
-    var myName = (nameInput.value || '').trim().slice(0, 16) || 'Bạn';
+    var myName = (nameInput.value || '').trim().slice(0, 16) || myProfile.display_name || 'Bạn';
     try { localStorage.setItem('srank_player_name', myName); } catch (e) {}
-
     var players = [];
     var st0 = PLAYER_STYLES[0];
     players.push({
-      id: 0, name: myName, bot: false, pos: 0, skip: false, extra: false,
-      color: st0.color, soft: st0.soft, emoji: st0.emoji,
-      avatar: avatarUrl(myName + '-me-' + Date.now())
+      id: 0, username: myUsername, name: myName, bot: false, pos: 0, skip: false, extra: false,
+      color: st0.color, soft: st0.soft, avatar: avatarUrl(myName + '-me-' + Date.now())
     });
-
-    // Ưu tiên: user thật được chọn
-    var picked = systemUsers.filter(function (u) { return selectedUserIds.has(u.id); });
-    picked.slice(0, state.count - 1).forEach(function (u, i) {
-      var st = PLAYER_STYLES[i + 1];
-      players.push({
-        id: i + 1,
-        name: u.name.slice(0, 16),
-        bot: false,
-        pos: 0, skip: false, extra: false,
-        color: st.color, soft: st.soft, emoji: st.emoji,
-        avatar: u.avatar
-      });
-    });
-
-    // Fill bot nếu còn slot và vsBot ON
-    if (state.vsBot) {
+    if (state.playMode === 'bot') {
       var bi = 0;
       while (players.length < state.count && bi < BOT_NAMES.length) {
         var st = PLAYER_STYLES[players.length];
         var nm = BOT_NAMES[bi++];
         players.push({
-          id: players.length, name: nm, bot: true,
+          id: players.length, username: 'bot_' + players.length, name: nm, bot: true,
           pos: 0, skip: false, extra: false,
-          color: st.color, soft: st.soft, emoji: st.emoji,
-          avatar: avatarUrl(nm + '-' + players.length)
+          color: st.color, soft: st.soft, avatar: avatarUrl(nm + '-' + players.length)
         });
       }
-    } else if (picked.length === 0 && players.length < 2) {
-      // Không chọn ai + không bot → pass-and-play 2 người
-      var st1 = PLAYER_STYLES[1];
-      players.push({
-        id: 1, name: 'Người chơi 2', bot: false,
-        pos: 0, skip: false, extra: false,
-        color: st1.color, soft: st1.soft, emoji: st1.emoji,
-        avatar: avatarUrl('P2-' + Date.now())
-      });
-    }
-
-    // Đảm bảo tối thiểu 2 người
-    while (players.length < 2) {
-      var s = PLAYER_STYLES[players.length];
-      players.push({
-        id: players.length, name: 'Người chơi ' + (players.length + 1), bot: false,
-        pos: 0, skip: false, extra: false,
-        color: s.color, soft: s.soft, emoji: s.emoji,
-        avatar: avatarUrl('P' + (players.length + 1))
-      });
+    } else {
+      while (players.length < state.count) {
+        var st = PLAYER_STYLES[players.length];
+        players.push({
+          id: players.length, username: 'p' + (players.length + 1),
+          name: 'Người chơi ' + (players.length + 1), bot: false,
+          pos: 0, skip: false, extra: false,
+          color: st.color, soft: st.soft, avatar: avatarUrl('P' + (players.length + 1))
+        });
+      }
     }
     return players;
   }
 
-  function startGame() {
-    state.players = createPlayers();
-    state.current = 0;
-    state.busy = false;
+  /* ============================ Enter game screen ============================ */
+  function enterGameScreenFromRoom() {
+    // Build state.players từ roomPlayers
+    state.players = roomPlayers.map(function (rp, i) {
+      var st = PLAYER_STYLES[rp.color_index % 4];
+      return {
+        id: i,
+        username: rp.username,
+        name: rp.display_name,
+        bot: false,
+        pos: rp.pos,
+        skip: rp.skip_turn,
+        extra: rp.extra_turn,
+        color: st.color, soft: st.soft,
+        avatar: rp.avatar_url || avatarUrl(rp.display_name),
+        el: null, cardEl: null, posEl: null, barEl: null
+      };
+    });
+    state.mode = room.mode;
     state.over = false;
-    state.moves = 0;
-    state.startTime = Date.now();
-    $('setupScreen').hidden = true;
-    $('gameScreen').hidden = false;
-    $('winOverlay').hidden = true;
+    state.busy = false;
+    state.moves = (room.state || {}).moves || 0;
+    state.startTime = (room.state || {}).started_at || Date.now();
+    state.current = state.players.findIndex(function (p) { return p.username === (room.state || {}).current_turn; });
+    if (state.current < 0) state.current = 0;
+
+    // Reset cache
+    renderedLogTs = {};
     $('log').innerHTML = '';
+
+    showScreen('gameScreen');
     buildBoard();
     renderPlayers();
     createTokens();
-    setupDiceForMode();
+    $('diceStage1').style.display = (state.mode === 'speed') ? '' : 'none';
     dice0.show(1, true);
     if (dice1) dice1.show(1, true);
     positionTokens();
     updateTurnPill();
     syncPlayerCards();
-    addLog('🎮 Bắt đầu trò chơi — chế độ ' +
-      ({ classic: 'Cổ điển', speed: 'Tốc độ', chaos: 'Hỗn loạn' }[state.mode]), '#a78bfa');
-    setTimeout(beginTurn, 420);
+
+    // Render log từ state
+    renderLogFromState((room.state || {}).log || []);
+
+    // Turn hint
+    syncTurnUI();
   }
 
-  function beginTurn() {
+  function enterGameScreenLocal() {
+    state.players = createLocalPlayers();
+    state.over = false;
+    state.busy = false;
+    state.moves = 0;
+    state.startTime = Date.now();
+    state.current = 0;
+
+    renderedLogTs = {};
+    $('log').innerHTML = '';
+
+    showScreen('gameScreen');
+    buildBoard();
+    renderPlayers();
+    createTokens();
+    $('diceStage1').style.display = (state.mode === 'speed') ? '' : 'none';
+    dice0.show(1, true);
+    if (dice1) dice1.show(1, true);
+    positionTokens();
+    updateTurnPill();
+    syncPlayerCards();
+    $('rollBtn').disabled = false;
+    $('rollHint').textContent = 'Nhấn để tung!';
+    addLogItem({ text: '🎮 Trò chơi bắt đầu — chế độ ' + ({ classic:'Cổ điển',speed:'Tốc độ',chaos:'Hỗn loạn' }[state.mode]), color: '#a78bfa', ts: Date.now() });
+    setTimeout(beginTurnLocal, 400);
+  }
+
+  /* ============================ Sync from room ============================ */
+  function rebuildPlayersFromRoom() {
+    if (!room || (room.status !== 'playing' && room.status !== 'finished')) return;
+    var oldCache = {};
+    state.players.forEach(function (p) { oldCache[p.username] = p; });
+
+    state.players = roomPlayers.map(function (rp, i) {
+      var old = oldCache[rp.username];
+      var st = PLAYER_STYLES[rp.color_index % 4];
+      return {
+        id: i,
+        username: rp.username,
+        name: rp.display_name,
+        bot: false,
+        pos: old ? old.pos : rp.pos,
+        targetPos: rp.pos,
+        skip: rp.skip_turn,
+        extra: rp.extra_turn,
+        color: st.color, soft: st.soft,
+        avatar: rp.avatar_url || avatarUrl(rp.display_name),
+        el: old ? old.el : null,
+        cardEl: old ? old.cardEl : null,
+        posEl: old ? old.posEl : null,
+        barEl: old ? old.barEl : null
+      };
+    });
+
+    // Rebind UI refs còn thiếu (nếu có player mới)
+    if (state.players.some(function (p) { return !p.el; })) {
+      // rebuild toàn bộ list
+      renderPlayers();
+      createTokens();
+    }
+
+    // Animate ai có pos thay đổi
+    state.players.forEach(function (p) {
+      if (p.pos !== p.targetPos && !animating[p.username]) {
+        animateRemoteMove(p);
+      }
+    });
+
+    // Update current
+    var curUser = (room.state || {}).current_turn;
+    var curIdx = state.players.findIndex(function (p) { return p.username === curUser; });
+    if (curIdx >= 0) state.current = curIdx;
+
+    updateTurnPill();
+    syncPlayerCards();
+    positionTokens();
+    syncTurnUI();
+  }
+
+  async function animateRemoteMove(player) {
+    animating[player.username] = true;
+    var from = player.pos, to = player.targetPos;
+    var step = to > from ? 1 : -1;
+    if (to === from) { animating[player.username] = false; return; }
+    if (Math.abs(to - from) > 1) {
+      // Thang / rắn / chaos — chờ chút rồi nhảy cóc
+      await sleep(300);
+      player.pos = to;
+      if (to > from) SFX.ladder(); else SFX.snake();
+      positionTokens();
+      animating[player.username] = false;
+      return;
+    }
+    var cur = from;
+    while ((step > 0 && cur !== to) || (step < 0 && cur !== to)) {
+      cur += step;
+      player.pos = cur;
+      positionTokens();
+      SFX.tick();
+      await sleep(90);
+    }
+    animating[player.username] = false;
+  }
+
+  function animateDiceFromRemote(values) {
+    var cubes = [dice0];
+    if (values.length > 1) cubes.push(dice1);
+    cubes.forEach(function (c) { c.show(1 + rnd(6)); });
+    SFX.roll();
+    setTimeout(function () {
+      cubes.forEach(function (c, i) { c.show(values[i] || 1); });
+    }, 450);
+  }
+
+  function syncTurnUI() {
+    if (state.playMode !== 'online' || !room) return;
+    var isMyTurn = (room.state || {}).current_turn === myUsername;
+    var playing = room.status === 'playing';
+    $('rollBtn').disabled = !(isMyTurn && playing && !state.busy);
+    if (!playing) {
+      $('rollHint').textContent = 'Trò chơi đã kết thúc';
+    } else if (isMyTurn) {
+      $('rollHint').textContent = '👉 Lượt của bạn — nhấn để tung!';
+    } else {
+      var curName = 'người khác';
+      var cur = state.players.find(function (p) { return p.username === (room.state || {}).current_turn; });
+      if (cur) curName = cur.name;
+      $('rollHint').textContent = 'Đang chờ ' + curName + '...';
+    }
+  }
+
+  /* ============================ ONLINE roll ============================ */
+  async function doRollOnline() {
+    if (!room || room.status !== 'playing') return;
+    if ((room.state || {}).current_turn !== myUsername) return;
+    if (state.busy) return;
+    state.busy = true;
+    $('rollBtn').disabled = true;
+
+    var me = roomPlayers.find(function (p) { return p.username === myUsername; });
+    if (!me) { state.busy = false; return; }
+
+    var nDice = room.mode === 'speed' ? 2 : 1;
+    var values = [];
+    for (var i = 0; i < nDice; i++) values.push(1 + rnd(6));
+    var total = values.reduce(function (a, b) { return a + b; }, 0);
+
+    // Animate dice local
+    await animateDice(values);
+
+    var oldPos = me.pos;
+    var newPos = oldPos + total;
+    var reachedGoal = newPos >= 100;
+    if (reachedGoal) newPos = 100;
+
+    var newLog = [];
+    var myColor = PLAYER_STYLES[me.color_index % 4].color;
+    newLog.push({ text: '🎲 ' + me.display_name + ' tung ' + values.join(' + ') + (nDice > 1 ? ' = ' + total : ''), color: myColor, ts: Date.now() });
+
+    // Ladder / snake
+    if (!reachedGoal) {
+      if (LADDERS[newPos]) {
+        newLog.push({ text: '🪜 ' + me.display_name + ' leo thang ' + newPos + ' → ' + LADDERS[newPos] + '!', color: myColor, ts: Date.now() + 1 });
+        newPos = LADDERS[newPos];
+      } else if (SNAKES[newPos]) {
+        newLog.push({ text: '🐍 ' + me.display_name + ' bị rắn cắn ' + newPos + ' → ' + SNAKES[newPos] + '!', color: myColor, ts: Date.now() + 1 });
+        newPos = SNAKES[newPos];
+      }
+    }
+
+    var winner = reachedGoal ? myUsername : null;
+
+    // Update DB
+    await sb.from(ROOM_PLAYERS_T).update({ pos: newPos }).eq('room_id', room.id).eq('username', myUsername);
+
+    // Compute next turn
+    var curIdx = roomPlayers.findIndex(function (p) { return p.username === myUsername; });
+    var nextIdx = (curIdx + 1) % roomPlayers.length;
+    var nextTurn = roomPlayers[nextIdx].username;
+
+    var newLogAll = newLog.concat((room.state || {}).log || []).slice(0, 40);
+    var newState = {
+      current_turn: winner ? myUsername : nextTurn,
+      dice: values,
+      last_roll_by: myUsername,
+      last_roll_at: Date.now(),
+      moves: ((room.state || {}).moves || 0) + 1,
+      started_at: (room.state || {}).started_at || Date.now(),
+      log: newLogAll,
+      winner: winner,
+      winner_at: winner ? Date.now() : null
+    };
+
+    await sb.from(ROOMS_T).update({
+      state: newState,
+      status: winner ? 'finished' : 'playing',
+      version: (room.version || 0) + 1,
+      updated_at: new Date().toISOString()
+    }).eq('id', room.id);
+
+    state.busy = false;
+    // Realtime sẽ tự sync state mới
+  }
+
+  /* ============================ LOCAL roll (bot + pass-and-play) ============================ */
+  function beginTurnLocal() {
     if (state.over) return;
     var p = state.players[state.current];
     if (!p) return;
     updateTurnPill(); syncPlayerCards(); positionTokens();
     if (p.skip) {
-      p.skip = false; state.busy = true; setRollEnabled(false);
-      addLog('⏳ ' + p.name + ' đang bị đóng băng — bỏ lượt!', p.color);
-      setTimeout(function () { state.busy = false; advanceTurn(); }, 950);
+      p.skip = false; state.busy = true;
+      $('rollBtn').disabled = true;
+      $('rollHint').textContent = p.name + ' đang bị đóng băng — bỏ lượt!';
+      addLogItem({ text: '⏳ ' + p.name + ' bị đóng băng — bỏ lượt!', color: p.color, ts: Date.now() });
+      setTimeout(function () { state.busy = false; advanceTurnLocal(); }, 900);
       return;
     }
     state.busy = false;
     if (p.bot) {
-      setRollEnabled(false);
+      $('rollBtn').disabled = true;
       $('rollHint').textContent = p.name + ' đang suy nghĩ...';
-      setTimeout(function () { if (!state.over) doRoll(); }, 750 + rnd(450));
+      setTimeout(function () { if (!state.over) doRollLocal(); }, 700 + rnd(400));
     } else {
-      setRollEnabled(true);
+      $('rollBtn').disabled = false;
+      $('rollHint').textContent = 'Lượt của ' + p.name + ' — nhấn để tung!';
     }
   }
-
-  function advanceTurn() {
+  function advanceTurnLocal() {
     if (state.over) return;
     state.current = (state.current + 1) % state.players.length;
     positionTokens();
-    beginTurn();
+    beginTurnLocal();
   }
 
-  async function animateDice(values) {
-    var cubes = [dice0];
-    if (values.length > 1) cubes.push(dice1);
-    cubes.forEach(function (c) { c.show(1 + rnd(6)); });
-    SFX.roll();
-    for (var i = 0; i < 5; i++) {
-      await sleep(70);
-      cubes.forEach(function (c) { c.show(1 + rnd(6)); });
-    }
-    await sleep(120);
-    cubes.forEach(function (c, i) { c.show(values[i]); });
-    await sleep(560);
-  }
-
-  async function resolveSpecial(p) {
-    if (LADDERS[p.pos] && p.pos !== 100) {
-      var to = LADDERS[p.pos];
-      addLog('🪜 ' + p.name + ' leo thang ' + p.pos + ' → ' + to + '!', p.color);
-      SFX.ladder();
-      await sleep(280);
-      p.pos = to;
-      positionTokens();
-      await sleep(460);
-      return true;
-    }
-    if (SNAKES[p.pos]) {
-      var down = SNAKES[p.pos];
-      addLog('🐍 ' + p.name + ' bị rắn cắn ' + p.pos + ' → ' + down + '!', p.color);
-      SFX.snake();
-      await sleep(280);
-      p.pos = down;
-      positionTokens();
-      await sleep(460);
-      return true;
-    }
-    return false;
-  }
-
-  async function doRoll() {
+  async function doRollLocal() {
     if (state.busy || state.over) return;
     state.busy = true;
-    setRollEnabled(false);
+    $('rollBtn').disabled = true;
     var p = state.players[state.current];
     var nDice = state.mode === 'speed' ? 2 : 1;
     var values = [];
@@ -1252,97 +1420,95 @@ input{font-family:inherit}
     await animateDice(values);
     var total = values.reduce(function (a, b) { return a + b; }, 0);
     state.moves++;
-    addLog('🎲 ' + p.name + ' tung ' + values.join(' + ') + (nDice > 1 ? ' = ' + total : ''), p.color);
+    addLogItem({ text: '🎲 ' + p.name + ' tung ' + values.join(' + ') + (nDice > 1 ? ' = ' + total : ''), color: p.color, ts: Date.now() });
     var target = p.pos + total;
     var reachedGoal = target >= 100;
     if (reachedGoal) target = 100;
-    if (target > p.pos) {
-      while (p.pos < target) {
-        p.pos++;
-        positionTokens();
-        SFX.tick();
-        await sleep(Math.max(70, 150 - (target - p.pos) * 6));
-      }
+    while (p.pos < target) {
+      p.pos++; positionTokens(); SFX.tick();
+      await sleep(Math.max(60, 130 - (target - p.pos) * 5));
     }
-    if (reachedGoal) { await winGame(p); return; }
-    await resolveSpecial(p);
-    if (p.pos >= 100) { await winGame(p); return; }
+    if (reachedGoal) { await winLocal(p); return; }
+    // ladder/snake
+    if (LADDERS[p.pos] && p.pos !== 100) {
+      var to = LADDERS[p.pos];
+      addLogItem({ text: '🪜 ' + p.name + ' leo thang ' + p.pos + ' → ' + to + '!', color: p.color, ts: Date.now() });
+      SFX.ladder(); await sleep(250); p.pos = to; positionTokens(); await sleep(400);
+    } else if (SNAKES[p.pos]) {
+      var down = SNAKES[p.pos];
+      addLogItem({ text: '🐍 ' + p.name + ' bị rắn cắn ' + p.pos + ' → ' + down + '!', color: p.color, ts: Date.now() });
+      SFX.snake(); await sleep(250); p.pos = down; positionTokens(); await sleep(400);
+    }
+    if (p.pos >= 100) { await winLocal(p); return; }
+    // chaos
     if (state.mode === 'chaos' && Math.random() < 0.38) {
-      await chaosEvent(p);
-      if (p.pos >= 100) { await winGame(p); return; }
-    }
-    if (p.extra) {
-      p.extra = false;
-      addLog('🎁 ' + p.name + ' được tung thêm một lần nữa!', p.color);
-      state.busy = false; beginTurn(); return;
-    }
-    state.busy = false;
-    advanceTurn();
-  }
-
-  async function chaosEvent(p) {
-    var roll = Math.random();
-    if (roll < 0.20) {
-      var d1 = 3 + rnd(12);
-      p.pos = Math.min(99, p.pos + d1);
-      addLog('🚀 ' + p.name + ' gặp Tên lửa — bay +' + d1 + ' ô!', p.color);
-      SFX.boost(); positionTokens();
-      await sleep(560); await resolveSpecial(p);
-    } else if (roll < 0.40) {
-      var d2 = 3 + rnd(12);
-      p.pos = Math.max(1, p.pos - d2);
-      addLog('🌀 ' + p.name + ' bị Lốc xoáy — lùi -' + d2 + ' ô!', p.color);
-      SFX.snake(); positionTokens(); await sleep(560);
-    } else if (roll < 0.58) {
-      var others = state.players.filter(function (x) { return x !== p; });
-      if (others.length) {
-        var o = others[rnd(others.length)];
-        var tmp = p.pos; p.pos = o.pos; o.pos = tmp;
-        addLog('🔄 ' + p.name + ' hoán đổi vị trí với ' + o.name + '!', p.color);
-        SFX.swap(); positionTokens();
-        await sleep(620); await resolveSpecial(p); await resolveSpecial(o);
-      }
-    } else if (roll < 0.74) {
-      p.skip = true;
-      addLog('⏳ ' + p.name + ' bị Đóng băng — mất lượt kế tiếp!', p.color);
-      beep(320, 0.3, 'sine', 0.05); await sleep(480);
-    } else if (roll < 0.88) {
-      p.extra = true;
-      addLog('🎁 ' + p.name + ' nhận thêm 1 lượt!', p.color);
-      beep(880, 0.16, 'sine', 0.055); await sleep(420);
-    } else {
-      var starts = Object.keys(LADDERS).map(Number).filter(function (x) { return x > p.pos; }).sort(function (a, b) { return a - b; });
-      if (starts.length) {
-        var s = starts[0];
-        p.pos = s; positionTokens(); await sleep(400);
-        addLog('✨ ' + p.name + ' được dẫn tới chân thang ' + s + '!', p.color);
-        SFX.boost(); await resolveSpecial(p);
+      var roll = Math.random();
+      if (roll < 0.25) {
+        var dd = 3 + rnd(10); p.pos = Math.min(99, p.pos + dd);
+        addLogItem({ text: '🚀 ' + p.name + ' bay +' + dd + ' ô!', color: p.color, ts: Date.now() });
+        positionTokens(); await sleep(500);
+      } else if (roll < 0.5) {
+        var d2 = 3 + rnd(10); p.pos = Math.max(1, p.pos - d2);
+        addLogItem({ text: '🌀 ' + p.name + ' lùi -' + d2 + ' ô!', color: p.color, ts: Date.now() });
+        positionTokens(); await sleep(500);
+      } else if (roll < 0.75) {
+        p.skip = true;
+        addLogItem({ text: '⏳ ' + p.name + ' mất lượt kế tiếp!', color: p.color, ts: Date.now() });
+        await sleep(400);
       } else {
-        addLog('✨ ' + p.name + ' nhận may mắn nhỏ!', p.color);
+        p.extra = true;
+        addLogItem({ text: '🎁 ' + p.name + ' được thêm 1 lượt!', color: p.color, ts: Date.now() });
         await sleep(300);
       }
     }
+    if (p.extra) {
+      p.extra = false;
+      addLogItem({ text: '🎁 ' + p.name + ' được tung thêm!', color: p.color, ts: Date.now() });
+      state.busy = false; beginTurnLocal(); return;
+    }
+    state.busy = false;
+    advanceTurnLocal();
   }
-
-  async function winGame(winner) {
-    state.over = true; state.busy = true; setRollEnabled(false);
-    positionTokens(); syncPlayerCards(); updateTurnPill();
-    addLog('🏆 ' + winner.name + ' đã chạm ô 100 và chiến thắng!', winner.color);
+  async function winLocal(winner) {
+    state.over = true; state.busy = true;
+    $('rollBtn').disabled = true;
+    addLogItem({ text: '🏆 ' + winner.name + ' đã chạm ô 100 và chiến thắng!', color: winner.color, ts: Date.now() });
     SFX.win(); confetti();
     var durationMs = Date.now() - state.startTime;
     var secs = Math.max(1, Math.round(durationMs / 1000));
-    $('winEmoji').textContent = winner.bot ? '🤖' : '🏆';
-    $('winTitle').textContent = winner.bot ? (winner.name + ' thắng!') : 'Bạn thắng rồi! 🎉';
-    $('winSub').textContent = winner.bot ? 'Đừng buồn nhé, thử lại ván nữa nào!' : 'Tuyệt vời! Bạn đã leo tới tận ô 100.';
     $('statMoves').textContent = state.moves;
     $('statTime').textContent = fmtTime(secs);
-    $('statMode').textContent = ({ classic: 'Cổ điển', speed: 'Tốc độ', chaos: 'Hỗn loạn' }[state.mode]);
-    await saveScore({
-      player_name: winner.name, mode: state.mode, player_count: state.count,
-      moves: state.moves, duration_ms: durationMs, result: winner.bot ? 'bot' : 'human'
-    });
+    $('statMode').textContent = ({ classic:'Cổ điển',speed:'Tốc độ',chaos:'Hỗn loạn' }[state.mode]);
+    $('winEmoji').textContent = winner.bot ? '🤖' : '🏆';
+    $('winTitle').textContent = winner.bot ? (winner.name + ' thắng!') : (winner.username === myUsername ? 'Bạn thắng rồi! 🎉' : winner.name + ' thắng!');
+    $('winSub').textContent = winner.bot ? 'Đừng buồn nhé!' : 'Chúc mừng!';
+    await saveScore({ player_name: winner.name, mode: state.mode, player_count: state.players.length, moves: state.moves, duration_ms: durationMs, result: winner.bot ? 'bot' : 'human' });
     await refreshLeaderboards();
-    await sleep(700);
+    await sleep(600);
+    $('winOverlay').hidden = false;
+  }
+
+  /* ============================ Win overlay (online) ============================ */
+  async function showWinOverlay(winnerUsername, roomData) {
+    var winnerPlayer = roomPlayers.find(function (p) { return p.username === winnerUsername; });
+    var winnerName = winnerPlayer ? winnerPlayer.display_name : winnerUsername;
+    var isMe = winnerUsername === myUsername;
+    var st = roomData.state || {};
+    var durationMs = Date.now() - (st.started_at || Date.now());
+    var secs = Math.max(1, Math.round(durationMs / 1000));
+
+    $('statMoves').textContent = st.moves || 0;
+    $('statTime').textContent = fmtTime(secs);
+    $('statMode').textContent = ({ classic:'Cổ điển',speed:'Tốc độ',chaos:'Hỗn loạn' }[roomData.mode]);
+    $('winEmoji').textContent = isMe ? '🏆' : '🎉';
+    $('winTitle').textContent = isMe ? 'Bạn thắng rồi! 🎉' : (winnerName + ' thắng!');
+    $('winSub').textContent = isMe ? 'Tuyệt vời!' : 'Chơi ván mới nhé!';
+    $('playAgainBtn').textContent = 'Về sảnh 🏠';
+
+    SFX.win(); confetti();
+    await saveScore({ player_name: winnerName, mode: roomData.mode, player_count: roomPlayers.length, moves: st.moves || 0, duration_ms: durationMs, result: isMe ? 'human' : 'other' });
+    await refreshLeaderboards();
+    await sleep(600);
     $('winOverlay').hidden = false;
   }
 
@@ -1369,7 +1535,7 @@ input{font-family:inherit}
       });
     }
     var frames = 0;
-    function loop() {
+    (function loop() {
       ctx.clearRect(0, 0, W, H);
       for (var i = 0; i < parts.length; i++) {
         var p = parts[i];
@@ -1384,18 +1550,103 @@ input{font-family:inherit}
       frames++;
       if (frames < 250) requestAnimationFrame(loop);
       else ctx.clearRect(0, 0, W, H);
-    }
-    loop();
+    })();
   }
 
-  /* ============================ UI wiring ============================ */
+  /* ============================ Dice animation ============================ */
+  async function animateDice(values) {
+    var cubes = [dice0];
+    if (values.length > 1) cubes.push(dice1);
+    cubes.forEach(function (c) { c.show(1 + rnd(6)); });
+    SFX.roll();
+    for (var i = 0; i < 5; i++) {
+      await sleep(70);
+      cubes.forEach(function (c) { c.show(1 + rnd(6)); });
+    }
+    await sleep(120);
+    cubes.forEach(function (c, i) { c.show(values[i]); });
+    await sleep(500);
+  }
+
+  /* ============================ Show screen ============================ */
+  function showScreen(id) {
+    ['menuScreen', 'onlineScreen', 'waitingScreen', 'localSetupScreen', 'gameScreen'].forEach(function (s) {
+      var el = $(s);
+      if (el) el.hidden = (s !== id);
+    });
+    if (id !== 'gameScreen') $('winOverlay').hidden = true;
+    var app = shadow.getElementById('sgApp');
+    if (app) app.scrollTop = 0;
+  }
+
+  /* ============================ UI WIRING ============================ */
+  // Play mode cards
+  $('playModeGrid').addEventListener('click', function (e) {
+    var btn = e.target.closest('.play-card');
+    if (!btn) return;
+    Array.prototype.forEach.call(this.children, function (c) { c.classList.remove('active'); });
+    btn.classList.add('active');
+    state.playMode = btn.dataset.playmode;
+    beep(720, 0.06, 'sine', 0.04);
+  });
+
+  $('continueBtn').addEventListener('click', function () {
+    var nameVal = ($('playerName').value || '').trim();
+    if (!nameVal) { toast('Nhập tên hiển thị trước đã!'); $('playerName').focus(); return; }
+    try { localStorage.setItem('srank_player_name', nameVal); } catch (e) {}
+    ac();
+    if (state.playMode === 'online') {
+      if (!sb) { toast('Supabase chưa sẵn sàng'); return; }
+      showScreen('onlineScreen');
+    } else {
+      $('localSetupEmoji').textContent = state.playMode === 'bot' ? '🤖' : '👥';
+      $('localSetupTitle').textContent = state.playMode === 'bot' ? 'Đấu với Bot' : 'Cùng máy';
+      showScreen('localSetupScreen');
+    }
+  });
+
+  $('backFromOnlineBtn').addEventListener('click', function () { showScreen('menuScreen'); });
+  $('backFromLocalBtn').addEventListener('click', function () { showScreen('menuScreen'); });
+
+  // Create / Join
+  $('createRoomBtn').addEventListener('click', async function () {
+    this.disabled = true;
+    try { await createRoom(); } finally { this.disabled = false; }
+  });
+  $('joinRoomBtn').addEventListener('click', async function () {
+    var code = $('joinCodeInput').value;
+    this.disabled = true;
+    try { await joinRoom(code); } finally { this.disabled = false; }
+  });
+  $('joinCodeInput').addEventListener('input', function () {
+    this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  });
+  $('joinCodeInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') $('joinRoomBtn').click();
+  });
+
+  // Copy room code
+  $('roomCodeValue').addEventListener('click', function () {
+    var code = this.textContent;
+    try {
+      navigator.clipboard.writeText(code);
+      toast('Đã copy mã: ' + code);
+    } catch (e) {
+      toast('Mã phòng: ' + code);
+    }
+  });
+
+  $('hostStartBtn').addEventListener('click', hostStartGame);
+  $('leaveRoomBtn').addEventListener('click', leaveRoom);
+
+  // Local setup
   $('modeGrid').addEventListener('click', function (e) {
     var btn = e.target.closest('.mode-card');
     if (!btn) return;
     Array.prototype.forEach.call(this.children, function (c) { c.classList.remove('active'); });
     btn.classList.add('active');
     state.mode = btn.dataset.mode;
-    beep(720, 0.07, 'sine', 0.04);
+    beep(720, 0.06, 'sine', 0.04);
   });
   $('countSeg').addEventListener('click', function (e) {
     var btn = e.target.closest('button');
@@ -1403,55 +1654,59 @@ input{font-family:inherit}
     Array.prototype.forEach.call(this.children, function (c) { c.classList.remove('active'); });
     btn.classList.add('active');
     state.count = +btn.dataset.count;
-    beep(720, 0.07, 'sine', 0.04);
-  });
-  $('vsBot').addEventListener('change', function () { state.vsBot = this.checked; });
-
-  $('systemUsersList').addEventListener('click', function (e) {
-    var chip = e.target.closest('.sys-user-chip');
-    if (!chip) return;
-    var uid = chip.dataset.uid;
-    if (selectedUserIds.has(uid)) {
-      selectedUserIds.delete(uid);
-    } else {
-      if (selectedUserIds.size >= 3) { toast('Tối đa 3 đối thủ từ hệ thống'); return; }
-      selectedUserIds.add(uid);
-    }
-    renderSystemUsers();
-    syncCountFromSelection();
     beep(720, 0.06, 'sine', 0.04);
   });
+  $('startLocalBtn').addEventListener('click', function () {
+    ac();
+    if (state.playMode === 'bot' && state.count > 4) state.count = 4;
+    enterGameScreenLocal();
+  });
 
-  $('startBtn').addEventListener('click', function () { ac(); startGame(); });
-  $('rollBtn').addEventListener('click', function () { ac(); doRoll(); });
-  $('quitBtn').addEventListener('click', function () {
-    state.over = true; state.busy = true;
-    $('gameScreen').hidden = true;
-    $('setupScreen').hidden = false;
-    $('winOverlay').hidden = true;
-    refreshLeaderboards();
+  // Roll button
+  $('rollBtn').addEventListener('click', function () {
+    ac();
+    if (state.playMode === 'online') doRollOnline();
+    else doRollLocal();
   });
-  $('playAgainBtn').addEventListener('click', function () { $('winOverlay').hidden = true; startGame(); });
-  $('homeBtn').addEventListener('click', function () {
-    $('winOverlay').hidden = true;
-    $('gameScreen').hidden = true;
-    $('setupScreen').hidden = false;
-    refreshLeaderboards();
+
+  // Quit
+  $('quitBtn').addEventListener('click', async function () {
+    if (state.playMode === 'online' && room) {
+      await leaveRoom();
+    } else {
+      state.over = true;
+      showScreen('menuScreen');
+      refreshLeaderboards();
+    }
   });
+
+  // Play again
+  $('playAgainBtn').addEventListener('click', async function () {
+    $('winOverlay').hidden = true;
+    if (state.playMode === 'online') {
+      state.over = true; state.busy = false;
+      await leaveRoom();
+      showScreen('menuScreen');
+    } else {
+      state.over = true;
+      showScreen('menuScreen');
+      refreshLeaderboards();
+    }
+  });
+
+  // Sound
   $('soundBtn').addEventListener('click', function () {
     soundOn = !soundOn;
     this.textContent = soundOn ? '🔊' : '🔇';
     if (soundOn) beep(660, 0.08, 'sine', 0.05);
   });
+
+  // Space to roll
   document.addEventListener('keydown', function (e) {
-    if (e.code === 'Space' && host.style.display !== 'none') {
+    if (e.code === 'Space' && host.style.display !== 'none' && !$('gameScreen').hidden) {
       e.preventDefault();
-      if (!$('rollBtn').disabled) { ac(); doRoll(); }
+      if (!$('rollBtn').disabled) { ac(); $('rollBtn').click(); }
     }
-  });
-  window.addEventListener('resize', function () {
-    var c = $('fx');
-    if (c) { c.width = c.width; }
   });
 
   /* ============================ Open / Close ============================ */
@@ -1464,10 +1719,13 @@ input{font-family:inherit}
     closeBtn.style.display = 'grid';
     var app = shadow.getElementById('sgApp');
     if (app) app.scrollTop = 0;
-    // Nếu chưa fetch users lần nào → fetch
-    if (!systemUsers.length) fetchSystemUsers();
+    showScreen('menuScreen');
   }
-  function closeGame() {
+  async function closeGame() {
+    // Nếu đang trong phòng thì leave
+    if (room) {
+      try { await leaveRoom(); } catch (e) {}
+    }
     host.style.display = 'none';
     closeBtn.style.display = 'none';
     document.body.style.overflow = prevBodyOverflow;
@@ -1479,17 +1737,17 @@ input{font-family:inherit}
   });
 
   /* ============================ Init ============================ */
-  try {
-    var saved = localStorage.getItem('srank_player_name');
-    if (saved) $('playerName').value = saved;
-  } catch (e) {}
-
   dice0 = makeDice($('diceCube0'));
   dice1 = makeDice($('diceCube1'));
   refreshLeaderboards();
-  fetchSystemUsers();
+  loadMyProfile().then(function () {
+    try {
+      var saved = localStorage.getItem('srank_player_name');
+      if (saved) $('playerName').value = saved;
+      else if (myProfile) $('playerName').value = myProfile.display_name;
+    } catch (e) {}
+  });
 
-  /* Bind launcher button */
   function bindLauncher() {
     var launch = document.getElementById('snakeLadderBtn');
     if (launch && !launch.__sgBound) {
@@ -1497,9 +1755,6 @@ input{font-family:inherit}
       launch.addEventListener('click', openGame);
     }
   }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bindLauncher);
-  } else {
-    bindLauncher();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindLauncher);
+  else bindLauncher();
 })();
