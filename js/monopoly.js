@@ -1,6 +1,5 @@
 /* =====================================================================
-   CỜ TỶ PHÚ — MONOPOLY (v2.3 — MAXIMUM BOARD SPACE)
-   No HUD · No Sidebar · Center Roll · Pawns show Money
+   CỜ TỶ PHÚ — MONOPOLY (v2.4 — OWNER COLORS & MY POSITION PULSE)
    ===================================================================== */
 (function () {
   'use strict';
@@ -71,7 +70,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .board-grid{display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);width:100%;height:100%;gap:3px;position:relative;z-index:1}
 
 /* =====================================================
-   TILES — Giá ở trên, Người ở dưới
+   TILES
    ===================================================== */
 .tile{position:relative;border-radius:6px;overflow:hidden;background:#fff;border:1px solid rgba(0,0,0,.12);box-shadow:0 2px 5px rgba(0,0,0,.15),inset 0 1px 0 rgba(255,255,255,.8);display:flex;flex-direction:column;transition:transform .2s}
 .tile.corner{border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--tile-size)*.06);color:#fff;overflow:hidden;position:relative}
@@ -89,19 +88,29 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 .tile.prop .tile-band::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.35),transparent 60%)}
 .tile-band-text{font-size:calc(var(--tile-size)*.18);font-weight:900;color:#fff;position:relative;z-index:1;text-shadow:0 1px 2px rgba(0,0,0,.4);white-space:nowrap}
 
-.tile.prop .tile-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:2px;min-height:0;background:linear-gradient(180deg,#fff, #f8f5ff 100%);position:relative}
+/* Đây là phần nền thay đổi theo màu người chơi */
+.tile.prop .tile-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:2px;min-height:0;background:#fff;position:relative;transition:background .3s ease}
+.tile.prop.owned .tile-body{background:var(--owner-bg, #fff)}
 .tile-name{font-size:calc(var(--tile-size)*.2);font-weight:900;color:#3b2b52;text-align:center;line-height:1.1;margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:100%}
 
-/* Dải hiển thị cấp độ nhà */
 .tile-levels{display:flex;gap:1.5px;margin-top:2px;flex-wrap:wrap;justify-content:center;max-width:100%}
 .tile-levels span{font-size:calc(var(--tile-size)*.22);line-height:1}
 
-.tile.prop.owned{box-shadow:inset 0 0 0 2px var(--owner-color),0 2px 5px rgba(0,0,0,.15)}
-.tile.highlight{box-shadow:inset 0 0 0 2px #f59e0b,0 0 24px rgba(245,158,11,.6);animation:targetPulse 1.4s ease-in-out infinite;z-index:2}
-@keyframes targetPulse{0%,100%{box-shadow:inset 0 0 0 2px #f59e0b,0 0 24px rgba(245,158,11,.6)}50%{box-shadow:inset 0 0 0 2px #fbbf24,0 0 36px rgba(245,158,11,.9)}}
+/* Hiệu ứng nhấp nháy vị trí BẢN THÂN */
+.tile.my-position{animation:myTilePulse 1.5s ease-in-out infinite;z-index:5}
+@keyframes myTilePulse{
+  0%,100%{
+    box-shadow:inset 0 0 0 3px var(--my-color, #f59e0b), 0 0 20px var(--my-color-alpha, rgba(245,158,11,.5));
+    filter:brightness(1);
+  }
+  50%{
+    box-shadow:inset 0 0 0 5px var(--my-color, #fbbf24), 0 0 40px var(--my-color-alpha, rgba(245,158,11,.9));
+    filter:brightness(1.15);
+  }
+}
 
 /* Quân cờ và Tiền */
-.tile-players{position:absolute;bottom:2px;left:0;right:0;display:flex;justify-content:center;gap:2px;padding:0 2px;pointer-events:none;z-index:3;flex-wrap:wrap}
+.tile-players{position:absolute;bottom:2px;left:0;right:0;display:flex;justify-content:center;gap:2px;padding:0 2px;pointer-events:none;z-index:6;flex-wrap:wrap}
 .pawn-box{display:flex;flex-direction:column;align-items:center;line-height:1}
 .pawn-box img{width:calc(var(--tile-size)*.35);height:calc(var(--tile-size)*.35);min-width:14px;min-height:14px;border-radius:50%;border:1.5px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,.5);flex-shrink:0;transition:transform .18s}
 .pawn-money{font-size:calc(var(--tile-size)*.14);font-weight:900;color:#16a34a;background:rgba(255,255,255,.9);padding:0 3px;border-radius:4px;margin-top:1px;border:1px solid rgba(0,0,0,.1);letter-spacing:-.3px;white-space:nowrap}
@@ -109,7 +118,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 @keyframes pawnHop{0%{transform:translateY(0) scale(1)}45%{transform:translateY(-60%) scale(1.3)}100%{transform:translateY(0) scale(1)}}
 
 /* =====================================================
-   CENTER INFO — Bảng điều khiển trung tâm
+   CENTER INFO
    ===================================================== */
 .center-info{grid-column:2/8;grid-row:2/8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--tile-size)*.15);background:radial-gradient(circle at 50% 25%,#fffef5 0%,#fef3c7 45%,#fde68a 100%);border-radius:20px;padding:calc(var(--tile-size)*.4);text-align:center;position:relative;overflow:hidden;box-shadow:inset 0 0 0 2px rgba(245,158,11,.3),inset 0 0 80px rgba(245,158,11,.12),0 0 60px rgba(245,158,11,.25)}
 .center-info::before{content:"";position:absolute;inset:-30%;background:conic-gradient(from 0deg,transparent 0deg,rgba(245,158,11,.15) 60deg,transparent 120deg,rgba(245,158,11,.15) 240deg,transparent 300deg);animation:centerSpin 24s linear infinite;pointer-events:none}
@@ -417,7 +426,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     if (!board) return;
     var w = board.clientWidth;
     var h = board.clientHeight;
-    // 4px padding * 2 + 3px gap * 7 = 8 + 21 = 29
     var tileW = (w - 29) / 8;
     var tileH = (h - 29) / 8;
     var minTile = Math.min(tileW, tileH);
@@ -438,7 +446,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 
   function showMoneyFloat(username, amount) {
     var pawn = shadow.querySelector('.pawn-box[data-user="' + username + '"]');
-    var rect = pawn ? pawn.getBoundingClientRect() : { left: window.innerWidth/2, right: window.innerWidth/2, bottom: window.innerHeight/2 };
+    var rect = pawn ? pawn.getBoundingClientRect() : { left: window.innerWidth/2, right: window.innerWidth/2, top: window.innerHeight/2 };
     var f = document.createElement('div');
     f.className = 'money-float';
     f.textContent = (amount > 0 ? '+' : '−') + '$' + Math.abs(amount).toLocaleString();
@@ -477,6 +485,8 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
   function renderStaticTiles() {
     var grid = $('boardGrid');
     grid.innerHTML = '';
+    var me = state.game.players.find(function(p){ return p.username === myUsername; });
+
     for (var i = 0; i < 28; i++) {
       var rc = tileRowCol(i);
       var tile = state.game.tiles[i];
@@ -501,9 +511,11 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
         el.className = 'tile prop';
         el.style.setProperty('--zone-color', ZONES[tile.zone].color);
         var owner = tile.owner ? state.game.players.find(function (p) { return p.username === tile.owner; }) : null;
+        
         if (owner) {
           el.classList.add('owned');
           el.style.setProperty('--owner-color', owner.color);
+          el.style.setProperty('--owner-bg', owner.soft); // Lấy màu pastel làm nền
         }
         
         var bandText = owner ? ('Lv.' + tile.level) : fmtShort(ZONES[tile.zone].price);
@@ -521,6 +533,14 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
         el.innerHTML = '<div class="tile-band"><span class="tile-band-text">' + bandText + '</span></div>' +
                        '<div class="tile-body">' + body + '</div>';
       }
+
+      // Highlight nhấp nháy vị trí của BẠN
+      if (me && me.pos === i && !me.bankrupt) {
+        el.classList.add('my-position');
+        el.style.setProperty('--my-color', me.color);
+        el.style.setProperty('--my-color-alpha', me.soft);
+      }
+
       grid.appendChild(el);
     }
 
@@ -537,7 +557,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
       '<div class="center-status" id="rollInfo">...</div>';
     grid.appendChild(center);
     
-    // Bind roll button
     $('rollBtn').onclick = function () { executeRoll(); };
     syncRollBtn();
   }
@@ -637,8 +656,6 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     return count;
   }
 
-  // pushLog removed (no UI log)
-
   function getPlayer(username) {
     return state.game.players.find(function (p) { return p.username === username; });
   }
@@ -709,8 +726,27 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
   async function animateStepMove(player, steps) {
     var grid = $('boardGrid');
     var myPawnBox = grid.querySelector('.pawn-box[data-user="' + player.username + '"]');
+    var me = state.game.players.find(function(p){ return p.username === myUsername; });
+    
     for (var s = 0; s < steps; s++) {
+      // Xóa viền phát sáng của ô cũ (nếu đang là lượt của mình)
+      if (me && player.username === myUsername) {
+        var oldTile = grid.querySelector('[data-idx="' + player.pos + '"]');
+        if (oldTile) oldTile.classList.remove('my-position');
+      }
+
       player.pos = (player.pos + 1) % 28;
+
+      // Thêm viền phát sáng vào ô mới
+      if (me && player.username === myUsername) {
+        var newHighlightTile = grid.querySelector('[data-idx="' + player.pos + '"]');
+        if (newHighlightTile) {
+          newHighlightTile.classList.add('my-position');
+          newHighlightTile.style.setProperty('--my-color', me.color);
+          newHighlightTile.style.setProperty('--my-color-alpha', me.soft);
+        }
+      }
+
       if (myPawnBox) {
         var newTile = grid.querySelector('[data-idx="' + player.pos + '"]');
         if (newTile) {
@@ -1398,7 +1434,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
     var elName = $('myDisplayName');
     if (elName) elName.textContent = myUsername;
     bindEvents();
-    dbgEvent('INIT', 'Monopoly v2.3 initialized.');
+    dbgEvent('INIT', 'Monopoly v2.4 initialized.');
   }
 
   function openGame() {
