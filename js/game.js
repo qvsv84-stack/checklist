@@ -1,9 +1,9 @@
 /* =====================================================================
-   RẮN & THANG — ONLINE MULTIPLAYER (v3)
-   - Public room list (không cần mã)
-   - Start với 2+ người chơi
-   - Realtime sync state + auto refresh
-   - Chỉ winner save score (không duplicate)
+   RẮN & THANG — ONLINE MULTIPLAYER (v3.1 COMPLETE)
+   - Public room list, start 2+ players
+   - Debug panel (🐞 button)
+   - Version-checked realtime + polling fallback
+   - In-place player mutation (fixes animation bug)
    ===================================================================== */
 (function () {
   'use strict';
@@ -66,16 +66,12 @@ input,select{font-family:inherit}
 .seg{display:inline-flex;background:#fff;border-radius:16px;padding:5px;gap:4px;border:2px solid rgba(167,139,250,.16);width:fit-content}
 .seg button{width:54px;padding:10px 0;border-radius:12px;font-weight:900;font-size:16px;color:#9c8fb5;transition:all .18s ease}
 .seg button.active{color:#fff;background:linear-gradient(135deg,#ff7ab8,#a78bfa);box-shadow:0 8px 16px -8px rgba(167,139,250,.95)}
-
-/* =============== PUBLIC ROOMS LIST =============== */
 .rooms-head{display:flex;justify-content:space-between;align-items:center;margin:22px 0 10px;font-size:12px;font-weight:900;color:#8a7aa6;letter-spacing:.1em;text-transform:uppercase}
-.rooms-head .rooms-refresh{padding:5px 12px;border-radius:8px;background:#f3eeff;color:#a78bfa;font-size:11px;font-weight:900;letter-spacing:.05em;transition:all .15s ease}
-.rooms-head .rooms-refresh:active{transform:scale(.94)}
+.rooms-head .rooms-refresh{padding:5px 12px;border-radius:8px;background:#f3eeff;color:#a78bfa;font-size:11px;font-weight:900;letter-spacing:.05em}
 .rooms-list{display:flex;flex-direction:column;gap:10px;max-height:380px;overflow-y:auto;padding-right:2px}
 .rooms-list::-webkit-scrollbar{width:6px}
 .rooms-list::-webkit-scrollbar-thumb{background:#d9cff0;border-radius:99px}
-.room-item{display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:16px;background:#fff;border:2px solid rgba(167,139,250,.18);box-shadow:0 6px 16px -14px rgba(88,60,150,.8);transition:all .15s ease}
-.room-item:hover{border-color:rgba(167,139,250,.4)}
+.room-item{display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:16px;background:#fff;border:2px solid rgba(167,139,250,.18);box-shadow:0 6px 16px -14px rgba(88,60,150,.8)}
 .room-item.is-mine{background:linear-gradient(100deg,#f8f3ff,#fff);border-color:#c9b8f0}
 .room-item-info{flex:1;min-width:0}
 .room-item-host{font-size:14px;font-weight:900;color:#4a3a63;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
@@ -85,7 +81,6 @@ input,select{font-family:inherit}
 .room-item-join{padding:9px 18px;border-radius:12px;font-size:13px;flex:0 0 auto;min-width:72px;background:linear-gradient(135deg,#ff7ab8,#a78bfa);color:#fff;font-weight:900;box-shadow:0 6px 14px -8px rgba(167,139,250,.9);transition:transform .12s ease}
 .room-item-join:active{transform:scale(.94)}
 .room-item-join:disabled{opacity:.5;cursor:not-allowed;box-shadow:none;background:#c3b8d8}
-
 .waiting-players{display:flex;flex-direction:column;gap:8px;margin:16px 0}
 .waiting-player{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;background:#fff;border:2px solid rgba(167,139,250,.15)}
 .waiting-player img{width:42px;height:42px;border-radius:50%;object-fit:cover;background:#f0ecfa}
@@ -96,11 +91,10 @@ input,select{font-family:inherit}
 .host-controls select{width:100%;padding:12px 14px;border-radius:12px;border:2px solid rgba(167,139,250,.25);background:#fff;font-size:14px;font-weight:800;color:#4a3a63;outline:none}
 .waiting-actions{display:flex;gap:10px;margin-top:16px}
 .waiting-actions .btn{flex:1}
-
 .lb-block{margin-top:6px}
 .lb-block h3{margin:0 0 10px;font-family:'Baloo 2',cursive;font-size:16px;font-weight:800;color:#6b5b85;display:flex;align-items:center;gap:8px}
 .lb-list{display:flex;flex-direction:column;gap:7px}
-.lb-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto auto auto;gap:10px;align-items:center;padding:11px 14px;border-radius:14px;background:#fff;border:1px solid rgba(167,139,250,.14);font-size:13px;font-weight:700;box-shadow:0 6px 16px -16px rgba(88,60,150,.9)}
+.lb-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto auto auto;gap:10px;align-items:center;padding:11px 14px;border-radius:14px;background:#fff;border:1px solid rgba(167,139,250,.14);font-size:13px;font-weight:700}
 .lb-row:nth-child(1){background:linear-gradient(100deg,#fff7e0,#fffdf5);border-color:#f6d98a}
 .lb-row:nth-child(2){background:linear-gradient(100deg,#f5f7fb,#fdfdff);border-color:#d8dfeb}
 .lb-row:nth-child(3){background:linear-gradient(100deg,#fff2ea,#fffaf6);border-color:#f3cdb2}
@@ -176,6 +170,19 @@ input,select{font-family:inherit}
 .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);padding:12px 22px;border-radius:999px;background:rgba(59,43,82,.94);color:#fff;font-weight:800;font-size:14px;z-index:9500;opacity:0;pointer-events:none;transition:all .32s cubic-bezier(.2,.9,.3,1.2);box-shadow:0 16px 34px -14px rgba(0,0,0,.6);max-width:88vw;text-align:center}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .sys-empty{padding:22px;text-align:center;color:#b0a4c7;font-weight:700;font-size:13px;background:#faf7ff;border-radius:16px;border:1px dashed rgba(167,139,250,.3)}
+#debugPanel{position:fixed;top:60px;right:12px;z-index:9800;width:min(380px,calc(100vw - 24px));max-height:80vh;overflow-y:auto;background:rgba(20,15,35,.97);color:#e0d8ff;border-radius:16px;padding:14px;font-family:ui-monospace,'SF Mono','Cascadia Code',monospace;font-size:11px;line-height:1.55;box-shadow:0 20px 60px rgba(0,0,0,.7);border:1px solid rgba(167,139,250,.4)}
+#debugPanel .dbg-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(167,139,250,.3);font-weight:900;font-size:12px;color:#ff7ab8}
+#debugPanel #dbgClose{color:#ff7ab8;font-size:16px;padding:0;width:24px;height:24px;border-radius:50%;background:rgba(255,122,184,.15)}
+#debugPanel b{color:#a78bfa}
+#debugPanel .dbg-row{display:flex;gap:6px;margin-bottom:3px}
+#debugPanel .dbg-row > span:first-child{flex:0 0 auto;min-width:70px;color:#a78bfa}
+#debugPanel .dbg-val{flex:1;color:#e0d8ff;word-break:break-all}
+#debugPanel .dbg-val.warn{color:#fb7185}
+#debugPanel .dbg-val.ok{color:#22c98a}
+#debugPanel pre{margin:6px 0;padding:6px 8px;background:rgba(0,0,0,.4);border-radius:8px;white-space:pre-wrap;word-break:break-all;font-size:10px;max-height:130px;overflow-y:auto;color:#c9bde8}
+#debugPanel .dbg-actions{display:flex;gap:6px;margin-top:10px}
+#debugPanel .dbg-actions button{flex:1;padding:7px;border-radius:8px;background:rgba(167,139,250,.2);color:#e0d8ff;font-weight:800;font-size:11px;border:1px solid rgba(167,139,250,.4)}
+#debugPanel .dbg-actions button:active{transform:scale(.96)}
 `;
 
   /* ============================ HTML ============================ */
@@ -185,7 +192,10 @@ input,select{font-family:inherit}
   <div class="shell">
     <header class="topbar">
       <div class="brand"><span class="logo">🐍</span><span>Rắn &amp; Thang</span><span class="badge">ONLINE</span></div>
-      <div class="top-actions"><button class="icon-btn" id="soundBtn" title="Bật/tắt âm thanh" type="button">🔊</button></div>
+      <div class="top-actions">
+        <button class="icon-btn" id="soundBtn" title="Âm thanh" type="button">🔊</button>
+        <button class="icon-btn" id="debugBtn" title="Debug" type="button">🐞</button>
+      </div>
     </header>
 
     <section id="menuScreen" class="setup">
@@ -206,16 +216,9 @@ input,select{font-family:inherit}
 
     <section id="onlineScreen" class="setup" hidden>
       <div class="panel">
-        <div style="text-align:center;margin-bottom:16px">
-          <div style="font-size:48px;line-height:1;margin-bottom:6px">🌐</div>
-          <h2 style="margin:0;font-family:'Baloo 2',cursive;font-size:24px;color:#4a3a63">Chơi Online</h2>
-          <p style="margin:8px 0 0;color:#8a7aa6;font-size:13.5px;font-weight:700">Chọn phòng bên dưới hoặc tạo phòng mới</p>
-        </div>
+        <div style="text-align:center;margin-bottom:16px"><div style="font-size:48px;line-height:1;margin-bottom:6px">🌐</div><h2 style="margin:0;font-family:'Baloo 2',cursive;font-size:24px;color:#4a3a63">Chơi Online</h2><p style="margin:8px 0 0;color:#8a7aa6;font-size:13.5px;font-weight:700">Chọn phòng bên dưới hoặc tạo phòng mới</p></div>
         <button class="btn btn-primary btn-lg" id="createRoomBtn" type="button">➕ Tạo phòng mới</button>
-        <div class="rooms-head">
-          <span>🎮 Phòng đang chờ</span>
-          <button class="rooms-refresh" id="refreshRoomsBtn" type="button">↻ Làm mới</button>
-        </div>
+        <div class="rooms-head"><span>🎮 Phòng đang chờ</span><button class="rooms-refresh" id="refreshRoomsBtn" type="button">↻ Làm mới</button></div>
         <div class="rooms-list" id="roomsList"><div class="sys-empty">Đang tải...</div></div>
         <div style="margin-top:16px;text-align:center"><button class="btn" id="backFromOnlineBtn" type="button" style="font-size:13px;padding:8px 16px;color:#8a7aa6">← Quay lại</button></div>
       </div>
@@ -293,6 +296,26 @@ input,select{font-family:inherit}
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <div id="debugPanel" hidden>
+    <div class="dbg-head"><span>🐞 Debug Info</span><button id="dbgClose" type="button">✕</button></div>
+    <div class="dbg-row"><span>Me:</span><span class="dbg-val" id="dbgMe">—</span></div>
+    <div class="dbg-row"><span>Room:</span><span class="dbg-val" id="dbgRoom">—</span></div>
+    <div class="dbg-row"><span>Status:</span><span class="dbg-val" id="dbgStatus">—</span></div>
+    <div class="dbg-row"><span>Version:</span><span class="dbg-val" id="dbgVersion">—</span></div>
+    <div class="dbg-row"><span>Turn:</span><span class="dbg-val" id="dbgTurn">—</span></div>
+    <div class="dbg-row"><span>Busy:</span><span class="dbg-val" id="dbgBusy">—</span></div>
+    <div class="dbg-row"><span>LastMove:</span><span class="dbg-val" id="dbgLastMove">—</span></div>
+    <div class="dbg-row"><span>Realtime:</span><span class="dbg-val" id="dbgRealtime">—</span></div>
+    <div style="margin-top:8px"><b>Players:</b></div>
+    <pre id="dbgPlayers">—</pre>
+    <div style="margin-top:6px"><b>Events (last 20):</b></div>
+    <pre id="dbgEvents">—</pre>
+    <div class="dbg-actions">
+      <button id="dbgForceRefresh" type="button">🔄 Force refresh</button>
+      <button id="dbgResub" type="button">🔌 Resubscribe</button>
+    </div>
+  </div>
 </div>
 `;
 
@@ -334,6 +357,42 @@ input,select{font-family:inherit}
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2600);
   }
+
+  /* ============================ Debug ============================ */
+  var debugOpen = false;
+  var debugLog = [];
+  function dbg(msg) {
+    var line = '[' + new Date().toLocaleTimeString('vi-VN') + '] ' + msg;
+    debugLog.push(line);
+    if (debugLog.length > 50) debugLog.shift();
+    if (window.console) console.log('[SG]', msg);
+    if (debugOpen) renderDebugPanel();
+  }
+  function renderDebugPanel() {
+    if (!debugOpen) return;
+    $('dbgMe').textContent = myUsername + (myProfile ? ' (' + myProfile.display_name + ')' : '');
+    $('dbgRoom').textContent = room ? (room.code + ' / ' + room.id.slice(0, 8)) : 'none';
+    var st = room ? room.status : '—';
+    $('dbgStatus').textContent = st;
+    $('dbgStatus').className = 'dbg-val ' + (st === 'playing' ? 'ok' : st === 'finished' ? 'warn' : '');
+    $('dbgVersion').textContent = room ? (room.version || 0) : '—';
+    var turn = room && room.state ? (room.state.current_turn || '—') : '—';
+    $('dbgTurn').textContent = turn + (turn === myUsername ? '  ← BẠN' : '');
+    $('dbgTurn').className = 'dbg-val ' + (turn === myUsername ? 'ok' : '');
+    $('dbgBusy').textContent = String(state.busy);
+    var lm = room && room.state ? room.state.last_move : null;
+    $('dbgLastMove').textContent = lm ? (lm.user + ': ' + lm.from + '→' + lm.dice_land + '→' + lm.final + ' [' + lm.via + ']') : '—';
+    var rtOn = roomChannel ? '🟢 connected' : '⚪ none';
+    var poll = pollTimer ? '🔄 polling' : '—';
+    $('dbgRealtime').textContent = rtOn + ' · ' + poll;
+    $('dbgPlayers').textContent = state.players.length ? state.players.map(function (p) {
+      var mark = animating[p.username] ? ' 🔄' : '';
+      var you = p.username === myUsername ? ' (you)' : '';
+      return p.name + you + '\n  pos=' + p.pos + ' target=' + p.targetPos + mark;
+    }).join('\n') : '—';
+    $('dbgEvents').textContent = debugLog.slice(-20).join('\n') || '—';
+  }
+  setInterval(function () { if (debugOpen) renderDebugPanel(); }, 600);
 
   /* ============================ Supabase ============================ */
   var FALLBACK = {
@@ -504,6 +563,7 @@ input,select{font-family:inherit}
   var roomPlayers = [];
   var roomChannel = null;
   var roomsChannel = null;
+  var pollTimer = null;
   var myUsername = '';
   var myProfile = null;
   var isHost = false;
@@ -768,37 +828,25 @@ input,select{font-family:inherit}
     } catch (e) { return false; }
   }
 
-  /* ============================ Public rooms list ============================ */
+  /* ============================ Public rooms ============================ */
   function scheduleRoomsRefresh() {
     if (roomsRefreshTimer) clearTimeout(roomsRefreshTimer);
-    roomsRefreshTimer = setTimeout(function () {
-      roomsRefreshTimer = null;
-      refreshRoomsList();
-    }, 100);
+    roomsRefreshTimer = setTimeout(function () { roomsRefreshTimer = null; refreshRoomsList(); }, 100);
   }
-
   async function refreshRoomsList() {
     if (!sb) return;
     var el = $('roomsList');
     if (!el || !$('onlineScreen') || $('onlineScreen').hidden) return;
-
     var since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     var r;
     try {
       r = await sb.from(ROOMS_T).select('*').eq('status', 'waiting').gt('created_at', since).order('created_at', { ascending: false }).limit(30);
     } catch (e) { return; }
     if (r.error) { el.innerHTML = '<div class="sys-empty">Lỗi tải phòng</div>'; return; }
-
     var rooms = r.data || [];
-    if (!rooms.length) {
-      el.innerHTML = '<div class="sys-empty">Chưa có phòng nào. Hãy tạo phòng mới! 🎉</div>';
-      return;
-    }
-
-    // Fetch player counts + host names for those rooms
+    if (!rooms.length) { el.innerHTML = '<div class="sys-empty">Chưa có phòng nào. Hãy tạo phòng mới! 🎉</div>'; return; }
     var ids = rooms.map(function (x) { return x.id; });
-    var counts = {};
-    var hostNames = {};
+    var counts = {}, hostNames = {};
     try {
       var p = await sb.from(ROOM_PLAYERS_T).select('room_id,display_name,is_host').in('room_id', ids);
       if (p.data) p.data.forEach(function (row) {
@@ -806,7 +854,6 @@ input,select{font-family:inherit}
         if (row.is_host) hostNames[row.room_id] = row.display_name;
       });
     } catch (e) {}
-
     var modeLabels = { classic: 'Cổ điển', speed: 'Tốc độ', chaos: 'Hỗn loạn' };
     el.innerHTML = rooms.map(function (r) {
       var count = counts[r.id] || 1;
@@ -817,15 +864,11 @@ input,select{font-family:inherit}
       var joinLabel = mine ? 'Của bạn' : (full ? 'Đầy' : 'Vào');
       var disabled = mine || full;
       return '<div class="room-item' + (mine ? ' is-mine' : '') + '">' +
-        '<div class="room-item-info">' +
-          '<div class="room-item-host">🐱 ' + escapeHtml(host) + (mine ? '<span class="room-item-mine-tag">CỦA BẠN</span>' : '') + '</div>' +
-          '<div class="room-item-meta"><span class="room-item-mode">' + escapeHtml(mode) + '</span><span>' + count + '/' + r.max_players + ' người</span></div>' +
-        '</div>' +
-        '<button class="room-item-join" data-room-id="' + r.id + '" type="button"' + (disabled ? ' disabled' : '') + '>' + joinLabel + '</button>' +
-      '</div>';
+        '<div class="room-item-info"><div class="room-item-host">🐱 ' + escapeHtml(host) + (mine ? '<span class="room-item-mine-tag">CỦA BẠN</span>' : '') + '</div>' +
+        '<div class="room-item-meta"><span class="room-item-mode">' + escapeHtml(mode) + '</span><span>' + count + '/' + r.max_players + ' người</span></div></div>' +
+        '<button class="room-item-join" data-room-id="' + r.id + '" type="button"' + (disabled ? ' disabled' : '') + '>' + joinLabel + '</button></div>';
     }).join('');
   }
-
   function subscribeRoomsList() {
     if (!sb || roomsChannel) return;
     try {
@@ -836,17 +879,11 @@ input,select{font-family:inherit}
     } catch (e) { console.warn('[rooms] subscribe failed:', e); }
   }
   function unsubscribeRoomsList() {
-    if (roomsChannel) {
-      try { sb.removeChannel(roomsChannel); } catch (e) {}
-      roomsChannel = null;
-    }
+    if (roomsChannel) { try { sb.removeChannel(roomsChannel); } catch (e) {} roomsChannel = null; }
     if (roomsRefreshTimer) { clearTimeout(roomsRefreshTimer); roomsRefreshTimer = null; }
   }
-
   async function enterOnlineScreen() {
-    if (room) {
-      try { await Promise.race([leaveRoom(), sleep(2000)]); } catch (e) {}
-    }
+    if (room) { try { await Promise.race([leaveRoom(), sleep(2000)]); } catch (e) {} }
     showScreen('onlineScreen');
     refreshRoomsList();
     subscribeRoomsList();
@@ -858,8 +895,6 @@ input,select{font-family:inherit}
     if (room) { toast('Bạn đang ở trong phòng khác'); return; }
     var displayName = ($('playerName').value || '').trim().slice(0, 16) || myProfile.display_name;
     try { localStorage.setItem('srank_player_name', displayName); } catch (e) {}
-
-    // Retry on unique code collision
     var created = null;
     for (var attempt = 0; attempt < 5 && !created; attempt++) {
       var ins = await sb.from(ROOMS_T).insert([{
@@ -872,7 +907,7 @@ input,select{font-family:inherit}
     if (!created) { toast('Không tạo được phòng, thử lại sau'); return; }
     room = created;
     isHost = true;
-
+    dbg('CREATE room ' + created.code + ' v=' + created.version);
     var pIns = await sb.from(ROOM_PLAYERS_T).insert([{
       room_id: room.id, username: myUsername, display_name: displayName,
       avatar_url: myProfile.avatar_url, color_index: 0, pos: 0, is_host: true
@@ -883,25 +918,19 @@ input,select{font-family:inherit}
       room = null;
       return;
     }
-
     renderedLogTs = {}; animating = {}; pendingWin = null;
     unsubscribeRoomsList();
     enterWaitingRoom();
     subscribeRoom();
   }
-
   async function joinRoomById(roomId) {
     if (!sb) { toast('Chưa kết nối Supabase'); return; }
     if (room) { toast('Bạn đang ở trong phòng khác'); return; }
-
     var rRes = await sb.from(ROOMS_T).select('*').eq('id', roomId).eq('status', 'waiting').maybeSingle();
     if (rRes.error || !rRes.data) { toast('Phòng không tồn tại hoặc đã bắt đầu'); refreshRoomsList(); return; }
     var targetRoom = rRes.data;
-
     var cnt = await sb.from(ROOM_PLAYERS_T).select('id', { count: 'exact', head: true }).eq('room_id', targetRoom.id);
     if ((cnt.count || 0) >= targetRoom.max_players) { toast('Phòng đã đầy'); refreshRoomsList(); return; }
-
-    // Check not already in
     var exist = await sb.from(ROOM_PLAYERS_T).select('id').eq('room_id', targetRoom.id).eq('username', myUsername).maybeSingle();
     if (!exist.data) {
       var displayName = ($('playerName').value || '').trim().slice(0, 16) || myProfile.display_name;
@@ -910,25 +939,20 @@ input,select{font-family:inherit}
         avatar_url: myProfile.avatar_url, color_index: (cnt.count || 0), pos: 0, is_host: false
       }]).select().single();
       if (pIns.error) { toast('Lỗi vào phòng: ' + (pIns.error.message || pIns.error.code)); refreshRoomsList(); return; }
-
-      // Race check: if room became full, back out
       var after = await sb.from(ROOM_PLAYERS_T).select('id', { count: 'exact', head: true }).eq('room_id', targetRoom.id);
       if ((after.count || 0) > targetRoom.max_players) {
         await sb.from(ROOM_PLAYERS_T).delete().eq('room_id', targetRoom.id).eq('username', myUsername);
-        toast('Phòng vừa đầy, thử phòng khác');
-        refreshRoomsList();
-        return;
+        toast('Phòng vừa đầy, thử phòng khác'); refreshRoomsList(); return;
       }
     }
-
     room = targetRoom;
     isHost = (targetRoom.host_username === myUsername);
+    dbg('JOIN room ' + targetRoom.code + ' v=' + targetRoom.version);
     renderedLogTs = {}; animating = {}; pendingWin = null;
     unsubscribeRoomsList();
     enterWaitingRoom();
     subscribeRoom();
   }
-
   async function leaveRoom() {
     if (!room) return;
     var old = room;
@@ -940,7 +964,8 @@ input,select{font-family:inherit}
     renderedLogTs = {};
     if (busyTimeout) { clearTimeout(busyTimeout); busyTimeout = null; }
     state.busy = false;
-
+    dbg('LEAVE room ' + old.code);
+    stopPolling();
     try { if (roomChannel) { await sb.removeChannel(roomChannel); roomChannel = null; } } catch (e) {}
     try {
       await sb.from(ROOM_PLAYERS_T).delete().eq('room_id', old.id).eq('username', myUsername);
@@ -954,41 +979,41 @@ input,select{font-family:inherit}
   /* ============================ Realtime ============================ */
   function scheduleRefresh() {
     if (refreshTimer) clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(function () {
-      refreshTimer = null;
-      refreshRoomPlayers();
-    }, 80);
+    refreshTimer = setTimeout(function () { refreshTimer = null; refreshRoomPlayers(); }, 80);
   }
-
   async function refreshRoomPlayers() {
     if (!room) return;
     try {
       var res = await sb.from(ROOM_PLAYERS_T).select('*').eq('room_id', room.id).order('joined_at', { ascending: true });
       if (!res.data) return;
       roomPlayers = res.data;
-      renderWaitingPlayers();
       if (room && (room.status === 'playing' || room.status === 'finished')) {
         rebuildPlayersFromRoom();
         syncTurnUI();
+      } else {
+        renderWaitingPlayers();
       }
     } catch (e) { console.warn('[room] refresh failed:', e); }
   }
-
   function subscribeRoom() {
     if (!room || !sb) return;
     if (roomChannel) { try { sb.removeChannel(roomChannel); } catch (e) {} }
     var roomId = room.id;
-
+    dbg('SUBSCRIBE room channel');
     roomChannel = sb.channel('room:' + roomId)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: ROOMS_T, filter: 'id=eq.' + roomId }, function (payload) {
         if (!room || room.id !== roomId) return;
+        var oldVer = room.version || 0;
+        var newVer = (payload.new && payload.new.version) || 0;
+        if (newVer <= oldVer) { dbg('RT UPDATE ignored (stale): v' + newVer + ' <= v' + oldVer); return; }
+        dbg('RT UPDATE v' + oldVer + '→v' + newVer + ' turn=' + ((payload.new.state || {}).current_turn || '?'));
         var oldRoom = room;
         room = payload.new;
         handleRoomUpdate(oldRoom, payload.new);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: ROOMS_T, filter: 'id=eq.' + roomId }, function () {
-        // If win overlay shown, don't disrupt — user can manually leave
         if (!$('winOverlay').hidden) return;
+        dbg('RT DELETE room');
         toast('Phòng đã đóng');
         room = null; roomPlayers = [];
         showScreen('menuScreen');
@@ -996,34 +1021,49 @@ input,select{font-family:inherit}
       .on('postgres_changes', { event: '*', schema: 'public', table: ROOM_PLAYERS_T, filter: 'room_id=eq.' + roomId }, function () {
         scheduleRefresh();
       })
-      .subscribe();
-
+      .subscribe(function (status) { dbg('RT channel status: ' + status); });
     refreshRoomPlayers();
+    startPolling();
   }
-
+  function startPolling() {
+    if (pollTimer) return;
+    dbg('POLL start 1.5s');
+    pollTimer = setInterval(async function () {
+      if (!room || !sb) return;
+      if (document.hidden) return;
+      try {
+        var r = await sb.from(ROOMS_T).select('*').eq('id', room.id).maybeSingle();
+        if (!r.data) return;
+        var oldVer = room.version || 0;
+        var newVer = r.data.version || 0;
+        if (newVer > oldVer) {
+          dbg('POLL caught v' + oldVer + '→v' + newVer);
+          var oldRoom = room;
+          room = r.data;
+          handleRoomUpdate(oldRoom, r.data);
+        }
+      } catch (e) {}
+    }, 1500);
+  }
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; dbg('POLL stop'); }
+  }
   function handleRoomUpdate(oldRoom, newRoom) {
-    // Waiting → Playing
     if (oldRoom.status === 'waiting' && newRoom.status === 'playing') {
       refreshRoomPlayers().then(function () { enterGameScreenFromRoom(); });
       return;
     }
-
-    // Remote dice roll animation
     var oldRollAt = (oldRoom.state || {}).last_roll_at || 0;
     var newRollAt = (newRoom.state || {}).last_roll_at || 0;
     if (newRollAt > oldRollAt && (newRoom.state || {}).last_roll_by !== myUsername) {
       animateDiceFromRemote((newRoom.state || {}).dice || [1]);
     }
-
-    // Track pending win (show after refresh to have up-to-date players)
     var oldWinner = (oldRoom.state || {}).winner;
     var newWinner = (newRoom.state || {}).winner;
     if (newWinner && newWinner !== oldWinner) {
       pendingWin = { username: newWinner, roomData: newRoom };
     }
-
     renderLogFromState((newRoom.state || {}).log || []);
-
     refreshRoomPlayers().then(function () {
       syncTurnUI();
       if (pendingWin) {
@@ -1040,7 +1080,6 @@ input,select{font-family:inherit}
     $('hostControls').style.display = isHost ? '' : 'none';
     $('hostModeSelect').value = room.mode || 'classic';
   }
-
   function renderWaitingPlayers() {
     var el = $('waitingPlayers');
     var cnt = $('waitingCount');
@@ -1051,11 +1090,9 @@ input,select{font-family:inherit}
       var youBadge = isYou ? '<span class="wp-you">BẠN</span>' : '';
       return '<div class="waiting-player">' +
         '<img src="' + escapeHtml(rp.avatar_url || avatarUrl(rp.display_name)) + '" alt="" onerror="this.src=\'' + avatarUrl('x') + '\'">' +
-        '<span class="wp-name">' + escapeHtml(rp.display_name) + '</span>' +
-        badge + youBadge + '</div>';
+        '<span class="wp-name">' + escapeHtml(rp.display_name) + '</span>' + badge + youBadge + '</div>';
     }).join('');
     if (cnt) cnt.textContent = roomPlayers.length;
-
     if ($('hostControls')) {
       var show = isHost && room && room.status === 'waiting';
       $('hostControls').style.display = show ? '' : 'none';
@@ -1084,7 +1121,7 @@ input,select{font-family:inherit}
         dice: mode === 'speed' ? [1, 1] : [1],
         last_roll_by: null, last_roll_at: 0, moves: 0, started_at: now,
         player_count: roomPlayers.length,
-        log: [{ text: '🎮 Trò chơi bắt đầu — chế độ ' + ({ classic:'Cổ điển',speed:'Tốc độ',chaos:'Hỗn loạn' }[mode]) + ' · ' + roomPlayers.length + ' người', color: '#a78bfa', ts: now }],
+        log: [{ text: '🎮 Trò chơi bắt đầu — ' + ({ classic:'Cổ điển',speed:'Tốc độ',chaos:'Hỗn loạn' }[mode]) + ' · ' + roomPlayers.length + ' người', color: '#a78bfa', ts: now }],
         winner: null, winner_at: null, last_move: null
       };
       await sb.from(ROOM_PLAYERS_T).update({ pos: 0, skip_turn: false, extra_turn: false }).eq('room_id', room.id);
@@ -1093,6 +1130,7 @@ input,select{font-family:inherit}
         version: (room.version || 0) + 1, updated_at: new Date().toISOString()
       }).eq('id', room.id);
       if (upd.error) { toast('Lỗi: ' + upd.error.message); btn.disabled = false; }
+      else { dbg('HOST START v=' + (room.version + 1)); }
     } catch (e) {
       toast('Lỗi: ' + e.message);
       btn.disabled = false;
@@ -1157,7 +1195,6 @@ input,select{font-family:inherit}
     wasMyTurn = false;
     renderedLogTs = {};
     $('log').innerHTML = '';
-
     showScreen('gameScreen');
     buildBoard();
     renderPlayers();
@@ -1171,7 +1208,6 @@ input,select{font-family:inherit}
     renderLogFromState((room.state || {}).log || []);
     syncTurnUI();
   }
-
   function enterGameScreenLocal() {
     state.players = createLocalPlayers();
     state.over = false;
@@ -1182,7 +1218,6 @@ input,select{font-family:inherit}
     wasMyTurn = false;
     renderedLogTs = {};
     $('log').innerHTML = '';
-
     showScreen('gameScreen');
     buildBoard();
     renderPlayers();
@@ -1204,9 +1239,7 @@ input,select{font-family:inherit}
     if (!room || (room.status !== 'playing' && room.status !== 'finished')) return;
     var oldCache = {};
     state.players.forEach(function (p) { oldCache[p.username] = p; });
-
     var needsRender = roomPlayers.some(function (rp) { return !oldCache[rp.username]; });
-
     state.players = roomPlayers.map(function (rp, i) {
       var old = oldCache[rp.username];
       var st = PLAYER_STYLES[rp.color_index % 4];
@@ -1223,16 +1256,13 @@ input,select{font-family:inherit}
         barEl: old ? old.barEl : null
       };
     });
-
     if (needsRender) {
       renderPlayers(); createTokens(); positionTokens();
       animating = {};
     }
-
     var curUser = (room.state || {}).current_turn;
     var curIdx = state.players.findIndex(function (p) { return p.username === curUser; });
     if (curIdx >= 0) state.current = curIdx;
-
     var lastMove = (room.state || {}).last_move;
     state.players.forEach(function (p) {
       if (p.pos !== p.targetPos && !animating[p.username]) {
@@ -1240,43 +1270,33 @@ input,select{font-family:inherit}
         animateRemoteMove(p, moveInfo);
       }
     });
-
     updateTurnPill();
     syncPlayerCards();
     positionTokens();
     syncTurnUI();
   }
-
   async function animateRemoteMove(player, moveInfo) {
     if (animating[player.username]) return;
     animating[player.username] = true;
     try {
       var from = player.pos, to = player.targetPos;
       if (from === to) return;
-
       if (moveInfo && (moveInfo.via === 'ladder' || moveInfo.via === 'snake') && moveInfo.dice_land != null) {
         var diceLand = moveInfo.dice_land;
         var safety = 0;
         while (player.pos !== diceLand && safety < 20) {
           player.pos += diceLand > player.pos ? 1 : -1;
-          positionTokens();
-          SFX.tick();
-          await sleep(65);
-          safety++;
+          positionTokens(); SFX.tick(); await sleep(65); safety++;
         }
         await sleep(220);
         player.pos = to;
         if (moveInfo.via === 'ladder') SFX.ladder(); else SFX.snake();
-        positionTokens();
-        await sleep(320);
+        positionTokens(); await sleep(320);
       } else {
         var s2 = 0;
         while (player.pos !== player.targetPos && s2 < 25) {
           player.pos += player.targetPos > player.pos ? 1 : -1;
-          positionTokens();
-          SFX.tick();
-          await sleep(65);
-          s2++;
+          positionTokens(); SFX.tick(); await sleep(65); s2++;
         }
       }
     } finally {
@@ -1285,7 +1305,6 @@ input,select{font-family:inherit}
       animating[player.username] = false;
     }
   }
-
   function animateDiceFromRemote(values) {
     var cubes = [dice0];
     if (values.length > 1) cubes.push(dice1);
@@ -1295,22 +1314,17 @@ input,select{font-family:inherit}
       cubes.forEach(function (c, i) { c.show(values[i] || 1); });
     }, 450);
   }
-
   function syncTurnUI() {
     if (state.playMode !== 'online' || !room) return;
     var isMyTurn = (room.state || {}).current_turn === myUsername;
     var playing = room.status === 'playing';
-
     if (!isMyTurn && state.busy) {
       state.busy = false;
       if (busyTimeout) { clearTimeout(busyTimeout); busyTimeout = null; }
     }
-
     $('rollBtn').disabled = !(isMyTurn && playing && !state.busy);
-
     if (isMyTurn && !wasMyTurn && playing) vibrate([60, 40, 60]);
     wasMyTurn = isMyTurn;
-
     if (!playing) {
       $('rollHint').textContent = 'Trò chơi đã kết thúc';
     } else if (isMyTurn) {
@@ -1328,34 +1342,27 @@ input,select{font-family:inherit}
     if (state.busy) return;
     state.busy = true;
     $('rollBtn').disabled = true;
-
     if (busyTimeout) clearTimeout(busyTimeout);
     busyTimeout = setTimeout(function () {
       if (state.busy) { state.busy = false; busyTimeout = null; syncTurnUI(); }
     }, 6000);
-
     try {
       var me = roomPlayers.find(function (p) { return p.username === myUsername; });
       if (!me) { state.busy = false; return; }
-
       var nDice = room.mode === 'speed' ? 2 : 1;
       var values = [];
       for (var i = 0; i < nDice; i++) values.push(1 + rnd(6));
       var total = values.reduce(function (a, b) { return a + b; }, 0);
-
       await animateDice(values);
-
       var oldPos = me.pos;
       var diceLand = oldPos + total;
       var reachedGoal = diceLand >= 100;
       if (reachedGoal) diceLand = 100;
-
       var newPos = diceLand;
       var via = 'normal';
       var newLog = [];
       var myColor = PLAYER_STYLES[me.color_index % 4].color;
       newLog.push({ text: '🎲 ' + me.display_name + ' tung ' + values.join(' + ') + (nDice > 1 ? ' = ' + total : ''), color: myColor, ts: Date.now() });
-
       if (reachedGoal) { via = 'goal'; }
       else if (LADDERS[diceLand]) {
         newPos = LADDERS[diceLand]; via = 'ladder';
@@ -1364,14 +1371,10 @@ input,select{font-family:inherit}
         newPos = SNAKES[diceLand]; via = 'snake';
         newLog.push({ text: '🐍 ' + me.display_name + ' bị rắn cắn ' + diceLand + ' → ' + newPos + '!', color: myColor, ts: Date.now() + 1 });
       }
-
       var winner = reachedGoal ? myUsername : null;
-
       await sb.from(ROOM_PLAYERS_T).update({ pos: newPos }).eq('room_id', room.id).eq('username', myUsername);
-
       var curIdx = roomPlayers.findIndex(function (p) { return p.username === myUsername; });
       var nextTurn = roomPlayers[(curIdx + 1) % roomPlayers.length].username;
-
       var newState = {
         current_turn: winner ? myUsername : nextTurn,
         dice: values,
@@ -1383,13 +1386,13 @@ input,select{font-family:inherit}
         winner: winner, winner_at: winner ? Date.now() : null,
         last_move: { user: myUsername, from: oldPos, dice_land: diceLand, final: newPos, via: via }
       };
-
       await sb.from(ROOMS_T).update({
         state: newState,
         status: winner ? 'finished' : 'playing',
         version: (room.version || 0) + 1,
         updated_at: new Date().toISOString()
       }).eq('id', room.id);
+      dbg('ROLL submitted: ' + values.join('+') + ' → pos ' + newPos + ' next=' + nextTurn);
     } catch (e) {
       console.warn('[roll] failed:', e);
       state.busy = false;
@@ -1486,7 +1489,6 @@ input,select{font-family:inherit}
     state.busy = false;
     advanceTurnLocal();
   }
-
   async function winLocal(winner) {
     state.over = true; state.busy = true;
     $('rollBtn').disabled = true;
@@ -1515,18 +1517,14 @@ input,select{font-family:inherit}
     var durationMs = Date.now() - (st.started_at || Date.now());
     var secs = Math.max(1, Math.round(durationMs / 1000));
     var playerCount = st.player_count || roomPlayers.length;
-
     $('statMoves').textContent = st.moves || 0;
     $('statTime').textContent = fmtTime(secs);
     $('statMode').textContent = ({ classic:'Cổ điển',speed:'Tốc độ',chaos:'Hỗn loạn' }[roomData.mode]);
     $('winEmoji').textContent = isMe ? '🏆' : '🎉';
     $('winTitle').textContent = isMe ? 'Bạn thắng rồi! 🎉' : (winnerName + ' thắng!');
     $('winSub').textContent = isMe ? 'Tuyệt vời!' : 'Chơi ván mới nhé!';
-
     SFX.win(); confetti();
     vibrate([100, 50, 100, 50, 100]);
-
-    // Only the winner saves the score — prevents duplicate rows
     if (isMe) {
       try {
         await saveScore({
@@ -1536,7 +1534,6 @@ input,select{font-family:inherit}
         });
       } catch (e) { console.warn('[LB] winner save failed:', e); }
     }
-
     await refreshLeaderboards();
     await sleep(600);
     $('winOverlay').hidden = false;
@@ -1619,7 +1616,6 @@ input,select{font-family:inherit}
     state.playMode = btn.dataset.playmode;
     beep(720, 0.06, 'sine', 0.04);
   });
-
   $('continueBtn').addEventListener('click', function () {
     var nameVal = ($('playerName').value || '').trim();
     if (!nameVal) { toast('Nhập tên hiển thị trước đã!'); $('playerName').focus(); return; }
@@ -1634,19 +1630,15 @@ input,select{font-family:inherit}
       showScreen('localSetupScreen');
     }
   });
-
   $('backFromOnlineBtn').addEventListener('click', function () { showScreen('menuScreen'); });
   $('backFromLocalBtn').addEventListener('click', function () { showScreen('menuScreen'); });
-
   $('createRoomBtn').addEventListener('click', async function () {
     if (this.disabled) return;
     this.disabled = true;
     try { await createRoom(); } catch (e) { toast('Lỗi: ' + e.message); }
     finally { this.disabled = false; }
   });
-
   $('refreshRoomsBtn').addEventListener('click', function () { refreshRoomsList(); });
-
   $('roomsList').addEventListener('click', async function (e) {
     var btn = e.target.closest('.room-item-join');
     if (!btn || btn.disabled) return;
@@ -1657,13 +1649,11 @@ input,select{font-family:inherit}
     catch (err) { toast('Lỗi: ' + err.message); }
     finally { btn.disabled = false; }
   });
-
   $('hostStartBtn').addEventListener('click', hostStartGame);
   $('leaveRoomBtn').addEventListener('click', async function () {
     await leaveRoom();
     showScreen('menuScreen');
   });
-
   $('modeGrid').addEventListener('click', function (e) {
     var btn = e.target.closest('.mode-card');
     if (!btn) return;
@@ -1685,13 +1675,11 @@ input,select{font-family:inherit}
     if (state.count > 4) state.count = 4;
     enterGameScreenLocal();
   });
-
   $('rollBtn').addEventListener('click', function () {
     ac();
     if (state.playMode === 'online') doRollOnline();
     else doRollLocal();
   });
-
   $('quitBtn').addEventListener('click', async function () {
     if (state.playMode === 'online' && room) {
       await leaveRoom();
@@ -1702,7 +1690,6 @@ input,select{font-family:inherit}
       refreshLeaderboards();
     }
   });
-
   $('playAgainBtn').addEventListener('click', async function () {
     $('winOverlay').hidden = true;
     if (state.playMode === 'online' && room) {
@@ -1715,11 +1702,51 @@ input,select{font-family:inherit}
       refreshLeaderboards();
     }
   });
-
   $('soundBtn').addEventListener('click', function () {
     soundOn = !soundOn;
     this.textContent = soundOn ? '🔊' : '🔇';
     if (soundOn) beep(660, 0.08, 'sine', 0.05);
+  });
+
+  /* Debug panel UI */
+  $('debugBtn').addEventListener('click', function () {
+    debugOpen = !debugOpen;
+    $('debugPanel').hidden = !debugOpen;
+    if (debugOpen) renderDebugPanel();
+  });
+  $('dbgClose').addEventListener('click', function () {
+    debugOpen = false;
+    $('debugPanel').hidden = true;
+  });
+  $('dbgForceRefresh').addEventListener('click', async function () {
+    dbg('MANUAL force refresh');
+    if (room) {
+      try {
+        var r = await sb.from(ROOMS_T).select('*').eq('id', room.id).maybeSingle();
+        if (r.data) {
+          var oldRoom = room;
+          room = r.data;
+          if ((r.data.version || 0) > (oldRoom.version || 0)) {
+            dbg('FORCE applied v' + oldRoom.version + '→v' + r.data.version);
+            handleRoomUpdate(oldRoom, r.data);
+          } else {
+            dbg('FORCE: no newer version');
+          }
+        }
+        await refreshRoomPlayers();
+        syncTurnUI();
+        renderDebugPanel();
+      } catch (e) { dbg('FORCE error: ' + e.message); }
+    } else {
+      refreshRoomsList();
+    }
+  });
+  $('dbgResub').addEventListener('click', function () {
+    dbg('MANUAL resubscribe');
+    if (room) {
+      try { if (roomChannel) { sb.removeChannel(roomChannel); roomChannel = null; } } catch (e) {}
+      subscribeRoom();
+    }
   });
 
   document.addEventListener('keydown', function (e) {
@@ -1747,6 +1774,8 @@ input,select{font-family:inherit}
     closeBtn.style.display = 'none';
     document.body.style.overflow = prevBodyOverflow;
     document.body.classList.remove('snake-game-open');
+    debugOpen = false;
+    $('debugPanel').hidden = true;
     unsubscribeRoomsList();
     if (old) leaveRoom().catch(function () {});
   }
