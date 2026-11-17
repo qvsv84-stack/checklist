@@ -1,5 +1,5 @@
 /* =====================================================================
-   CỜ TỶ PHÚ — MONOPOLY (v4.1.1 — CRYPTO TYCOON RPG + CLOUD SYNC)
+   CỜ TỶ PHÚ — MONOPOLY (v4.1.2 — CRYPTO TYCOON RPG + CLOUD SYNC)
    Profile persists on Supabase · LocalStorage as offline cache
    CSS tách ra: css/monopoly.css
    ===================================================================== */
@@ -319,7 +319,7 @@
 
   /* ==================== STATE ==================== */
   var state = { playMode: 'bot', botCount: 1, game: null, busy: false, animating: false, selectedBooster: null };
-  var myUsername = '', myProfile = null;
+  var myUsername = '', myDisplayName = '', myProfile = null;
   var room = null, roomPlayers = [];
   var roomChan = null, roomsChan = null, pollTimer = null, isHost = false, debugOpen = false, dbgEvents = [];
   var lastDiceRoll = 0, consecutiveLowRolls = 0;
@@ -333,6 +333,17 @@
   }
 
   function getMyUsername() {
+    // Ưu tiên lấy trực tiếp thông tin từ SRank Auth nếu có (đã cập nhật display name chuẩn)
+    try {
+      if (window.SRank && window.SRank.Auth && typeof window.SRank.Auth.getCurrentUser === 'function') {
+        var uObj = window.SRank.Auth.getCurrentUser();
+        if (uObj) {
+          myDisplayName = uObj.displayName || uObj.username || '';
+          return uObj.username || myDisplayName;
+        }
+      }
+    } catch (e) {}
+
     var u = '';
     try {
       var keys = ['srank_username', 'username'];
@@ -343,6 +354,7 @@
       if (!u && window.SRANK_STATE && window.SRANK_STATE.currentUser) u = window.SRANK_STATE.currentUser.username;
     } catch (e) {}
     if (!u) { u = localStorage.getItem('srank_guest_id'); if (!u) { u = 'guest_' + rnd(99999); localStorage.setItem('srank_guest_id', u); } }
+    myDisplayName = u;
     return String(u).trim();
   }
 
@@ -446,7 +458,7 @@
   /* ==================== UI ==================== */
   function renderProfile() {
     $('profileAvatar').src = avt(myUsername);
-    $('profileName').textContent = myUsername;
+    $('profileName').textContent = myDisplayName || myUsername;
     $('profileLevel').textContent = profile.level;
     var pct = Math.min(100, (profile.xp / xpForLevel(profile.level)) * 100);
     $('xpFill').style.width = pct + '%';
@@ -1301,7 +1313,7 @@
   function startLocalGame() {
     myUsername = getMyUsername();
     var players = [{
-      username: myUsername, name: myProfile.display_name || myUsername, avatar: myProfile.avatar_url || avt(myUsername),
+      username: myUsername, name: myDisplayName || myProfile.display_name || myUsername, avatar: myProfile.avatar_url || avt(myUsername),
       color: PLAYER_COLORS[0].c, pos: 0, money: 200000, jail_turns: 0, bankrupt: false, bot: false
     }];
     for (var i = 0; i < state.botCount; i++) {
@@ -1347,7 +1359,7 @@
     var r = await sb.from('monopoly_rooms').insert({ code: code, host_username: myUsername, status: 'waiting', max_players: 4, state: {}, version: 0 }).select().single();
     if (r.error) return toast('Lỗi tạo phòng: ' + r.error.message);
     room = r.data; isHost = true;
-    await sb.from('monopoly_room_players').insert({ room_id: room.id, username: myUsername, display_name: myProfile.display_name || myUsername, avatar_url: myProfile.avatar_url, is_host: true, color_index: 0 });
+    await sb.from('monopoly_room_players').insert({ room_id: room.id, username: myUsername, display_name: myDisplayName || myProfile.display_name || myUsername, avatar_url: myProfile.avatar_url, is_host: true, color_index: 0 });
     enterWait();
   }
   async function joinRoomById(rid) {
@@ -1358,7 +1370,7 @@
     var ex = await sb.from('monopoly_room_players').select('id').eq('room_id', rid).eq('username', myUsername).maybeSingle();
     if (!ex.data) {
       var cnt = await sb.from('monopoly_room_players').select('id', { count: 'exact', head: true }).eq('room_id', rid);
-      await sb.from('monopoly_room_players').insert({ room_id: rid, username: myUsername, display_name: myProfile.display_name || myUsername, avatar_url: myProfile.avatar_url, color_index: cnt.count || 0 });
+      await sb.from('monopoly_room_players').insert({ room_id: rid, username: myUsername, display_name: myDisplayName || myProfile.display_name || myUsername, avatar_url: myProfile.avatar_url, color_index: cnt.count || 0 });
     }
     enterWait();
   }
@@ -1535,7 +1547,7 @@
 
     $('continueBtn').onclick = function () {
       myUsername = getMyUsername();
-      myProfile = { display_name: myUsername, avatar_url: avt(myUsername) };
+      myProfile = { display_name: myDisplayName || myUsername, avatar_url: avt(myUsername) };
       if (state.playMode === 'bot') showScreen('localSetupScreen');
       else enterOnlineScreen();
     };
@@ -1566,9 +1578,9 @@
 
   async function init() {
     myUsername = getMyUsername();
-    myProfile = { display_name: myUsername, avatar_url: avt(myUsername) };
+    myProfile = { display_name: myDisplayName || myUsername, avatar_url: avt(myUsername) };
     var elName = $('myDisplayName');
-    if (elName) elName.textContent = myUsername;
+    if (elName) elName.textContent = myDisplayName || myUsername;
 
     var cached = loadProfileLocal();
     if (cached) { profile = cached; dbgEvent('PROFILE_CACHE_HIT', 'Lv.' + cached.level); }
