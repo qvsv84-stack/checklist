@@ -1,5 +1,5 @@
 /* =====================================================================
-   CỜ TỶ PHÚ — MONOPOLY (v4.1.2 — CRYPTO TYCOON RPG + CLOUD SYNC)
+   CỜ TỶ PHÚ — MONOPOLY (v4.2.0 — + STREAK / QUESTS / CHEST / ACHIEVEMENTS / LEADERBOARD)
    Profile persists on Supabase · LocalStorage as offline cache
    CSS tách ra: css/monopoly.css
    ===================================================================== */
@@ -22,10 +22,15 @@
         <label>ID Người Chơi</label>
         <div id="myDisplayName" style="font-family:'Orbitron';font-size:18px;font-weight:900;color:#00f0ff">...</div>
       </div>
+      <div id="menuStreak" class="menu-streak"></div>
       <div class="profile-actions" style="margin-top:14px">
         <button class="btn btn-ghost" id="gotoProfileBtn">👤 Hồ Sơ</button>
         <button class="btn btn-ghost" id="gotoShopBtn">🛒 Shop</button>
         <button class="btn btn-ghost" id="gotoSkillsBtn">🌳 Kỹ Năng</button>
+      </div>
+      <div class="profile-actions" style="margin-top:8px">
+        <button class="btn btn-ghost" id="gotoQuestsBtn">📋 Nhiệm Vụ</button>
+        <button class="btn btn-ghost" id="gotoBoardBtn">🏆 BXH</button>
       </div>
       <div class="field" style="margin-top:12px"><label>Chế Độ</label>
         <div class="play-mode-grid" id="playModeGrid">
@@ -76,6 +81,26 @@
     </div>
   </section>
 
+  <section id="questsScreen" class="screen" hidden>
+    <div class="setup-card" style="max-width:600px;max-height:92vh;overflow:auto">
+      <h2>📋 NHIỆM VỤ</h2>
+      <div class="q-sub" id="questTimer"></div>
+      <div id="questList"></div>
+      <h3 class="q-h3">🏅 THÀNH TỰU</h3>
+      <div id="achList"></div>
+      <button class="btn btn-ghost btn-lg" id="backFromQuestsBtn" style="margin-top:12px">← Quay Lại</button>
+    </div>
+  </section>
+
+  <section id="leaderboardScreen" class="screen" hidden>
+    <div class="setup-card" style="max-width:600px;max-height:92vh;overflow:auto">
+      <h2>🏆 BXH TUẦN</h2>
+      <div class="q-sub" id="lbSub">Số ván thắng trong tuần (reset thứ Hai)</div>
+      <div id="lbList"></div>
+      <button class="btn btn-ghost btn-lg" id="backFromBoardBtn" style="margin-top:12px">← Quay Lại</button>
+    </div>
+  </section>
+
   <section id="onlineScreen" class="screen" hidden>
     <div class="setup-card">
       <h2>🌐 Phòng Chơi</h2>
@@ -120,9 +145,12 @@
       <h2 id="winTitle">Chiến thắng!</h2>
       <p id="winSub">...</p>
       <div class="rewards" id="winRewards"></div>
-      <button class="btn btn-primary btn-lg" id="playAgainBtn">🏠 Về Sảnh</button>
+      <div class="win-hint" id="winHint"></div>
+      <button class="btn btn-primary btn-lg" id="playNowBtn" style="margin-top:10px">🔄 Chơi Lại</button>
+      <button class="btn btn-ghost btn-lg" id="playAgainBtn" style="margin-top:8px">🏠 Về Sảnh</button>
     </div>
   </div>
+  <div class="mp-overlay" id="dailyOverlay" hidden><div class="mp-modal" id="dailyBody"></div></div>
   <div class="toast" id="toast"></div>
   <div class="sync-indicator" id="syncIndicator">💾 Đang lưu...</div>
   <div id="debugPanel" hidden>
@@ -132,11 +160,44 @@
 </div>
 `;
 
+  var EXTRA_CSS = `
+.menu-streak{text-align:center;margin-top:8px;font-weight:800;font-size:13px;color:#ffcc00;letter-spacing:.5px;min-height:18px}
+.btn .badge{display:inline-block;min-width:18px;padding:0 5px;margin-left:6px;border-radius:9px;background:#ff2a75;color:#fff;font-size:11px;line-height:18px;font-weight:900}
+.q-sub{text-align:center;font-size:11px;color:#a0aabf;margin:4px 0 10px;letter-spacing:1px}
+.q-h3{margin:16px 0 8px;font-size:13px;letter-spacing:1px;color:#00f0ff}
+.q-item,.a-item,.lb-row{display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:8px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid rgba(0,240,255,.2);color:#fff}
+.q-item.done{border-color:#00ff66}
+.q-item.claimed,.a-item.locked{opacity:.5}
+.a-item.unlocked{border-color:#ffcc00}
+.q-info{flex:1;min-width:0}
+.q-name{font-weight:800;font-size:13px}
+.q-rw{font-size:11px;color:#a0aabf;margin-top:2px}
+.q-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.1);margin-top:6px;overflow:hidden}
+.q-bar i{display:block;height:100%;background:linear-gradient(90deg,#00f0ff,#00ff66)}
+.a-ico{font-size:22px}
+.lb-row.me{border-color:#ffcc00;background:rgba(255,204,0,.08)}
+.lb-rank{width:34px;font-weight:900;text-align:center}
+.lb-name{flex:1;font-weight:800;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb-wins{font-weight:900;color:#00ff66;font-size:13px}
+.dl-streak{text-align:center;font-weight:900;color:#ffcc00;margin:6px 0}
+.dl-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0}
+.dl-cell{padding:8px 2px;border-radius:8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);text-align:center;color:#fff;font-size:11px;display:flex;flex-direction:column;gap:2px}
+.dl-cell span{font-size:18px}
+.dl-cell.done{opacity:.45}
+.dl-cell.today{border-color:#ffcc00;box-shadow:0 0 10px rgba(255,204,0,.6)}
+.dl-got{text-align:center;font-size:18px;font-weight:900;color:#00ff66;margin:10px 0}
+.dl-note{text-align:center;font-size:11px;color:#a0aabf;margin-bottom:12px}
+#dailyBody{color:#fff;text-align:center}
+.win-hint{margin-top:10px;font-size:12px;color:#a0aabf;line-height:1.7}
+.chest-line{margin-top:8px;font-weight:900}
+.chest-line.common{color:#c0c8d8}.chest-line.rare{color:#00f0ff}.chest-line.epic{color:#b000ff}.chest-line.jackpot{color:#ffcc00}
+`;
+
   var host = document.createElement('div');
   host.id = 'monopolyHost';
   host.style.cssText = 'position:fixed;inset:0;z-index:9500;display:none;';
   var shadow = host.attachShadow({ mode: 'open' });
-  shadow.innerHTML = '<link rel="stylesheet" href="' + CSS_HREF + '">' + HTML;
+  shadow.innerHTML = '<link rel="stylesheet" href="' + CSS_HREF + '"><style>' + EXTRA_CSS + '</style>' + HTML;
   document.body.appendChild(host);
 
   var closeBtn = document.createElement('button');
@@ -175,8 +236,20 @@
     level: 1, xp: 0, skillPoints: 0, chips: 100,
     ownedDice: ['silver'], ownedBoards: ['neon'], ownedBoosters: {},
     activeDice: 'silver', activeBoard: 'neon',
-    skills: {}, stats: { wins: 0, plays: 0 }
+    skills: {}, stats: { wins: 0, plays: 0, buys: 0, upgrades: 0 },
+    loginStreak: 0, lastLoginDate: '', quests: { date: '', list: [], bonus: false },
+    achievements: {}, weekKey: '', weekWins: 0
   };
+
+  function normalizeProfile(p) {
+    var d = JSON.parse(JSON.stringify(DEFAULT_PROFILE));
+    for (var k in d) if (p[k] === undefined || p[k] === null) p[k] = d[k];
+    ['wins', 'plays', 'buys', 'upgrades'].forEach(function (k) { p.stats[k] = p.stats[k] || 0; });
+    if (typeof p.quests !== 'object') p.quests = d.quests;
+    if (typeof p.quests.date !== 'string') p.quests.date = '';
+    if (!Array.isArray(p.quests.list)) p.quests.list = [];
+    return p;
+  }
 
   function getClientId() {
     var cid = localStorage.getItem('mp_client_id');
@@ -207,18 +280,25 @@
       owned_dice: p.ownedDice, owned_boards: p.ownedBoards, owned_boosters: p.ownedBoosters,
       active_dice: p.activeDice, active_board: p.activeBoard,
       skills: p.skills, stats: p.stats,
+      login_streak: p.loginStreak, last_login_date: p.lastLoginDate || null,
+      daily_quests: p.quests, achievements: p.achievements,
+      week_key: p.weekKey || null, week_wins: p.weekWins,
+      display_name: myDisplayName || myUsername,
       updated_at: new Date().toISOString()
     };
   }
   function rowToProfile(r) {
-    return {
+    return normalizeProfile({
       level: r.level || 1, xp: r.xp || 0, skillPoints: r.skill_points || 0, chips: r.chips || 0,
       ownedDice: Array.isArray(r.owned_dice) ? r.owned_dice : ['silver'],
       ownedBoards: Array.isArray(r.owned_boards) ? r.owned_boards : ['neon'],
       ownedBoosters: r.owned_boosters || {},
       activeDice: r.active_dice || 'silver', activeBoard: r.active_board || 'neon',
-      skills: r.skills || {}, stats: r.stats || { wins: 0, plays: 0 }
-    };
+      skills: r.skills || {}, stats: r.stats || { wins: 0, plays: 0 },
+      loginStreak: r.login_streak || 0, lastLoginDate: r.last_login_date || '',
+      quests: r.daily_quests || undefined, achievements: r.achievements || {},
+      weekKey: r.week_key || '', weekWins: r.week_wins || 0
+    });
   }
 
   function setSyncStatus(status) {
@@ -251,6 +331,7 @@
   }
 
   function scheduleSaveProfile() {
+    checkAchievements();
     saveProfileLocal();
     if (!syncOnline) return;
     if (saveTimer) clearTimeout(saveTimer);
@@ -316,6 +397,223 @@
   };
 
   function hasSkill(id) { return !!profile.skills[id]; }
+
+  /* ==================== RETENTION: STREAK / QUESTS / CHEST / ACHIEVEMENTS / LEADERBOARD ==================== */
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function dateKey(d) { d = d || new Date(); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function yesterdayKey() { var d = new Date(); d.setDate(d.getDate() - 1); return dateKey(d); }
+  function weekKey() { var d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return dateKey(d); }
+  function isWeekend() { var w = new Date().getDay(); return w === 0 || w === 6; }
+  function ensureWeek() { var wk = weekKey(); if (profile.weekKey !== wk) { profile.weekKey = wk; profile.weekWins = 0; } }
+
+  function seededShuffle(arr, seed) {
+    var h = 0, i;
+    for (i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+    function r() { h = (h * 1664525 + 1013904223) >>> 0; return h / 4294967296; }
+    var a = arr.slice();
+    for (i = a.length - 1; i > 0; i--) { var j = Math.floor(r() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+
+  /* ---- Điểm danh ---- */
+  var LOGIN_REWARDS = [50, 60, 70, 80, 100, 120, 300];
+  function checkDailyLogin() {
+    var today = dateKey();
+    if (profile.lastLoginDate === today) return;
+    var streak = (profile.lastLoginDate === yesterdayKey()) ? (profile.loginStreak || 0) + 1 : 1;
+    var idx = (streak - 1) % 7, chips = LOGIN_REWARDS[idx], sp = idx === 6 ? 1 : 0;
+    profile.loginStreak = streak; profile.lastLoginDate = today;
+    profile.chips += chips; profile.skillPoints += sp;
+    scheduleSaveProfile();
+    showDailyPopup(streak, idx, chips, sp);
+  }
+  function showDailyPopup(streak, idx, chips, sp) {
+    var cells = '';
+    for (var i = 0; i < 7; i++) {
+      cells += '<div class="dl-cell' + (i < idx ? ' done' : (i === idx ? ' today' : '')) + '"><b>Ngày ' + (i + 1) + '</b><span>' + (i === 6 ? '🎁' : '💎') + '</span><small>' + LOGIN_REWARDS[i] + (i === 6 ? ' +1SP' : '') + '</small></div>';
+    }
+    $('dailyBody').innerHTML = '<h2>🔥 ĐIỂM DANH</h2><div class="dl-streak">Chuỗi ' + streak + ' ngày</div><div class="dl-grid">' + cells + '</div>' +
+      '<div class="dl-got">+' + chips + ' 💎' + (sp ? ' · +' + sp + ' 🔮 SP' : '') + '</div><div class="dl-note">Bỏ lỡ 1 ngày là mất chuỗi!</div>' +
+      '<button class="btn btn-primary btn-lg" id="dailyOkBtn">Nhận</button>';
+    $('dailyOkBtn').onclick = function () { $('dailyOverlay').hidden = true; renderMenuExtras(); };
+    $('dailyOverlay').hidden = false; sfx.win();
+  }
+
+  /* ---- Nhiệm vụ ngày ---- */
+  var QUEST_DEFS = {
+    play:    { name: 'Chơi 2 ván', target: 2, chips: 40, xp: 30 },
+    win:     { name: 'Thắng 1 ván', target: 1, chips: 80, xp: 60 },
+    buy:     { name: 'Mua 4 ô đất', target: 4, chips: 40, xp: 30 },
+    upgrade: { name: 'Nâng cấp nhà 2 lần', target: 2, chips: 40, xp: 30 },
+    rent:    { name: 'Thu tiền thuê 3 lần (đấu Bot)', target: 3, chips: 50, xp: 40 },
+    rich:    { name: 'Kết thúc ván với ≥ $300k', target: 1, chips: 60, xp: 40 },
+    chain:   { name: 'Sở hữu chuỗi ≥ 3 ô cùng khu', target: 1, chips: 60, xp: 40 }
+  };
+  function ensureQuests() {
+    var today = dateKey();
+    if (profile.quests.date === today && profile.quests.list.length) return;
+    var ids = seededShuffle(Object.keys(QUEST_DEFS), today + '|' + myUsername).slice(0, 3);
+    profile.quests = { date: today, bonus: false, list: ids.map(function (id) { return { id: id, prog: 0, claimed: false }; }) };
+    scheduleSaveProfile();
+  }
+  function questAdd(id, n) {
+    ensureQuests();
+    var q = profile.quests.list.find(function (x) { return x.id === id; });
+    if (!q) return;
+    var def = QUEST_DEFS[id];
+    if (q.prog >= def.target) return;
+    q.prog = Math.min(def.target, q.prog + (n || 1));
+    if (q.prog >= def.target) toast('📋 Xong: ' + def.name + ' — vào Nhiệm Vụ để nhận thưởng!');
+    scheduleSaveProfile();
+  }
+  function countClaimable() {
+    ensureQuests();
+    return profile.quests.list.filter(function (q) { return !q.claimed && q.prog >= QUEST_DEFS[q.id].target; }).length;
+  }
+  function claimQuest(i) {
+    ensureQuests();
+    var q = profile.quests.list[i]; if (!q) return;
+    var def = QUEST_DEFS[q.id];
+    if (q.claimed || q.prog < def.target) return;
+    q.claimed = true; profile.chips += def.chips; addXP(def.xp); sfx.buy();
+    toast('🎁 +' + def.chips + '💎 +' + def.xp + ' XP');
+    if (!profile.quests.bonus && profile.quests.list.every(function (x) { return x.claimed; })) {
+      profile.quests.bonus = true;
+      var r = openChest(true);
+      setTimeout(function () { toast(r.label + ': ' + r.text); sfx.event(); }, 1300);
+    }
+    scheduleSaveProfile(); renderQuests(); renderMenuExtras();
+  }
+
+  /* ---- Rương ngẫu nhiên ---- */
+  function openChest(boost) {
+    var roll = Math.random() * 100;
+    var jack = boost ? 5 : 2, epic = boost ? 20 : 10, rare = boost ? 45 : 30;
+    var res, c;
+    if (roll < jack) {
+      profile.chips += 500; profile.skillPoints += 1;
+      res = { tier: 'jackpot', label: '💥 JACKPOT', text: '+500 💎 +1 🔮 SP' };
+    } else if (roll < jack + epic) {
+      var pool = [], id;
+      for (id in DICE_SKINS) if (DICE_SKINS[id].cost > 0 && DICE_SKINS[id].cost <= 1000 && profile.ownedDice.indexOf(id) < 0) pool.push({ k: 'dice', id: id });
+      for (id in BOARD_SKINS) if (BOARD_SKINS[id].cost > 0 && BOARD_SKINS[id].cost <= 1000 && profile.ownedBoards.indexOf(id) < 0) pool.push({ k: 'board', id: id });
+      if (pool.length) {
+        var pk = pool[rnd(pool.length)];
+        if (pk.k === 'dice') { profile.ownedDice.push(pk.id); res = { tier: 'epic', label: '🌟 Rương Sử Thi', text: 'Mở khóa ' + DICE_SKINS[pk.id].name + '!' }; }
+        else { profile.ownedBoards.push(pk.id); res = { tier: 'epic', label: '🌟 Rương Sử Thi', text: 'Mở khóa bàn ' + BOARD_SKINS[pk.id].name + '!' }; }
+      } else {
+        var bk = Object.keys(BOOSTERS), bid = bk[rnd(bk.length)];
+        profile.ownedBoosters[bid] = (profile.ownedBoosters[bid] || 0) + 1;
+        res = { tier: 'epic', label: '🌟 Rương Sử Thi', text: '+1 ' + BOOSTERS[bid].name };
+      }
+    } else if (roll < jack + epic + rare) {
+      c = 80 + rnd(71); profile.chips += c;
+      res = { tier: 'rare', label: '💠 Rương Hiếm', text: '+' + c + ' 💎' };
+    } else {
+      c = 20 + rnd(41); profile.chips += c;
+      res = { tier: 'common', label: '📦 Rương Thường', text: '+' + c + ' 💎' };
+    }
+    scheduleSaveProfile();
+    return res;
+  }
+
+  /* ---- Thành tựu (tự mở khóa + tự thưởng) ---- */
+  var ACH_LIST = [
+    { id: 'first_win', name: 'Chiến thắng đầu tiên', icon: '🏆', chips: 50, target: 1, get: function (p) { return p.stats.wins; } },
+    { id: 'win10', name: 'Thắng 10 ván', icon: '👑', chips: 200, target: 10, get: function (p) { return p.stats.wins; } },
+    { id: 'play20', name: 'Chơi 20 ván', icon: '🎮', chips: 100, target: 20, get: function (p) { return p.stats.plays; } },
+    { id: 'buy50', name: 'Mua 50 ô đất', icon: '🏠', chips: 100, target: 50, get: function (p) { return p.stats.buys; } },
+    { id: 'up20', name: 'Nâng cấp 20 lần', icon: '🏗️', chips: 100, target: 20, get: function (p) { return p.stats.upgrades; } },
+    { id: 'lv5', name: 'Đạt Level 5', icon: '⭐', chips: 50, sp: 1, target: 5, get: function (p) { return p.level; } },
+    { id: 'streak7', name: 'Điểm danh 7 ngày liên tiếp', icon: '🔥', chips: 150, target: 7, get: function (p) { return p.loginStreak; } },
+    { id: 'collect', name: 'Sưu tập 6 skin', icon: '🎨', chips: 150, target: 6, get: function (p) { return p.ownedDice.length + p.ownedBoards.length; } },
+    { id: 'skill3', name: 'Mở 3 kỹ năng', icon: '🌳', chips: 100, target: 3, get: function (p) { return Object.keys(p.skills).length; } }
+  ];
+  var achBusy = false;
+  function checkAchievements() {
+    if (achBusy || !profile || !profile.stats) return;
+    achBusy = true;
+    try {
+      ACH_LIST.forEach(function (a) {
+        if (profile.achievements[a.id]) return;
+        if (a.get(profile) >= a.target) {
+          profile.achievements[a.id] = true;
+          profile.chips += a.chips; if (a.sp) profile.skillPoints += a.sp;
+          setTimeout(function () { toast('🏅 Thành tựu: ' + a.name + ' (+' + a.chips + '💎)'); sfx.event(); }, 1500);
+        }
+      });
+    } finally { achBusy = false; }
+  }
+
+  /* ---- Render: menu / nhiệm vụ / BXH / gợi ý cuối ván ---- */
+  function renderMenuExtras() {
+    var s = $('menuStreak');
+    if (s) {
+      var parts = [];
+      if (profile.loginStreak > 0) parts.push('🔥 Chuỗi ' + profile.loginStreak + ' ngày');
+      if (isWeekend()) parts.push('⚡ Cuối tuần x2 XP');
+      s.textContent = parts.join(' · ');
+    }
+    var qb = $('gotoQuestsBtn');
+    if (qb) { var n = countClaimable(); qb.innerHTML = '📋 Nhiệm Vụ' + (n ? '<span class="badge">' + n + '</span>' : ''); }
+  }
+  function renderQuests() {
+    ensureQuests();
+    var now = new Date(), end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    $('questTimer').textContent = 'Làm mới sau ~' + Math.ceil((end - now) / 36e5) + ' giờ';
+    var box = $('questList'), html = '';
+    profile.quests.list.forEach(function (q, i) {
+      var d = QUEST_DEFS[q.id], done = q.prog >= d.target;
+      var right = q.claimed ? '<span style="font-size:11px;color:#00ff66;font-weight:800">✓ Đã nhận</span>'
+        : (done ? '<button class="btn btn-primary btn-sm" data-claim="' + i + '">Nhận</button>'
+          : '<span style="font-size:12px;font-weight:800;color:#a0aabf">' + q.prog + '/' + d.target + '</span>');
+      html += '<div class="q-item' + (q.claimed ? ' claimed' : (done ? ' done' : '')) + '"><div class="q-info"><div class="q-name">' + esc(d.name) + '</div>' +
+        '<div class="q-rw">💎 ' + d.chips + ' · ⭐ ' + d.xp + ' XP</div><div class="q-bar"><i style="width:' + Math.min(100, q.prog / d.target * 100) + '%"></i></div></div>' + right + '</div>';
+    });
+    html += '<div class="q-sub">' + (profile.quests.bonus ? '🎁 Đã nhận Rương Bonus hôm nay' : 'Xong cả 3 nhiệm vụ → mở Rương Bonus 🎁') + '</div>';
+    box.innerHTML = html;
+    var ah = '';
+    ACH_LIST.forEach(function (a) {
+      var ok = !!profile.achievements[a.id], cur = Math.min(a.get(profile), a.target);
+      ah += '<div class="a-item ' + (ok ? 'unlocked' : 'locked') + '"><div class="a-ico">' + a.icon + '</div><div class="q-info"><div class="q-name">' + esc(a.name) + '</div>' +
+        '<div class="q-rw">' + (ok ? '✓ Đã mở' : cur + '/' + a.target) + ' · 💎 ' + a.chips + (a.sp ? ' · 🔮 ' + a.sp : '') + '</div></div></div>';
+    });
+    $('achList').innerHTML = ah;
+  }
+  async function renderLeaderboard() {
+    var box = $('lbList');
+    ensureWeek();
+    $('lbSub').textContent = 'Tuần này bạn thắng ' + profile.weekWins + ' ván · reset thứ Hai';
+    if (!sb || !syncOnline) { box.innerHTML = '<div class="q-sub">Cần kết nối server để xem BXH</div>'; return; }
+    box.innerHTML = '<div class="q-sub">Đang tải...</div>';
+    try {
+      await flushSaveProfile();
+      var r = await sb.from('monopoly_profiles').select('username,display_name,week_wins,level').eq('week_key', weekKey()).gt('week_wins', 0).order('week_wins', { ascending: false }).limit(10);
+      if (r.error) throw r.error;
+      if (!r.data || !r.data.length) { box.innerHTML = '<div class="q-sub">Chưa ai thắng tuần này — hãy là người đầu tiên!</div>'; return; }
+      var medals = ['🥇', '🥈', '🥉'], html = '';
+      r.data.forEach(function (row, i) {
+        html += '<div class="lb-row' + (row.username === myUsername ? ' me' : '') + '"><div class="lb-rank">' + (medals[i] || '#' + (i + 1)) + '</div>' +
+          '<div class="lb-name">' + esc(row.display_name || row.username) + ' <small style="color:#a0aabf">Lv.' + (row.level || 1) + '</small></div><div class="lb-wins">' + row.week_wins + ' 🏆</div></div>';
+      });
+      box.innerHTML = html;
+    } catch (e) { box.innerHTML = '<div class="q-sub">Không tải được BXH</div>'; dbgEvent('LB_ERR', e.message || ''); }
+  }
+  function buildHints() {
+    var lines = [];
+    lines.push('⭐ Còn ' + (xpForLevel(profile.level) - profile.xp) + ' XP nữa lên Lv.' + (profile.level + 1));
+    var best = null;
+    function scan(map, owned) { for (var id in map) if (owned.indexOf(id) < 0 && (!best || map[id].cost < best.cost)) best = { name: map[id].name, cost: map[id].cost }; }
+    scan(DICE_SKINS, profile.ownedDice); scan(BOARD_SKINS, profile.ownedBoards);
+    if (best) { var need = best.cost - profile.chips; lines.push(need > 0 ? '💎 Còn ' + need + ' Chips để mua ' + best.name : '🛒 Bạn đủ Chips để mua ' + best.name + '!'); }
+    var claim = countClaimable();
+    if (claim) lines.push('📋 ' + claim + ' nhiệm vụ đang chờ nhận thưởng');
+    else {
+      var left = profile.quests.list.filter(function (q) { return !q.claimed; }).length;
+      if (left) lines.push('📋 Còn ' + left + ' nhiệm vụ hôm nay');
+    }
+    return lines.join('<br>');
+  }
 
   /* ==================== STATE ==================== */
   var state = { playMode: 'bot', botCount: 1, game: null, busy: false, animating: false, selectedBooster: null };
@@ -993,6 +1291,7 @@
       if (player.money >= rentPrice) {
         player.money -= rentPrice;
         if (owner) owner.money += rentPrice;
+        if (owner && owner.username === myUsername) questAdd('rent', 1);
         showMoneyFloat(player.username, -rentPrice);
         if (owner) showMoneyFloat(owner.username, rentPrice);
         sfx.pay();
@@ -1103,6 +1402,7 @@
       showMoneyFloat(player.username, -pa.price);
       sfx.buy();
       addXP(10);
+      profile.stats.buys++; questAdd('buy', 1);
     }
     state.game.pending_action = null;
     hideActionModal();
@@ -1120,6 +1420,7 @@
       showMoneyFloat(player.username, -pa.cost);
       sfx.buy();
       addXP(15);
+      profile.stats.upgrades++; questAdd('upgrade', 1);
     }
     state.game.pending_action = null;
     hideActionModal();
@@ -1280,6 +1581,16 @@
     else if (state.game.players.filter(function(p){return !p.bankrupt;}).length > 1) { chipsReward = 50; xpReward = 60; }
     else { chipsReward = 20; xpReward = 30; }
     profile.stats.plays++;
+    ensureWeek(); if (isMe) profile.weekWins++;
+    var wkBonus = isWeekend(); if (wkBonus) xpReward *= 2;
+    var mePl = getPlayer(myUsername);
+    questAdd('play', 1); if (isMe) questAdd('win', 1);
+    if (mePl && !mePl.bankrupt) {
+      if (mePl.money >= 300000) questAdd('rich', 1);
+      var bestChain = 0;
+      state.game.tiles.forEach(function (t, i) { if (t.type === 'prop' && t.owner === myUsername) bestChain = Math.max(bestChain, getChainCount(i)); });
+      if (bestChain >= 3) questAdd('chain', 1);
+    }
 
     if (state.game.activeBooster) {
       var bt = state.game.boosterTriggered || {};
@@ -1298,15 +1609,25 @@
     addChips(chipsReward);
     addXP(xpReward);
 
-    var rewardHtml = '💎 +' + chipsReward + ' Chips<br>⭐ +' + xpReward + ' XP';
+    var rewardHtml = '💎 +' + chipsReward + ' Chips<br>⭐ +' + xpReward + ' XP' + (wkBonus ? ' (x2 cuối tuần)' : '');
     if (isMe) rewardHtml += '<br>🏆 +1 Win';
+    rewardHtml += '<div class="chest-line" id="chestLine">🎁 Đang mở rương...</div>';
     $('winRewards').innerHTML = rewardHtml;
+    $('winHint').innerHTML = '';
+    $('playNowBtn').style.display = (state.playMode === 'bot' && !room) ? '' : 'none';
 
+    var chest = openChest(isMe);
     await flushSaveProfile();
 
     sfx.win();
     if (isMe) spawnConfetti(150);
     $('winOverlay').hidden = false;
+    setTimeout(function () {
+      var cl = $('chestLine');
+      if (cl) { cl.className = 'chest-line ' + chest.tier; cl.textContent = chest.label + ': ' + chest.text; }
+      $('winHint').innerHTML = buildHints();
+      if (chest.tier === 'jackpot' || chest.tier === 'epic') sfx.event();
+    }, 900);
   }
 
   /* ==================== START GAME ==================== */
@@ -1486,7 +1807,7 @@
   }
 
   function showScreen(id) {
-    ['menuScreen', 'profileScreen', 'shopScreen', 'skillsScreen', 'onlineScreen', 'waitingScreen', 'localSetupScreen', 'gameScreen'].forEach(function (sid) {
+    ['menuScreen', 'profileScreen', 'shopScreen', 'skillsScreen', 'questsScreen', 'leaderboardScreen', 'onlineScreen', 'waitingScreen', 'localSetupScreen', 'gameScreen'].forEach(function (sid) {
       var el = $(sid); if (el) el.hidden = (sid !== id);
     });
     if (id === 'gameScreen') requestAnimationFrame(function () { requestAnimationFrame(fitBoard); });
@@ -1494,6 +1815,9 @@
     if (id === 'shopScreen') renderShop();
     if (id === 'skillsScreen') renderSkills();
     if (id === 'localSetupScreen') renderBoosterSelect();
+    if (id === 'menuScreen') renderMenuExtras();
+    if (id === 'questsScreen') renderQuests();
+    if (id === 'leaderboardScreen') renderLeaderboard();
   }
 
   function bindEvents() {
@@ -1572,6 +1896,13 @@
       else showScreen('menuScreen');
     };
 
+    $('gotoQuestsBtn').onclick = function () { showScreen('questsScreen'); };
+    $('gotoBoardBtn').onclick = function () { showScreen('leaderboardScreen'); };
+    $('backFromQuestsBtn').onclick = function () { showScreen('menuScreen'); };
+    $('backFromBoardBtn').onclick = function () { showScreen('menuScreen'); };
+    $('questList').onclick = function (e) { var b = e.target.closest('[data-claim]'); if (b) claimQuest(parseInt(b.dataset.claim, 10)); };
+    $('playNowBtn').onclick = function () { $('winOverlay').hidden = true; state.game = null; startLocalGame(); };
+
     window.addEventListener('resize', fitBoard);
     window.addEventListener('orientationchange', function () { setTimeout(fitBoard, 300); });
   }
@@ -1583,7 +1914,7 @@
     if (elName) elName.textContent = myDisplayName || myUsername;
 
     var cached = loadProfileLocal();
-    if (cached) { profile = cached; dbgEvent('PROFILE_CACHE_HIT', 'Lv.' + cached.level); }
+    if (cached) { profile = normalizeProfile(cached); dbgEvent('PROFILE_CACHE_HIT', 'Lv.' + cached.level); }
 
     bindEvents();
 
@@ -1595,6 +1926,9 @@
       dbgEvent('OFFLINE_MODE', e.message || 'no network');
       toast('⚠️ Offline — không sync được server, chỉ lưu máy này');
     }
+
+    profile = normalizeProfile(profile);
+    ensureWeek(); ensureQuests(); checkDailyLogin(); renderMenuExtras();
   }
 
   function openGame() {
