@@ -1635,13 +1635,13 @@
     myUsername = getMyUsername();
     var players = [{
       username: myUsername, name: myDisplayName || myProfile.display_name || myUsername, avatar: myProfile.avatar_url || avt(myUsername),
-      color: PLAYER_COLORS[0].c, pos: 0, money: 200000, jail_turns: 0, bankrupt: false, bot: false
+      color: PLAYER_COLORS[0].c, pos: 0, money: 50000, jail_turns: 0, bankrupt: false, bot: false
     }];
     for (var i = 0; i < state.botCount; i++) {
       var nm = BOT_NAMES[i] || ('Bot ' + (i+1));
       players.push({
         username: 'bot_' + i, name: nm, avatar: avt('bot' + i + '_' + Date.now()),
-        color: PLAYER_COLORS[i+1].c, pos: 0, money: 200000, jail_turns: 0, bankrupt: false, bot: true
+        color: PLAYER_COLORS[i+1].c, pos: 0, money: 50000, jail_turns: 0, bankrupt: false, bot: true
       });
     }
 
@@ -1719,7 +1719,7 @@
   async function hostStart() {
     if (roomPlayers.length < 2) return;
     var players = roomPlayers.map(function (rp, i) {
-      return { username: rp.username, name: rp.display_name, avatar: rp.avatar_url || avt(rp.display_name), color: PLAYER_COLORS[i % 4].c, pos: 0, money: 200000, jail_turns: 0, bankrupt: false, bot: false };
+      return { username: rp.username, name: rp.display_name, avatar: rp.avatar_url || avt(rp.display_name), color: PLAYER_COLORS[i % 4].c, pos: 0, money: 50000, jail_turns: 0, bankrupt: false, bot: false };
     });
     var initialState = {
       players: players, tiles: initTiles(), current_turn: roomPlayers[0].username, turn_count: 0,
