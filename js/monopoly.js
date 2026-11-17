@@ -1,5 +1,5 @@
 /* =====================================================================
-   CỜ TỶ PHÚ — MONOPOLY (v4.2.0 — + STREAK / QUESTS / CHEST / ACHIEVEMENTS / LEADERBOARD)
+   CỜ TỶ PHÚ — MONOPOLY (v4.2.1 — FIX ONLINE ROOM START)
    Profile persists on Supabase · LocalStorage as offline cache
    CSS tách ra: css/monopoly.css
    ===================================================================== */
@@ -517,7 +517,7 @@
     return res;
   }
 
-  /* ---- Thành tựu (tự mở khóa + tự thưởng) ---- */
+  /* ---- Thành tựu ---- */
   var ACH_LIST = [
     { id: 'first_win', name: 'Chiến thắng đầu tiên', icon: '🏆', chips: 50, target: 1, get: function (p) { return p.stats.wins; } },
     { id: 'win10', name: 'Thắng 10 ván', icon: '👑', chips: 200, target: 10, get: function (p) { return p.stats.wins; } },
@@ -631,7 +631,6 @@
   }
 
   function getMyUsername() {
-    // Ưu tiên lấy trực tiếp thông tin từ SRank Auth nếu có (đã cập nhật display name chuẩn)
     try {
       if (window.SRank && window.SRank.Auth && typeof window.SRank.Auth.getCurrentUser === 'function') {
         var uObj = window.SRank.Auth.getCurrentUser();
@@ -1716,20 +1715,48 @@
     $('hostStartBtn').disabled = roomPlayers.length < 2;
     $('hostStartBtn').textContent = roomPlayers.length >= 2 ? '🚀 Bắt đầu (' + roomPlayers.length + ')' : '⏳ Cần 2 người';
   }
+
+  // ✅ FIX #2: hostStart tự set state + chuyển màn hình ngay, không phụ thuộc realtime
   async function hostStart() {
     if (roomPlayers.length < 2) return;
+    if (!sb) return toast('Supabase chưa sẵn sàng');
+
     var players = roomPlayers.map(function (rp, i) {
-      return { username: rp.username, name: rp.display_name, avatar: rp.avatar_url || avt(rp.display_name), color: PLAYER_COLORS[i % 4].c, pos: 0, money: 50000, jail_turns: 0, bankrupt: false, bot: false };
+      return {
+        username: rp.username, name: rp.display_name,
+        avatar: rp.avatar_url || avt(rp.display_name),
+        color: PLAYER_COLORS[i % 4].c, pos: 0, money: 50000,
+        jail_turns: 0, bankrupt: false, bot: false
+      };
     });
     var initialState = {
-      players: players, tiles: initTiles(), current_turn: roomPlayers[0].username, turn_count: 0,
-      started_at: Date.now(), winner: null, pending_action: null, global_event: null, is_double: false, doubleStreak: 0,
+      players: players, tiles: initTiles(),
+      current_turn: roomPlayers[0].username, turn_count: 0,
+      started_at: Date.now(), winner: null,
+      pending_action: null, global_event: null,
+      is_double: false, doubleStreak: 0,
       activeBooster: null, boosterTriggered: {}, player_flags: {}
     };
     var newVer = (room.version || 0) + 1;
-    var upd = await sb.from('monopoly_rooms').update({ status: 'playing', state: initialState, version: newVer, updated_at: new Date().toISOString() }).eq('id', room.id).select().single();
-    if (upd.data) room = upd.data;
+    var upd = await sb.from('monopoly_rooms')
+      .update({ status: 'playing', state: initialState, version: newVer, updated_at: new Date().toISOString() })
+      .eq('id', room.id).select().single();
+
+    if (upd.error) return toast('Lỗi bắt đầu: ' + upd.error.message);
+
+    if (upd.data) {
+      room = upd.data;
+      // === QUAN TRỌNG: host tự set state + chuyển màn hình ngay lập tức ===
+      state.playMode = 'online';
+      state.game = JSON.parse(JSON.stringify(initialState));
+      state.game._v = room.version;
+      showScreen('gameScreen');
+      renderAll();
+      setTimeout(function () { showTurnBanner(players[0].name, players[0].color); }, 400);
+      dbgEvent('HOST_START', 'ver=' + room.version + ' players=' + players.length);
+    }
   }
+
   async function refreshPlayers() {
     if (!room) return;
     try { var r = await sb.from('monopoly_room_players').select('*').eq('room_id', room.id).order('joined_at'); if (r.data) { roomPlayers = r.data; if (room.status === 'waiting') renderWait(); } } catch (e) {}
@@ -1750,35 +1777,65 @@
     if (roomsChan) { try { sb.removeChannel(roomsChan); } catch (e) {} }
     roomsChan = sb.channel('mp-rooms-list').on('postgres_changes', { event: '*', schema: 'public', table: 'monopoly_rooms' }, fetchRooms).subscribe();
   }
+
+  // ✅ FIX #3: gán _v sau khi commit + không gửi _v lên DB
   async function commitOnline() {
     if (!room || !state.game) return;
     try {
       var nextVer = (room.version || 0) + 1;
-      var res = await sb.from('monopoly_rooms').update({ state: state.game, version: nextVer, updated_at: new Date().toISOString() }).eq('id', room.id).select().single();
-      if (res.data) room = res.data;
-    } catch (e) {}
+      var payload = Object.assign({}, state.game);
+      delete payload._v;
+      var res = await sb.from('monopoly_rooms')
+        .update({ state: payload, version: nextVer, updated_at: new Date().toISOString() })
+        .eq('id', room.id).select().single();
+      if (res.data) {
+        room = res.data;
+        state.game._v = room.version;
+      }
+    } catch (e) { dbgEvent('COMMIT_ERR', e.message || ''); }
   }
+
+  // ✅ FIX #5: tránh re-show modal khi pending action không đổi
   function handleRemoteState(oldG, newG) {
     var prevPending = state.game && state.game.pending_action;
-    state.game = newG;
     var pa = newG.pending_action;
-    if (pa && pa.player === myUsername) {
+
+    var samePending = prevPending && pa &&
+      prevPending.type === pa.type &&
+      prevPending.tileIdx === pa.tileIdx &&
+      prevPending.player === pa.player;
+
+    state.game = newG;
+    if (room) state.game._v = room.version;
+
+    if (pa && pa.player === myUsername && !samePending) {
       if (pa.type === 'buy_empty') showBuyEmptyModal(getPlayer(pa.player), pa.tileIdx, pa.price);
       else if (pa.type === 'upgrade') showUpgradeModal(getPlayer(pa.player), pa.tileIdx, pa.cost, state.game.tiles[pa.tileIdx].level);
       else if (pa.type === 'opponent_tile') showOpponentModal(getPlayer(pa.player), pa.tileIdx, pa.chainValue, pa.rentPrice, pa.chainCount);
-    } else if (!pa && prevPending) hideActionModal();
+    } else if (!pa && prevPending) {
+      hideActionModal();
+    }
+
     renderAll();
     if (newG.winner) showWinOverlay();
   }
+
+  // ✅ FIX #1 + #4: realtime handler + poll timer với version-check chuẩn
   function startRealtime() {
     if (!sb || !room) return;
     if (roomChan) { try { sb.removeChannel(roomChan); } catch (e) {} roomChan = null; }
     roomChan = sb.channel('mp-room-' + room.id)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'monopoly_rooms', filter: 'id=eq.' + room.id }, function (payload) {
-        var row = payload.new; if (!row) return; room = row;
+        var row = payload.new; if (!row) return;
+        room = row;
         if (row.status === 'playing' && row.state) {
-          if (document.getElementById('monopolyHost').style.display !== 'block') showScreen('gameScreen');
-          handleRemoteState(state.game, row.state);
+          var currentV = (state.game && state.game._v) || 0;
+          if (!state.game || (row.version || 0) > currentV) {
+            state.playMode = 'online';
+            showScreen('gameScreen');
+            handleRemoteState(state.game, row.state);
+            if (state.game) state.game._v = row.version;
+          }
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'monopoly_room_players', filter: 'room_id=eq.' + room.id }, refreshPlayers)
@@ -1790,7 +1847,13 @@
         var r = await sb.from('monopoly_rooms').select('*').eq('id', room.id).maybeSingle();
         if (r.data && r.data.status === 'playing' && r.data.state) {
           room = r.data;
-          if (!state.game || (room.version || 0) > ((state.game._v) || 0)) { state.game._v = room.version; handleRemoteState(state.game, room.state); }
+          var currentV = (state.game && state.game._v) || 0;
+          if (!state.game || (room.version || 0) > currentV) {
+            state.playMode = 'online';
+            showScreen('gameScreen');
+            handleRemoteState(state.game, r.data.state);
+            if (state.game) state.game._v = room.version;
+          }
         }
         refreshPlayers();
       } catch (e) {}
@@ -1920,7 +1983,7 @@
 
     try {
       await loadProfileFromDB();
-      dbgEvent('INIT', 'Monopoly v4.1 online — ' + myUsername);
+      dbgEvent('INIT', 'Monopoly v4.2.1 online — ' + myUsername);
     } catch (e) {
       syncOnline = false;
       dbgEvent('OFFLINE_MODE', e.message || 'no network');
