@@ -221,10 +221,10 @@
   if (window.supabase && CFG.SUPABASE_URL) sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY, { auth: { persistSession: false } });
 
   var ZONES = [
-    { name: 'Nhà nghèo', short: 'Nghèo', price: 10000, color: '#00f0ff' },
-    { name: 'Nhà giàu', short: 'Giàu', price: 15000, color: '#00ff66' },
-    { name: 'Địa chủ', short: 'Đ.chủ', price: 20000, color: '#ffcc00' },
-    { name: 'Đại gia', short: 'Đ.gia', price: 25000, color: '#ff2a75' }
+    { name: 'Nhà nghèo', short: 'Nghèo', price: 20000, color: '#00f0ff' },
+    { name: 'Nhà giàu', short: 'Giàu', price: 30000, color: '#00ff66' },
+    { name: 'Địa chủ', short: 'Đ.chủ', price: 40000, color: '#ffcc00' },
+    { name: 'Đại gia', short: 'Đ.gia', price: 50000, color: '#ff2a75' }
   ];
   var ZONE_RANGES = [{ start: 1, end: 6 }, { start: 8, end: 13 }, { start: 15, end: 20 }, { start: 22, end: 27 }];
   var PLAYER_COLORS = [{ c: '#ff2a75' }, { c: '#00f0ff' }, { c: '#00ff66' }, { c: '#ffcc00' }];
