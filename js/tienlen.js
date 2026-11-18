@@ -11,6 +11,7 @@ if (window.TienLen) return;
 
 const CFG = window.__SRANK_CONFIG || {};
 const TURN = 30000;                       // 30s mỗi lượt
+const READY = 45000, OFFLINE = 30000, STALE = 5*60e3;   // chờ sẵn sàng / mất kết nối / dọn phòng
 const RK = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
 const SU = ['♠','♣','♦','♥'];
 const BASE = {2:[1,-1], 3:[2,0,-2], 4:[3,1,-1,-3]};
@@ -54,7 +55,7 @@ function shuffle(){
   return d;
 }
 function advance(st){                       // chuyển lượt (st.turn = người vừa hành động)
-  const n = st.order.length, fin = u => st.finished.includes(u);
+  const n = st.order.length, fin = u => st.finished.includes(u) || (st.gone||[]).includes(u);
   for (let i=1;i<=n;i++){
     const idx = (st.turn+i)%n, u = st.order[idx];
     if (fin(u)) continue;
@@ -77,11 +78,20 @@ function endGame(room, st, rank, wh, left){
   }
   rank.forEach(u => d[u] += st.pts[u]||0);   // tiền chặt heo
   st.result = {rank, delta:d, white:wh||null}; st.dl = 0;
+  room.status = 'ended'; st.ready = {}; st.rdl = Date.now()+READY;
   room.players.forEach(p => p.score = (p.score||0) + (d[p.u]||0));
 }
 
+const active = st => st.order.filter(x => !st.finished.includes(x) && !(st.gone||[]).includes(x));
+function settle(room, st, left){            // kết thúc ván nếu chỉ còn <=1 người còn đánh
+  const a = active(st); if (a.length>1) return false;
+  endGame(room, st, [...st.finished, ...a, ...[...(st.gone||[])].reverse()], null, left);
+  return true;
+}
+
 /* ---------- Trạng thái ---------- */
-let SB, root, ME, R=null, V='lobby', HAND=[], SEL=new Set(), LIST=[], DEAL=-1, autoKey='', tk=0, chan=null, busy=false;
+let SB, root, ME, R=null, V='lobby', HAND=[], SEL=new Set(), LIST=[], DEAL=-1, autoKey='', tk=0, chan=null, busy=false, presOn=new Set(), lastOn={}, firstSeen={}, presAt=0, joinAt=0, leaving=false, lastRes=0, drops={};
+const offline = u => presOn.has(u) ? 0 : Date.now() - (lastOn[u] || firstSeen[u] || joinAt);
 const nm = u => (R && R.players.find(p=>p.u===u) || {}).name || u;
 const sc = u => (R && R.players.find(p=>p.u===u) || {}).score || 0;
 
@@ -104,9 +114,13 @@ function toast(m){
 
 /* ---------- Dữ liệu ---------- */
 async function loadList(){
-  const since = new Date(Date.now()-6*3600e3).toISOString();
+  const since = new Date(Date.now()-STALE).toISOString();
   const {data} = await SB.from('tl_rooms').select('*').gt('updated_at',since).order('updated_at',{ascending:false}).limit(30);
-  LIST = (data||[]).filter(r => r.status==='waiting' || r.players.some(p=>p.u===ME.u));
+  LIST = (data||[]).filter(r => {
+    const mine = r.players.some(p=>p.u===ME.u);
+    if (mine) return !(r.status==='playing' && r.state && (r.state.gone||[]).includes(ME.u));
+    return r.status!=='playing' && r.players.length<4;
+  });
   if (V==='lobby') render();
 }
 async function loadHand(){
@@ -120,7 +134,12 @@ async function getHand(u){
 }
 function apply(r){
   if (!r){ R=null; V='lobby'; unsub(); loadList(); return render(); }
-  if (R && r.id===R.id && r.version < R.version) return;
+  if (R && r.id===R.id && r.version <= R.version) return;
+  if (!r.players.some(p=>p.u===ME.u)){            // mình không còn trong phòng
+    if (V==='room' && !leaving) toast('Bạn không còn trong phòng');
+    R=null; V='lobby'; unsub(); loadList(); return render();
+  }
+  r.players.forEach(p=>{ if(!firstSeen[p.u]) firstSeen[p.u]=Date.now(); });
   R = r; V = 'room';
   if (r.state && r.state.deal !== DEAL){ DEAL=r.state.deal; SEL.clear(); loadHand(); }
   render();
@@ -128,10 +147,19 @@ function apply(r){
 function unsub(){ if(chan){ SB.removeChannel(chan); chan=null; } }
 function sub(id){
   unsub();
-  chan = SB.channel('tl-'+id).on('postgres_changes',{event:'*',schema:'public',table:'tl_rooms',filter:'id=eq.'+id},
-    p => apply(p.eventType==='DELETE' ? null : p.new)).subscribe();
+  presOn=new Set(); lastOn={}; firstSeen={}; presAt=0; joinAt=Date.now(); drops={};
+  chan = SB.channel('tl-'+id, {config:{presence:{key:ME.u}}})
+    .on('postgres_changes',{event:'*',schema:'public',table:'tl_rooms',filter:'id=eq.'+id},
+      p => apply(p.eventType==='DELETE' ? null : p.new))
+    .on('presence',{event:'sync'},()=>{
+      const s = Object.keys(chan.presenceState()), n = Date.now();
+      presOn.forEach(k=>{ if(!s.includes(k)) lastOn[k]=n; });
+      s.forEach(k=>lastOn[k]=n);
+      presOn = new Set(s); if(!presAt) presAt=n;
+    })
+    .subscribe(st => { if (st==='SUBSCRIBED') chan.track({u:ME.u}); });
 }
-async function enter(room){ DEAL=-1; HAND=[]; SEL.clear(); apply(room); sub(room.id); }
+async function enter(room){ DEAL=-1; HAND=[]; SEL.clear(); R=null; apply(room); sub(room.id); }
 
 async function commit(fn){
   for (let i=0;i<4;i++){
@@ -149,6 +177,9 @@ async function commit(fn){
 }
 
 /* ---------- Phòng ---------- */
+function cleanup(){
+  SB.from('tl_rooms').delete().lt('updated_at', new Date(Date.now()-STALE).toISOString()).then(()=>{});
+}
 async function create(){
   const id = Array.from(crypto.getRandomValues(new Uint8Array(4)),b=>'ABCDEFGHJKLMNPQRSTUVWXYZ'[b%24]).join('');
   const room = {id, host:ME.u, status:'waiting', players:[{u:ME.u,name:ME.name,score:0}], state:null, version:0};
@@ -160,28 +191,78 @@ async function join(id){
   id = (id||'').trim().toUpperCase(); if(!id) return;
   const {data} = await SB.from('tl_rooms').select('*').eq('id',id).maybeSingle();
   if (!data) return toast('Không tìm thấy phòng '+id);
+  if (data.status==='playing' && data.state && (data.state.gone||[]).includes(ME.u))
+    return toast('Bạn đã thoát ván này, không thể vào lại');
   if (data.players.some(p=>p.u===ME.u)) return enter(data);
-  if (data.status!=='waiting') return toast('Phòng đã bắt đầu');
+  if (data.status==='playing') return toast('Phòng đang chơi');
   if (data.players.length>=4) return toast('Phòng đã đủ 4 người');
-  R = data;
+  DEAL=-1; HAND=[]; SEL.clear(); R = data;
   const ok = await commit(r => {
-    if (r.status!=='waiting' || r.players.length>=4) return false;
+    if (r.status==='playing' || r.players.length>=4) return false;
     r.players.push({u:ME.u,name:ME.name,score:0});
   });
-  if (!ok) { R=null; return toast('Không vào được phòng'); }
+  if (!ok){ R=null; return toast('Không vào được phòng'); }
   sub(id);
 }
+async function removePlayer(u){                 // chỉ khi phòng chờ / đang xem kết quả
+  const rid = R.id; let del = false;
+  await commit(room => {
+    if (room.status==='playing') return false;
+    room.players = room.players.filter(p=>p.u!==u);
+    if (room.state && room.state.ready) delete room.state.ready[u];
+    if (!room.players.length){ del = true; return; }
+    if (room.host===u) room.host = room.players[0].u;
+  });
+  if (del) await SB.from('tl_rooms').delete().eq('id',rid);
+}
+async function forfeit(u){                      // bỏ cuộc giữa ván: xếp bét
+  await commit(room => {
+    const st = room.state;
+    if (room.status!=='playing' || !st || st.result || !st.order.includes(u) ||
+        st.finished.includes(u) || (st.gone||[]).includes(u)) return false;
+    const wasTurn = st.order[st.turn]===u;
+    st.gone = [...(st.gone||[]), u]; st.seq++;
+    if (!settle(room, st, []) && wasTurn){ advance(st); st.dl = Date.now()+TURN; }
+  });
+}
 async function leave(){
-  if (R && !R.state){
-    if (R.host===ME.u) await SB.from('tl_rooms').delete().eq('id',R.id);
-    else await commit(r => { r.players = r.players.filter(p=>p.u!==ME.u); });
-  }
+  if (!R){ return; }
+  const st = R.state;
+  const inGame = R.status==='playing' && st && !st.result && !st.finished.includes(ME.u) && !(st.gone||[]).includes(ME.u);
+  if (inGame && !confirm('Thoát giữa ván sẽ bị tính thua (xếp bét) và không vào lại được ván này. Thoát?')) return;
+  leaving = true;
+  try {
+    if (inGame) await forfeit(ME.u);
+    else if (R && R.status!=='playing') await removePlayer(ME.u);
+  } finally { leaving = false; }
   R=null; V='lobby'; unsub(); loadList(); render();
+}
+async function ready(){
+  await commit(room => {
+    if (room.status!=='ended' || !room.state || !room.players.some(p=>p.u===ME.u)) return false;
+    room.state.ready[ME.u] = true;
+  });
+}
+async function resolveReady(){                  // hết giờ: ai chưa sẵn sàng bị mời ra
+  const rid = R.id; let del = false;
+  await commit(room => {
+    const st = room.state;
+    if (room.status!=='ended' || !st || Date.now()<=st.rdl) return false;
+    room.players = room.players.filter(p=>st.ready[p.u]);
+    if (!room.players.length){ del = true; return; }
+    if (!room.players.some(p=>p.u===room.host)) room.host = room.players[0].u;
+    if (room.players.length<2){ room.status='waiting'; room.state=null; }
+    else st.rdl = Date.now()+15000;             // đủ người sẵn sàng: chờ chủ phòng chia bài
+  });
+  if (del) await SB.from('tl_rooms').delete().eq('id',rid);
 }
 
 /* ---------- Ván chơi ---------- */
 async function start(){
-  if (busy || R.host!==ME.u || R.players.length<2) return; busy=true;
+  if (busy || !R || R.host!==ME.u || R.players.length<2) return;
+  const prev = R.state ? R.state.deal : 0;
+  if (R.state && !(R.status==='ended' && R.players.every(p=>R.state.ready && R.state.ready[p.u]))) return;
+  busy = true;
   try {
     const ps = R.players.map(p=>p.u), d = shuffle(), hands = {};
     ps.forEach((u,i)=> hands[u] = d.slice(i*13,i*13+13).sort((a,b)=>a-b));
@@ -189,12 +270,16 @@ async function start(){
     let lead = 0, need = null;
     if (first){ const mn = Math.min(...ps.map(u=>hands[u][0])); lead = ps.findIndex(u=>hands[u][0]===mn); need = mn; }
     else { const w = R.state.result && R.state.result.rank[0]; lead = Math.max(0, ps.indexOf(w)); }
-    const st = {deal:(R.state?R.state.deal:0)+1, seq:0, order:ps, counts:{}, turn:lead, last:null, passed:[],
-                finished:[], played:{}, pts:{}, need, result:null, dl:Date.now()+TURN};
+    const st = {deal:prev+1, seq:0, order:ps, counts:{}, turn:lead, last:null, passed:[], finished:[], gone:[], idle:{},
+                played:{}, pts:{}, need, result:null, dl:Date.now()+TURN};
     ps.forEach(u=>{ st.counts[u]=13; st.played[u]=false; st.pts[u]=0; });
     const w = ps.find(u=>white(hands[u]));
     await SB.from('tl_hands').upsert(ps.map(u=>({room:R.id,username:u,cards:hands[u]})));
     await commit(room => {
+      if ((room.state?room.state.deal:0)!==prev || room.host!==ME.u || room.players.length<2) return false;
+      if (room.players.map(p=>p.u).join()!==ps.join()) return false;
+      if (room.status==='ended'){ if (!room.players.every(p=>room.state.ready && room.state.ready[p.u])) return false; }
+      else if (room.status!=='waiting') return false;
       room.status='playing'; room.state=st;
       if (w) endGame(room, st, [w,...ps.filter(x=>x!==w)], white(hands[w]));
     });
@@ -202,14 +287,16 @@ async function start(){
 }
 
 async function act(u, mv){
-  const st0 = R.state; if (!st0 || st0.result) return;
+  const st0 = R.state; if (!st0 || st0.result || R.status!=='playing') return;
   const hand = await getHand(u); let left = [];
-  if (mv.cs && st0.counts[u]===mv.cs.length && st0.finished.length+2===st0.order.length){
-    const o = st0.order.find(x=>x!==u && !st0.finished.includes(x)); if (o) left = await getHand(o);
+  const a0 = active(st0);
+  if (mv.cs && st0.counts[u]===mv.cs.length && a0.length===2 && !(st0.gone||[]).length){
+    const o = a0.find(x=>x!==u); if (o) left = await getHand(o);
   }
   const ok = await commit(room => {
     const st = room.state;
-    if (!st || st.result || st.deal!==st0.deal || st.seq!==st0.seq || st.order[st.turn]!==u) return false;
+    if (!st || st.result || room.status!=='playing' || st.deal!==st0.deal || st.seq!==st0.seq || st.order[st.turn]!==u) return false;
+    st.gone = st.gone||[]; st.idle = st.idle||{};
     if (mv.cs){
       const p = st.last, c = mv.c;
       if (p && !(p.t===c.t && p.n===c.n)) p.cs.filter(x=>rk(x)===12).forEach(x=>{   // chặt heo
@@ -221,17 +308,18 @@ async function act(u, mv){
       if (!st.last) return false;
       st.passed.push(u);
     }
+    if (mv.auto){                                // treo máy: 2 lượt tự động liên tiếp = bỏ cuộc
+      st.idle[u] = (st.idle[u]||0)+1;
+      if (st.idle[u]>=2 && !st.finished.includes(u)) st.gone.push(u);
+    } else st.idle[u] = 0;
     st.seq++;
-    if (st.finished.length >= st.order.length-1){
-      const b = st.order.find(x=>!st.finished.includes(x));
-      endGame(room, st, [...st.finished, b], null, left);
-    } else { advance(st); st.dl = Date.now()+TURN; }
+    if (!settle(room, st, left)){ advance(st); st.dl = Date.now()+TURN; }
   });
   if (ok && mv.cs){
     const nh = hand.filter(x=>!mv.cs.includes(x)); if (u===ME.u) HAND = nh;
     await SB.from('tl_hands').update({cards:nh}).eq('room',R.id).eq('username',u);
     render();
-  } else if (!ok && u===ME.u) toast('Lượt đã thay đổi, thử lại');
+  } else if (!ok && u===ME.u && !mv.auto) toast('Lượt đã thay đổi, thử lại');
 }
 function play(){
   const st = R.state, cs = [...SEL].sort((a,b)=>a-b), c = cls(cs);
@@ -242,9 +330,9 @@ function play(){
 }
 async function auto(u){
   const st = R.state;
-  if (st.last) return act(u,{pass:1});
+  if (st.last) return act(u,{pass:1,auto:1});
   const h = await getHand(u), c = st.need!=null ? st.need : Math.min(...h);
-  if (isFinite(c)) act(u,{cs:[c],c:cls([c])});
+  if (isFinite(c)) act(u,{cs:[c],c:cls([c]),auto:1});
 }
 
 /* ---------- Giao diện ---------- */
@@ -267,19 +355,24 @@ function vWait(){
     <button class="ghost" data-a="leave">Rời phòng</button></div>`;
 }
 function vTable(){
-  const st = R.state, cur = st.order[st.turn], mine = cur===ME.u && !st.result;
-  const opp = st.order.filter(u=>u!==ME.u).map(u=>`<div class="o ${u===cur&&!st.result?'t':''}">
-    <b>${esc(nm(u))}</b><span>${st.finished.includes(u)?'hết bài #'+(st.finished.indexOf(u)+1):st.counts[u]+' lá'}${st.passed.includes(u)?' · bỏ lượt':''}</span><i>${sc(u)} điểm</i></div>`).join('');
+  const st = R.state, cur = st.order[st.turn], playing = R.status==='playing' && !st.result, mine = cur===ME.u && playing;
+  const gone = u => (st.gone||[]).includes(u), iGone = gone(ME.u);
+  const opp = st.order.filter(u=>u!==ME.u).map(u=>`<div class="o ${u===cur&&playing?'t':''}">
+    <b>${esc(nm(u))}</b><span>${gone(u)?'đã thoát':st.finished.includes(u)?'hết bài #'+(st.finished.indexOf(u)+1):st.counts[u]+' lá'}${st.passed.includes(u)?' · bỏ lượt':''}</span><i>${sc(u)} điểm</i></div>`).join('');
   const mid = st.last ? `<small>${esc(nm(st.last.u))} đánh</small><div class="cards">${st.last.cs.map(c=>cardH(c,'m')).join('')}</div>`
                       : `<small>${st.result?'':esc(nm(cur))+' đi tự do'}</small>`;
   const hand = HAND.map(c=>cardH(c,SEL.has(c)?'s':'')).join('');
+  const rdy = st.ready || {};
   const rs = st.result ? `<div class="ov"><div class="box"><h2>${st.result.white?'Tới trắng: '+st.result.white:'Kết thúc ván'}</h2>
-    ${st.result.rank.map((u,i)=>`<div class="row"><span>#${i+1} ${esc(nm(u))}</span><b>${st.result.delta[u]>0?'+':''}${st.result.delta[u]}</b></div>`).join('')}
-    ${R.host===ME.u?'<button class="big" data-a="start">Ván mới</button>':'<p class="sub">Chờ chủ phòng chia ván mới…</p>'}
-    <button class="ghost" data-a="close">Đóng</button></div></div>` : '';
-  return `<div class="tb"><div class="top"><span>Phòng ${R.id}</span><span id="tm"></span><button class="ghost" data-a="close">Thoát</button></div>
+    ${st.result.rank.map((u,i)=>`<div class="row"><span>#${i+1} ${esc(nm(u))}${gone(u)?' (đã thoát)':''}</span><b>${st.result.delta[u]>0?'+':''}${st.result.delta[u]}</b></div>`).join('')}
+    <h2>Chơi tiếp? <span id="rd"></span></h2>
+    ${R.players.map(p=>`<div class="row"><span>${esc(p.name)}</span><span>${rdy[p.u]?'✔ sẵn sàng':'đang chờ…'}</span></div>`).join('')}
+    <p class="sub">Ai chưa bấm khi hết giờ sẽ bị mời ra khỏi phòng.</p>
+    <button class="big" data-a="ready" ${rdy[ME.u]?'disabled':''}>${rdy[ME.u]?'Đã sẵn sàng':'Chơi tiếp'}</button>
+    <button class="ghost" data-a="leave">Rời phòng</button></div></div>` : '';
+  return `<div class="tb"><div class="top"><span>Phòng ${R.id}</span><span id="tm"></span><button class="ghost" data-a="leave">Thoát</button></div>
     <div class="opps">${opp}</div><div class="mid">${mid}</div>
-    <div class="me"><div class="who ${mine?'t':''}"><b>${esc(ME.name)}</b> · ${sc(ME.u)} điểm${st.finished.includes(ME.u)?' · đã hết bài':''}</div>
+    <div class="me"><div class="who ${mine?'t':''}"><b>${esc(ME.name)}</b> · ${sc(ME.u)} điểm${iGone?' · đã thoát ván':st.finished.includes(ME.u)?' · đã hết bài':''}</div>
     <div class="hand">${hand}</div>
     <div class="btns"><button data-a="clear" ${SEL.size?'':'disabled'}>Bỏ chọn</button>
     <button data-a="pass" ${mine&&st.last?'':'disabled'}>Bỏ lượt</button>
@@ -318,7 +411,7 @@ h1{margin:0;font:700 28px Georgia,serif}h2{margin:8px 0 0;font:700 17px Georgia,
 .who{text-align:center;padding:4px;border-radius:8px}.who.t{color:#e0b04a;font-weight:700}
 .btns{display:flex;gap:8px;margin-top:6px}.btns button{flex:1}
 .ov{position:fixed;inset:0;background:#000a;display:grid;place-items:center;padding:16px}
-.box{background:#0f3d33;border:1px solid #e0b04a;border-radius:14px;padding:18px;width:100%;max-width:380px;display:grid;gap:10px}
+.box{background:#0f3d33;border:1px solid #e0b04a;border-radius:14px;padding:18px;width:100%;max-width:380px;max-height:90vh;overflow:auto;display:grid;gap:10px}
 #toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#000c;padding:8px 14px;border-radius:20px;opacity:0;transition:opacity .2s;pointer-events:none}
 #toast.on{opacity:1}`;
 
@@ -331,6 +424,7 @@ function onClick(e){
   if (a==='joinroom') return join(el.dataset.id);
   if (a==='start') return start();
   if (a==='leave') return leave();
+  if (a==='ready') return ready();
   if (a==='close') return close();
   if (a==='clear'){ SEL.clear(); return render(); }
   if (a==='pass') return act(ME.u,{pass:1});
@@ -338,19 +432,37 @@ function onClick(e){
 }
 
 function tick(){
-  tk++;
-  if (V==='lobby' && tk%8===0) loadList();
-  if (V==='room' && tk%5===0){
-    SB.from('tl_rooms').select('*').eq('id',R.id).maybeSingle().then(({data})=>{
-      if (!data) apply(null); else if (data.version > R.version) apply(data); });
+  tk++; const now = Date.now();
+  if (V==='lobby'){ if (tk%8===0) loadList(); if (tk%60===0) cleanup(); return; }
+  if (V!=='room' || !R) return;
+  if (tk%5===0) SB.from('tl_rooms').select('*').eq('id',R.id).maybeSingle().then(({data})=>{
+    if (!R) return; if (!data) apply(null); else if (data.version > R.version) apply(data); });
+  if (tk%60===0) SB.from('tl_rooms').update({updated_at:new Date().toISOString()}).eq('id',R.id).then(()=>{});
+  // mất kết nối > 30s: phòng chờ/kết quả thì bị mời ra, đang chơi thì bỏ cuộc (xếp bét)
+  if (presOn.has(ME.u) && now-presAt>8000) R.players.forEach(p=>{
+    if (p.u===ME.u || offline(p.u)<=OFFLINE || (drops[p.u] && now-drops[p.u]<8000)) return;
+    const st = R.state;
+    if (R.status==='playing'){
+      if (!st || st.result || !st.order.includes(p.u) || st.finished.includes(p.u) || (st.gone||[]).includes(p.u)) return;
+      drops[p.u] = now; forfeit(p.u);
+    } else { drops[p.u] = now; removePlayer(p.u); }
+  });
+  const st = R.state; if (!st) return;
+  if (R.status==='ended'){
+    const rd = root.shadowRoot.querySelector('#rd');
+    if (rd) rd.textContent = Math.max(0, Math.ceil((st.rdl-now)/1000)) + 's';
+    if (now > st.rdl+500 && now-lastRes>4000){ lastRes = now; resolveReady(); }
+    else if (R.host===ME.u && R.players.length>=2 && R.players.every(p=>rdy_(st,p.u))) start();
+    return;
   }
-  if (V!=='room' || !R || !R.state || R.state.result) return;
-  const st = R.state, left = st.dl - Date.now(), cur = st.order[st.turn];
+  if (R.status!=='playing' || st.result) return;
+  const left = st.dl - now, cur = st.order[st.turn];
   const tm = root.shadowRoot.querySelector('#tm');
   if (tm) tm.textContent = Math.max(0, Math.ceil(left/1000)) + 's · ' + nm(cur);
   const key = st.deal+':'+st.seq;
   if (autoKey!==key && ((cur===ME.u && left<=0) || left<-5000)){ autoKey=key; auto(cur); }
 }
+const rdy_ = (st,u) => !!(st.ready && st.ready[u]);
 
 /* ---------- API ---------- */
 async function open(opts){
@@ -367,7 +479,7 @@ async function open(opts){
   sr.innerHTML = `<style>${CSS}</style><div id="w"><div id="v"></div><div id="toast"></div></div>`;
   sr.addEventListener('click', onClick);
   document.body.appendChild(root);
-  V='lobby'; R=null; render(); loadList();
+  V='lobby'; R=null; render(); loadList(); cleanup();
   clearInterval(open.h); open.h = setInterval(tick, 1000);
 }
 function close(){
