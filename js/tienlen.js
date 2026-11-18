@@ -376,4 +376,17 @@ function close(){
   R=null; V='lobby';
 }
 window.TienLen = {open, close, _rules:{cls, beats, white}};
+
+/* Tự gắn vào nút #tienlenBtn (menu 3 gạch proxy click vào đây) */
+function wire(){
+  const b = document.getElementById('tienlenBtn'); if (!b || b.__tl) return; b.__tl = 1;
+  b.addEventListener('click', () => {
+    let u = null;
+    try { u = window.SRank.Auth.getCurrentUser(); } catch(_){}
+    const un = u && (u.username || u.displayName);
+    if (!un){ alert('Hãy đăng nhập trước khi chơi Tiến lên'); return; }
+    open({username: String(un).trim().toLowerCase(), name: u.displayName || un});
+  });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
 })();
