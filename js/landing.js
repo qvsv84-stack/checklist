@@ -1,12 +1,11 @@
 /* =========================================================
-   LANDING VIEW — v5.1 (lyrics + music + countdown fallback)
+   LANDING VIEW — v5.2 (character podium + music player)
    ---------------------------------------------------------
-   v5.1:
-   - Thêm MUSIC PLAYER: nút loa cạnh lyric/countdown
-   - User bấm loa → bật/tắt nhạc (lưu vào localStorage)
-   - Lần sau vào app: nếu đã bật trước đó + có nhạc → tự play
-     khi có gesture đầu tiên (browser policy)
-   v5.0: lyrics > countdown
+   v5.2:
+   - Podium top3 dùng AttendanceCourt.buildPodiumHTML()
+     → nhân vật full-body (vua / nữ hoàng / kỵ sĩ)
+   - Fallback: nếu AttendanceCourt chưa load → podium avatar-tròn cũ
+   v5.1: lyrics + music + countdown fallback
    ========================================================= */
 (function(){
   "use strict";
@@ -336,20 +335,17 @@
     const audio = _ensureAudioMounted();
 
     if (!meta.url) {
-      // Không có nhạc → pause + clear
       try { audio.pause(); } catch (_) {}
       if (audio.src) { audio.removeAttribute('src'); audio.load(); }
       return;
     }
 
-    // Chỉ đổi src khi URL khác (so sánh string)
     if (audio.dataset.url !== meta.url) {
       audio.dataset.url = meta.url;
       audio.src = meta.url;
       try { audio.load(); } catch (_) {}
     }
 
-    // Volume
     audio.volume = Math.max(0, Math.min(1, Number(meta.volume) || 0.4));
   }
 
@@ -396,7 +392,6 @@
 
   function _getMusicBtnHTML() {
     _ensureLyricStyles();
-    // Nếu không có nhạc + không phải admin → không hiện gì
     const meta = _getMusicMeta();
     if (!meta.url && !_isAdmin()) return '';
 
@@ -436,9 +431,7 @@
       }).catch(() => {});
     };
 
-    // Thử play ngay (nếu user đã tương tác trang rồi thì OK)
     audio.play().catch(function () {
-      // Chờ gesture đầu tiên
       document.addEventListener('pointerdown', doPlay, true);
       document.addEventListener('touchstart', doPlay, true);
       document.addEventListener('keydown', doPlay, true);
@@ -542,7 +535,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════
-     TOP 3 BUILDER
+     TOP 3 BUILDER  ⭐ v5.2 — CHARACTER PODIUM
      ═══════════════════════════════════════════════════════ */
   function buildTop3HTML(top3) {
     if (!top3.length) {
@@ -562,44 +555,54 @@
       return _esc(String((window.DN ? window.DN(p.name) : p.name) || ''));
     }
 
-    const t1 = top3[0], t2 = top3[1], t3 = top3[2];
+    /* ⭐ PODIUM: dùng thư viện nhân vật full-body nếu có */
+    let podiumHtml;
+    const podiumTop3 = top3.slice(0, 3).map(p => ({
+      display_name: window.DN ? window.DN(p.name) : p.name,
+      name: p.name,
+      time: p.time,
+    }));
+
+    if (window.AttendanceCourt && typeof window.AttendanceCourt.buildPodiumHTML === 'function') {
+      podiumHtml = window.AttendanceCourt.buildPodiumHTML(podiumTop3);
+    } else {
+      /* Fallback: podium avatar-tròn cũ */
+      const t1 = top3[0], t2 = top3[1], t3 = top3[2];
+      podiumHtml = '<div class="court-podium">';
+      podiumHtml += '<div class="podium-slot podium-slot-2">';
+      if (t2) podiumHtml += `
+        <div class="advisor rank-2" data-name="${_esc(t2.name)}">
+          <div class="advisor-crown">☀️</div>
+          <div class="advisor-avatar">${makeAvatarHtml(t2, 'advisor-avatar')}</div>
+          <div class="advisor-name" title="${makeName(t2)}">${makeName(t2)}</div>
+          <div class="advisor-time">${t2.time}</div>
+        </div>`;
+      podiumHtml += '</div>';
+      podiumHtml += '<div class="podium-slot podium-slot-1">';
+      if (t1) podiumHtml += `
+        <div class="court-throne" data-name="${_esc(t1.name)}">
+          <div class="throne-crown">👑</div>
+          <div class="throne-avatar">${makeAvatarHtml(t1, 'throne-avatar')}</div>
+          <div class="throne-name" title="${makeName(t1)}">${makeName(t1)}</div>
+          <div class="throne-time">${t1.time}</div>
+        </div>`;
+      podiumHtml += '</div>';
+      podiumHtml += '<div class="podium-slot podium-slot-3">';
+      if (t3) podiumHtml += `
+        <div class="advisor rank-3" data-name="${_esc(t3.name)}">
+          <div class="advisor-crown">🌙</div>
+          <div class="advisor-avatar">${makeAvatarHtml(t3, 'advisor-avatar')}</div>
+          <div class="advisor-name" title="${makeName(t3)}">${makeName(t3)}</div>
+          <div class="advisor-time">${t3.time}</div>
+        </div>`;
+      podiumHtml += '</div>';
+      podiumHtml += '</div>';
+    }
+
+    /* ⭐ QUẦN THẦN (top4+) — logic cũ giữ nguyên */
     const court = top3.slice(3);
     const courtL = court.filter((_, i) => i % 2 === 0);
     const courtR = court.filter((_, i) => i % 2 === 1);
-
-    let podiumHtml = '<div class="court-podium">';
-
-    podiumHtml += '<div class="podium-slot podium-slot-2">';
-    if (t2) podiumHtml += `
-      <div class="advisor rank-2" data-name="${_esc(t2.name)}">
-        <div class="advisor-crown">☀️</div>
-        <div class="advisor-avatar">${makeAvatarHtml(t2, 'advisor-avatar')}</div>
-        <div class="advisor-name" title="${makeName(t2)}">${makeName(t2)}</div>
-        <div class="advisor-time">${t2.time}</div>
-      </div>`;
-    podiumHtml += '</div>';
-
-    podiumHtml += '<div class="podium-slot podium-slot-1">';
-    if (t1) podiumHtml += `
-      <div class="court-throne" data-name="${_esc(t1.name)}">
-        <div class="throne-crown">👑</div>
-        <div class="throne-avatar">${makeAvatarHtml(t1, 'throne-avatar')}</div>
-        <div class="throne-name" title="${makeName(t1)}">${makeName(t1)}</div>
-        <div class="throne-time">${t1.time}</div>
-      </div>`;
-    podiumHtml += '</div>';
-
-    podiumHtml += '<div class="podium-slot podium-slot-3">';
-    if (t3) podiumHtml += `
-      <div class="advisor rank-3" data-name="${_esc(t3.name)}">
-        <div class="advisor-crown">🌙</div>
-        <div class="advisor-avatar">${makeAvatarHtml(t3, 'advisor-avatar')}</div>
-        <div class="advisor-name" title="${makeName(t3)}">${makeName(t3)}</div>
-        <div class="advisor-time">${t3.time}</div>
-      </div>`;
-    podiumHtml += '</div>';
-
-    podiumHtml += '</div>';
 
     let courtiersHtml = '';
     if (court.length > 0) {
@@ -718,7 +721,7 @@
         _startDynamic();
       }
 
-      /* Đảm bảo nút loa sync đúng (có thể admin vừa thêm/xoá nhạc) */
+      /* Đảm bảo nút loa sync đúng */
       const meta = _getMusicMeta();
       let btn = document.getElementById('landingMusicBtn');
       if (meta.url && !btn && wrap) {
@@ -864,5 +867,5 @@
     } catch (e) { console.error('[LandingView] bdMusic:', e); }
   });
 
-  console.log('[LandingView] v5.1 ready ✓ (music player)');
+  console.log('[LandingView] v5.2 ready ✓ (character podium)');
 })();
