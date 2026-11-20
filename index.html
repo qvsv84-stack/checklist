@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="css/menu.css">
 <link rel="stylesheet" href="css/shop.css">
 <link rel="stylesheet" href="css/monopoly.css">
+<link rel="stylesheet" href="css/attendance-court.css">  <!-- ⭐ MỚI -->
 
 <style id="landingCourtForce">
 
@@ -622,6 +623,10 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
       <span class="att-employee-chevron">⌄</span>
     </button>
     <select id="attendanceEmployee" aria-hidden="true" tabindex="-1"></select>
+
+    <!-- ⭐ MỚI: Podium top 3 chấm công sớm nhất (nhân vật full-body) -->
+    <div id="attendanceCourt"></div>
+
     <div class="att-month-nav">
       <button id="attendancePrev" type="button" aria-label="Tháng trước">‹</button>
       <div class="att-month-label"><span id="attendanceMonthLabel">Tháng 1</span><span id="attendanceYearLabel">2026</span></div>
@@ -707,6 +712,7 @@ html body #question .landing-cta[data-cta="shop"]:active { transform: scale(.96)
 <script defer src="js/wheel-fallback.js"></script>
 <script defer src="js/attendance.js"></script>
 <script defer src="js/attendance-top3.js"></script>
+<script defer src="js/attendance-court.js"></script>  <!-- ⭐ MỚI -->
 <script defer src="js/realtime.js"></script>
 <script defer src="js/menu.js"></script>
 <script defer src="js/avatar-effect.js"></script>
