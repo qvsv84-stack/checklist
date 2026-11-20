@@ -4,6 +4,7 @@
    v5.2:
    - Podium top3 dùng AttendanceCourt.buildPodiumHTML()
      → nhân vật full-body (vua / nữ hoàng / kỵ sĩ)
+   - Truyền avatar_url cho từng người vào podium
    - Fallback: nếu AttendanceCourt chưa load → podium avatar-tròn cũ
    v5.1: lyrics + music + countdown fallback
    ========================================================= */
@@ -557,11 +558,15 @@
 
     /* ⭐ PODIUM: dùng thư viện nhân vật full-body nếu có */
     let podiumHtml;
-    const podiumTop3 = top3.slice(0, 3).map(p => ({
-      display_name: window.DN ? window.DN(p.name) : p.name,
-      name: p.name,
-      time: p.time,
-    }));
+    const podiumTop3 = top3.slice(0, 3).map(p => {
+      const av = S.getAvatarUrl(p.name);
+      return {
+        display_name: window.DN ? window.DN(p.name) : p.name,
+        name: p.name,
+        time: p.time,
+        avatar_url: av ? String(av).trim() : '',
+      };
+    });
 
     if (window.AttendanceCourt && typeof window.AttendanceCourt.buildPodiumHTML === 'function') {
       podiumHtml = window.AttendanceCourt.buildPodiumHTML(podiumTop3);
